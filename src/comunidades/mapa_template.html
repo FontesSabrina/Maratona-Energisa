@@ -2,10 +2,13 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<!-- Só imagens de fundo de mapa da Esri (e imagens embutidas data:); nenhuma outra conexão externa. Os hashes dos scripts são calculados pelo mapa.py. -->
+<meta http-equiv="Content-Security-Policy" content="/*__CSP__*/">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Comunidades Afetadas · Leopoldina</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Leaflet 1.9.4 embutido (BSD 2-Clause; ver vendor/leaflet/LICENSE) -->
+<style>/*__LEAFLET_CSS__*/</style>
+<script>/*__LEAFLET_JS__*/</script>
 <style>
 :root {
   color-scheme: light;
@@ -135,6 +138,8 @@ button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
 #roteiro th { width: 34%; text-align: left; font-weight: 600; color: #000; padding: 3pt 8pt 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
 #roteiro td { padding: 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
 #roteiro .rt-rodape { margin-top: 12pt; font-size: 9pt; color: #444; }
+#roteiro .rt-verif { margin-top: 6pt; font-size: 8.5pt; color: #444; border-top: .5pt solid #bbb; padding-top: 6pt; }
+#roteiro .rt-verif code { font: 8.5pt ui-monospace, Consolas, monospace; color: #000; word-break: break-all; }
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; height: auto; min-height: 100vh; }
   #mapa { height: 55vh; order: -1; }
@@ -305,16 +310,15 @@ C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { rendere
   color: css('--trafo'), weight: 1, fillColor: css('--surface'), fillOpacity: 1 })
   .bindTooltip(`<b>${t[2]}</b> · ${t[4]}<br>${t[3]} UCs`)));
 
-// UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu
+// UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu.
+// LGPD: sem titular, número da UC ou endereço; só classe, comunidade e dados técnicos.
 const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
 function popupUC(i) {
-  const u = D.ucs[i], t = D.ucsTxt[i];
-  return `<div class="pop"><b>${esc(t[1])}</b>
-    <span class="k">UC</span> ${t[0]} · ${esc(t[2])}<br>
-    <span class="k">Imóvel/endereço:</span> ${esc(t[3])}<br>
-    <span class="k">Localidade no cadastro:</span> ${t[4] ? esc(t[4]) : '<i>(vazio)</i>'}<br>
-    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (${u[5]}%)<br>
-    <span class="k">Comunidade real (IBGE):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}
+  const u = D.ucs[i], loc = D.locCad[u[10]];
+  return `<div class="pop"><b>Unidade ${esc(D.classes[u[9]].toLowerCase())}</b>
+    <span class="k">Localidade digitada no cadastro:</span> ${loc ? esc(loc) : '<i>(vazio)</i>'}<br>
+    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)<br>
+    <span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}
     ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
     <span class="k">Transformador:</span> ${D.trafos[u[2]][2]} · ${D.trafos[u[2]][4]}</div>`;
 }
@@ -496,7 +500,7 @@ function montarAviso(c, data, horario) {
 
 const elData = document.getElementById('avData'), elIni = document.getElementById('avIni'),
   elFim = document.getElementById('avFim'), elTel = document.getElementById('avTel');
-elData.value = isoData(new Date(Date.now() + PRAZO_INTERNO_DIAS * 864e5));  // sugestão: dentro do prazo interno
+elData.value = isoData(new Date(Date.now() + (PRAZO_INTERNO_DIAS + 1) * 864e5));  // sugestão: dentro do prazo interno
 const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
 function campos() {
   const [a, m, d] = (elData.value || '').split('-');
@@ -562,17 +566,25 @@ document.getElementById('btnCopiar').addEventListener('click', async e => {
   setTimeout(() => { b.textContent = 'Copiar texto'; }, 2000);
 });
 
+// Código de verificação: SHA-256 (API de criptografia do próprio navegador, sem biblioteca)
+async function sha256hex(t) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+let seqHash = 0, hashPronto = Promise.resolve();
+
 // Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
 function preencherRoteiro(c, f, ant, sD) {
   const { inteiras, parciais, vizinhas } = classificar(c);
   const agora = new Date();
+  const gerado = `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
   const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${codAtual}`;
   const ou = l => l.length ? esc(l.join(', ')) : '—';
   const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${x[1] === 1 ? 'UC' : 'UCs'})`).join('; ') : '—';
   const frases = textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
   document.getElementById('roteiro').innerHTML = `
     <h1>Aviso de desligamento programado</h1>
-    <div class="rt-meta">${DISTRIBUIDORA} · Aviso nº <b>${numero}</b> · gerado em <span id="rtGerado">${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+    <div class="rt-meta">${DISTRIBUIDORA} · Aviso nº <b>${numero}</b> · gerado em ${gerado.replace(' ', ' às ')}</div>
     <h2>Texto para leitura</h2>
     <div class="rt-leitura">${frases}</div>
     <div class="rt-dur">Duração estimada: cerca de ${sD} segundos (locução de ~150 palavras por minuto).</div>
@@ -595,14 +607,22 @@ function preencherRoteiro(c, f, ant, sD) {
       <tr><th>Antecedência</th><td>${ant.texto}${ant.falta ? ` (${ant.falta})` : ''}. Prazo legal: ${PRAZO_LEGAL_HORAS} horas; prazo interno: ${PRAZO_INTERNO_DIAS} dias (a confirmar). Unidades com equipamento vital: 5 dias úteis.</td></tr>
     </table>
     <p class="rt-rodape">Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).<br>
-      Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.</p>`;
+      Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.</p>
+    <p class="rt-verif">SHA-256: <code id="rtCodigo">calculando…</code><br>
+      Código de verificação: qualquer alteração no texto gera um código diferente.</p>`;
+  // Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular)
+  const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\nchave=${codAtual}\ngerado=${gerado}`;
+  const minha = ++seqHash;
+  hashPronto = sha256hex(entrada)
+    .then(h => { if (minha === seqHash) document.getElementById('rtCodigo').textContent = h; })
+    .catch(() => { document.getElementById('rtCodigo').textContent = 'indisponível neste navegador'; });
 }
-// Data e hora de geração = momento da impressão
-window.addEventListener('beforeprint', () => {
-  const el = document.getElementById('rtGerado'), agora = new Date();
-  if (el) el.textContent = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+// Gerar PDF: monta o roteiro com a hora atual, espera o código de verificação e só então imprime
+document.getElementById('btnPdf').addEventListener('click', async () => {
+  pararLeitura(); atualizarAviso();
+  await hashPronto;
+  window.print();
 });
-document.getElementById('btnPdf').addEventListener('click', () => { pararLeitura(); atualizarAviso(); window.print(); });
 
 // Leitura em voz alta (voz do próprio navegador), para sentir a diferença no rádio
 function pararLeitura() {

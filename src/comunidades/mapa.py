@@ -1,7 +1,10 @@
 """Mapa interativo (HTML autônomo, Leaflet): camadas reais + fictícias + resultado,
 com painel para simular o desligamento de qualquer chave."""
 
+import base64
+import hashlib
 import json
+import re
 from pathlib import Path
 
 import geopandas as gpd
@@ -19,6 +22,8 @@ from .nomes import exibir
 
 TEMPLATE = Path(__file__).with_name("mapa_template.html")
 ARQ_SAIDA = C.SAIDA / "mapa_comunidades.html"
+LEAFLET = Path(__file__).with_name("vendor") / "leaflet"   # Leaflet 1.9.4 embutido (sem CDN)
+FUNDO_MAPA = "https://server.arcgisonline.com"            # único servidor externo: fundos da Esri
 
 
 def _gj(gdf: gpd.GeoDataFrame, props: list[str], simplificar_m: float = 0) -> dict:
@@ -61,12 +66,14 @@ def construir():
     ip, ir = {c: i for i, c in enumerate(com_prev)}, {c: i for i, c in enumerate(com_real)}
     origem = {"cadastro": 0, "trafo (sem coordenada)": 1, "trafo (coordenada incoerente)": 2}
 
+    # LGPD: o HTML não leva titular, número da UC nem endereço; só classe, comunidade e dados técnicos
+    classes = sorted(df["CLASSE"].unique())
+    loc_cad = sorted(df["BAIRRO_LOCALIDADE"].fillna("").astype(str).unique())  # texto digitado no campo localidade
+    ic, il = {c: i for i, c in enumerate(classes)}, {c: i for i, c in enumerate(loc_cad)}
     ucs = [[round(r.LAT_REAL, 5), round(r.LON_REAL, 5), trafo_idx[r.COD_TRAFO], ip[r.COMUNIDADE_PREVISTA],
             ir[r.COMUNIDADE], int(r.CONFIANCA * 100), int(r.ACERTO), origem[r.ORIGEM_COORD],
-            1 if r.CLASSE == "Rural" else 0]
+            1 if r.CLASSE == "Rural" else 0, ic[r.CLASSE], il[str(r.BAIRRO_LOCALIDADE or "")]]
            for r in df.itertuples()]
-    ucs_txt = [[r.UC, r.TITULAR.title(), r.CLASSE, (r.NOME_IMOVEL or r.LOGRADOURO).title(),
-                str(r.BAIRRO_LOCALIDADE or "")] for r in df.itertuples()]
 
     # Cenários pré-calculados (mesma lógica do módulo desligamento)
     trafos_por_chave = {}
@@ -129,14 +136,31 @@ def construir():
         "nChaves": len(ch), "kmMT": round(float(mt.to_crs(C.CRS_METRICO).length.sum() / 1000)),
     }
 
-    dados = {"camadas": camadas, "ucs": ucs, "ucsTxt": ucs_txt, "trafos": trafos,
+    dados = {"camadas": camadas, "ucs": ucs, "classes": classes, "locCad": loc_cad, "trafos": trafos,
              "comPrev": com_prev, "comReal": com_real, "cenarios": cenarios, "metricas": metricas,
              "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
-    html = TEMPLATE.read_text(encoding="utf-8").replace(
-        "/*__DADOS__*/null", json.dumps(dados, ensure_ascii=False, separators=(",", ":"))
-    )
-    ARQ_SAIDA.write_text(html, encoding="utf-8")
+    html = (TEMPLATE.read_text(encoding="utf-8")
+            .replace("/*__LEAFLET_CSS__*/", (LEAFLET / "leaflet.css").read_text(encoding="utf-8"))
+            .replace("/*__LEAFLET_JS__*/", (LEAFLET / "leaflet.js").read_text(encoding="utf-8"))
+            .replace("/*__DADOS__*/null", json.dumps(dados, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")))
+    html = html.replace("/*__CSP__*/", politica_seguranca(html))
+    ARQ_SAIDA.write_text(html, encoding="utf-8", newline="\n")
     return ARQ_SAIDA
+
+
+def politica_seguranca(html: str) -> str:
+    """Content Security Policy do mapa: só roda os scripts embutidos (pelo hash SHA-256 de cada um)
+    e só carrega imagens dos fundos de mapa da Esri. Nenhuma outra conexão externa."""
+    hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode('utf-8')).digest()).decode()}'"
+                      for s in re.findall(r"<script>(.*?)</script>", html, flags=re.S))
+    return "; ".join([
+        "default-src 'none'",
+        f"script-src {hashes}",
+        "style-src 'unsafe-inline'",
+        f"img-src {FUNDO_MAPA} data:",  # data: = imagem embutida (o Leaflet usa para cancelar blocos), sem conexão
+        "connect-src 'none'", "font-src 'none'", "media-src 'none'", "object-src 'none'",
+        "frame-src 'none'", "worker-src 'none'", "base-uri 'none'", "form-action 'none'",
+    ])
 
 
 if __name__ == "__main__":
