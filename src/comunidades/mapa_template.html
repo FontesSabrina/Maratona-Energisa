@@ -232,11 +232,14 @@ C.se = L.geoJSON(D.camadas.se, { pane: 'topo',
   onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME) });
 // Chaves num canvas próprio, acima das casas, para ficarem sempre clicáveis
 const rendChaves = L.canvas({ pane: 'topo', padding: 0.4 });
+// Comunidades citadas pelo nome no aviso (fragmentos viram "localidades vizinhas")
+const citadas = c => c.com.filter(x => !x[5]);
 function popupChave(cod) {
   const c = D.cenarios[cod], el = document.createElement('div');
   el.className = 'pop';
   if (!c) { el.innerHTML = `<b>${cod}</b>Sem clientes a jusante.`; return el; }
-  const nomes = c.com.slice(0, 4).map(x => esc(x[0].replace(/ \(.*\)$/, ''))).join(', ') + (c.com.length > 4 ? ` e mais ${c.com.length - 4}` : '');
+  const cit = citadas(c);
+  const nomes = cit.slice(0, 4).map(x => esc(x[0].replace(/ \(.*\)$/, ''))).join(', ') + (cit.length > 4 ? ` e mais ${cit.length - 4}` : '');
   el.innerHTML = `<b>Chave ${cod}</b>
     <span class="k">Alimentador</span> ${c.alim}<br>
     <span class="k">Abrindo esta chave, ficam sem energia:</span> <b style="display:inline">${fmt(c.n)}</b> clientes${c.rural >= 0.8 ? ' (zona rural)' : ''}
@@ -344,7 +347,7 @@ const M = D.metricas;
 document.getElementById('tilesGerais').innerHTML = `
   <div class="tile"><div class="v">${M.acertoRural.toLocaleString('pt-BR')}<small>%</small></div><div class="l">acerto da comunidade (UCs rurais) <span class="de">· cadastro: ${M.acertoRuralCadastro.toLocaleString('pt-BR')}%</span></div></div>
   <div class="tile"><div class="v">${M.segDepois}<small> s</small></div><div class="l">aviso médio no rádio <span class="de">· hoje: ${M.segAntes} s</span></div></div>
-  <div class="tile"><div class="v">${M.cobertura.toLocaleString('pt-BR')}<small>%</small></div><div class="l">comunidades afetadas avisadas <span class="de">· ${fmt(M.nCenarios)} cenários</span></div></div>`;
+  <div class="tile"><div class="v">${M.coberturaUC.toLocaleString('pt-BR')}<small>%</small></div><div class="l">dos clientes desligados ouvem o nome da própria comunidade <span class="de">· por comunidade: ${M.cobertura.toLocaleString('pt-BR')}% · ${fmt(M.nCenarios)} cenários</span></div></div>`;
 
 // ---------- Simulação ----------
 const listaChaves = document.getElementById('listaChaves');
@@ -352,7 +355,7 @@ function montarLista() {
   const so = document.getElementById('soRural').checked;
   listaChaves.innerHTML = Object.entries(D.cenarios)
     .filter(([, c]) => !so || c.rural >= 0.8)
-    .map(([k, c]) => `<option value="${k}">${c.alim} · ${fmt(c.n)} UCs · ${esc(c.com.slice(0, 3).map(x => x[0].replace(/ \(.*\)$/, '')).join(', '))}</option>`).join('');
+    .map(([k, c]) => `<option value="${k}">${c.alim} · ${fmt(c.n)} UCs · ${esc(citadas(c).slice(0, 3).map(x => x[0].replace(/ \(.*\)$/, '')).join(', '))}</option>`).join('');
 }
 montarLista();
 document.getElementById('soRural').addEventListener('change', montarLista);
@@ -370,7 +373,12 @@ function simular(cod, enquadrar = true) {
   // Comunidades identificadas
   const nomes = new Map(c.com.map(x => [x[0], x]));
   L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
-    { pane: 'destaque', interactive: false, style: f => ({ color: css('--critical'), weight: 2.5, dashArray: nomes.get(f.properties.NOME)[3] ? '6 4' : null, fillColor: css('--critical'), fillOpacity: 0.08 }) }).addTo(destaque);
+    { pane: 'destaque', interactive: false, style: f => {
+      const x = nomes.get(f.properties.NOME);
+      // fragmento (não citado no aviso): contorno fraco e pontilhado, só para o operador enxergar
+      return x[5] ? { color: css('--critical'), weight: 1.2, opacity: 0.5, dashArray: '2 4', fillColor: css('--critical'), fillOpacity: 0.02 }
+        : { color: css('--critical'), weight: 2.5, dashArray: x[3] ? '6 4' : null, fillColor: css('--critical'), fillOpacity: 0.08 };
+    } }).addTo(destaque);
   // UCs desligadas
   const tset = new Set(c.trafos), pts = [];
   D.ucs.forEach((u, i) => { if (!tset.has(u[2])) return; pts.push([u[0], u[1]]);
@@ -383,14 +391,17 @@ function simular(cod, enquadrar = true) {
 
   // Painel
   const red = Math.round((1 - c.sDepois / c.sAntes) * 100);
+  const nCit = citadas(c).length;
   document.getElementById('resTitulo').textContent = `Resultado · chave ${cod} (${c.alim})`;
   document.getElementById('tilesRes').innerHTML = `
     <div class="tile"><div class="v">${fmt(c.n)}</div><div class="l">UCs desligadas</div></div>
-    <div class="tile"><div class="v">${c.com.length}</div><div class="l">${c.com.length === 1 ? 'comunidade' : 'comunidades'} no aviso</div></div>
+    <div class="tile"><div class="v">${nCit}</div><div class="l">${nCit === 1 ? 'comunidade' : 'comunidades'} no aviso</div></div>
     <div class="tile"><div class="v">${c.sDepois}<small> s</small></div><div class="l">no rádio <span class="de">· hoje ${c.sAntes} s${red > 0 ? ` (−${red}%)` : ''}</span></div></div>`;
-  document.getElementById('tabCom').innerHTML = c.com.map(([n, a, t, parc, conf]) =>
-    `<tr><td>${esc(n)}<div class="nota" style="margin:0">confiança ${Math.round(conf * 100)}%</div></td><td class="n">${fmt(a)} / ${fmt(t)}</td>
-     <td><span class="badge ${parc ? '' : 'total'}">${parc ? 'Parte' : 'Inteira'}</span></td></tr>`).join('');
+  // Citadas primeiro; fragmentos por último, em cinza
+  const linhas = [...citadas(c), ...c.com.filter(x => x[5])];
+  document.getElementById('tabCom').innerHTML = linhas.map(([n, a, t, parc, conf, frag]) =>
+    `<tr${frag ? ' style="color:var(--muted)"' : ''}><td>${esc(n)}<div class="nota" style="margin:0">confiança ${Math.round(conf * 100)}%</div></td><td class="n">${fmt(a)} / ${fmt(t)}</td>
+     <td><span class="badge ${parc || frag ? '' : 'total'}">${frag ? 'Vizinha (não citada)' : parc ? 'Parte' : 'Inteira'}</span></td></tr>`).join('');
   // Comparativo: fazenda a fazenda x por comunidade
   pararLeitura();
   avisoAtual = c;
@@ -399,7 +410,7 @@ function simular(cod, enquadrar = true) {
   document.getElementById('avisoAntigo').textContent = c.antigo;
   document.getElementById('avisoNovo').textContent = c.novo;
   document.getElementById('metAntigo').innerHTML = `<span><b>${fmt(c.nLocais)}</b> locais citados</span><span><b>${fmt(pal(c.antigo))}</b> palavras</span><span><b>${tempo(c.sAntes)}</b> no ar</span>`;
-  document.getElementById('metNovo').innerHTML = `<span><b>${c.com.length}</b> ${c.com.length === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(pal(c.novo))}</b> palavras</span><span><b>${tempo(c.sDepois)}</b> no ar</span>`;
+  document.getElementById('metNovo').innerHTML = `<span><b>${nCit}</b> ${nCit === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(pal(c.novo))}</b> palavras</span><span><b>${tempo(c.sDepois)}</b> no ar</span>`;
   document.getElementById('barraAntigo').style.width = '100%';
   document.getElementById('barraNovo').style.width = `${Math.max(3, Math.min(100, c.sDepois / c.sAntes * 100))}%`;
   document.getElementById('ganho').innerHTML = red > 0
@@ -439,7 +450,7 @@ document.getElementById('btnSimular').addEventListener('click', () => simular(do
 document.getElementById('chave').addEventListener('keydown', e => { if (e.key === 'Enter') simular(e.target.value); });
 document.getElementById('btnLimpar').addEventListener('click', limpar);
 document.getElementById('btnSortear').addEventListener('click', () => {
-  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && c.com.length >= 2);
+  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && citadas(c).length >= 2);
   const [k] = op[Math.floor(Math.random() * op.length)];
   document.getElementById('chave').value = k; simular(k);
 });

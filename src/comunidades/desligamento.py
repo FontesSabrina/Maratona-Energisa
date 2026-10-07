@@ -8,10 +8,12 @@ import pandas as pd
 LIMIAR_TOTAL = 0.9       # >= 90% das UCs da comunidade afetadas -> comunidade inteira
 PALAVRAS_POR_SEGUNDO = 2.5  # locução de rádio ~150 palavras/min
 
-# Comunidade com até 2 UCs afetadas é quase sempre ruído da votação na fronteira.
-# Ela não é citada pelo nome: o aviso diz "e de localidades vizinhas", para que
-# essas poucas UCs não fiquem sem aviso.
-LIMITE_FRAGMENTO = 2
+# Comunidade atingida só em parte, com poucas UCs afetadas e pouco peso no ramal,
+# é quase sempre ruído da votação na fronteira (fragmento). Ela não é citada pelo
+# nome: o aviso diz "além de localidades vizinhas", para que essas poucas UCs não
+# fiquem sem aviso.
+LIMITE_FRAGMENTO = 2        # até 2 UCs afetadas...
+LIMITE_PARTICIPACAO = 0.10  # ...e menos de 10% das UCs desligadas pela chave
 
 
 @dataclass
@@ -46,7 +48,8 @@ def resumir(afetadas: pd.DataFrame, todas: pd.DataFrame) -> pd.DataFrame:
     c["UC_TOTAL"] = total.reindex(c.index).to_numpy()
     c["PARCIAL"] = c["UC_AFETADAS"] / c["UC_TOTAL"] < LIMIAR_TOTAL
     c = c.sort_values("UC_AFETADAS", ascending=False).reset_index()
-    c["FRAGMENTO"] = c["UC_AFETADAS"] <= LIMITE_FRAGMENTO
+    c["FRAGMENTO"] = (c["PARCIAL"] & (c["UC_AFETADAS"] <= LIMITE_FRAGMENTO)
+                      & (c["UC_AFETADAS"] / c["UC_AFETADAS"].sum() < LIMITE_PARTICIPACAO))
     if len(c) and c["FRAGMENTO"].all():  # ramal minúsculo: cita ao menos a comunidade maior
         c.loc[0, "FRAGMENTO"] = False
     return c
@@ -73,8 +76,8 @@ def aviso_novo(resumo: pd.DataFrame, data: str, horario: str) -> str:
     if parciais:
         quem = f"{quem}, e de parte de {_lista(parciais)}" if quem else f"parte de {_lista(parciais)}"
     if resumo["FRAGMENTO"].any():
-        quem = f"{quem}, e de localidades vizinhas"
-    distritos = sorted({"Sede" if d == "Leopoldina" else d for d in citadas["DISTRITO"]})
+        quem = f"{quem}, além de localidades vizinhas"
+    distritos = sorted({"Sede" if d == "Leopoldina" else d for d in resumo["DISTRITO"]})
     onde = f"distrito{'s' if len(distritos) > 1 else ''} {_lista(distritos)}"
     return (f"Atenção, moradores de {quem}, em Leopoldina ({onde}): "
             f"no dia {data}, das {horario}, haverá desligamento programado de energia para "
