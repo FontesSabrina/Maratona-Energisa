@@ -18,6 +18,11 @@ import pandas as pd
 
 from . import config as C
 
+# Multiplica as probabilidades de ruído no campo de localidade (vazio, imovel,
+# vizinha, abreviado, digitacao). 1.0 = cadastro oficial; usado no teste de robustez.
+FATOR_RUIDO = 1.0
+TETO_RUIDO = 0.95  # a soma das probabilidades de ruído nunca passa disso
+
 NOMES = ("JOSE MARIA ANTONIO JOAO FRANCISCO ANA LUIZ PAULO CARLOS MANOEL PEDRO FRANCISCA MARCOS "
          "RAIMUNDO SEBASTIAO ANTONIA MARCELO JORGE MARCIA GERALDO ADRIANA SANDRA LUIS FERNANDO "
          "FABIO ROBERTO MARCIO EDSON ANDRE SERGIO JOSEFA PATRICIA DANIEL RODRIGO RAFAEL JOAQUIM "
@@ -82,8 +87,17 @@ def _nome_imovel(row, rng) -> str:
     return f"{tipo} {rng.choice(NOMES_IMOVEL)}"
 
 
-def construir():
-    rng = np.random.default_rng(C.SEMENTE)
+def _escalar(limites: list[tuple[float, str]], fator: float) -> list[tuple[float, str]]:
+    """Limites acumulados x fator; se a soma passar do teto, reduz todos na mesma proporção."""
+    escala = fator * min(1.0, TETO_RUIDO / (limites[-1][0] * fator))
+    return [(lim * escala, t) for lim, t in limites]
+
+
+def construir(semente: int | None = None, fator_ruido: float | None = None):
+    """semente e fator_ruido só mudam no teste de robustez; o padrão é o cadastro oficial."""
+    semente = C.SEMENTE if semente is None else semente
+    fator = FATOR_RUIDO if fator_ruido is None else fator_ruido
+    rng = np.random.default_rng(semente)
     uc = gpd.read_file(C.SINTETICO / "uc_base.gpkg")
     n = len(uc)
     rural = (uc["ZONA"] == "Rural").to_numpy()
@@ -108,13 +122,12 @@ def construir():
         vizinhas[nome] = [cent.index[j] for j in np.argsort(d)[1:5]]
 
     # --- Ruído no campo de localidade ---
+    lim_rural = _escalar([(0.22, "vazio"), (0.32, "imovel"), (0.37, "vizinha"), (0.55, "abreviado"), (0.63, "digitacao")], fator)
+    lim_urbano = _escalar([(0.08, "vazio"), (0.08, "imovel"), (0.11, "vizinha"), (0.16, "abreviado"), (0.21, "digitacao")], fator)
     loc, tipo_ruido = [], []
     for i in range(n):
         nome, r = real[i], rng.random()
-        if rural[i]:
-            limites = [(0.22, "vazio"), (0.32, "imovel"), (0.37, "vizinha"), (0.55, "abreviado"), (0.63, "digitacao")]
-        else:
-            limites = [(0.08, "vazio"), (0.08, "imovel"), (0.11, "vizinha"), (0.16, "abreviado"), (0.21, "digitacao")]
+        limites = lim_rural if rural[i] else lim_urbano
         t = next((t for lim, t in limites if r < lim), "correto")
         if t == "vazio":
             v = VAZIOS[rng.integers(len(VAZIOS))]
