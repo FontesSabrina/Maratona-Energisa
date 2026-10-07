@@ -19,6 +19,7 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Só algoritmo, avaliação e mapa: py -m uv run comunidades --so-algoritmo
 - Avaliação detalhada: py -m uv run python -m comunidades.validacao.avaliacao
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez
+- Janela de menor dano (ramais rurais, perfis hipotéticos): py -m uv run python -m comunidades.validacao.janela
 
 ## Regras de trabalho
 - Explique o plano antes de editar e espere minha confirmação.

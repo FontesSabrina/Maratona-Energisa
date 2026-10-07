@@ -38,6 +38,10 @@ NOMES_IMOVEL = ("BOA VISTA|SANTA RITA|SAO JOSE|BOA ESPERANCA|SANTO ANTONIO|TRES 
 
 CLASSE = {"1": "Residencial", "2": "Residencial", "3": "Rural", "4": "Poder Público",
           "5": "Poder Público", "6": "Comercial", "8": "Comercial"}
+# Atividade da UC (uma distribuidora real tem isso na subclasse ou na atividade da UC).
+# Vem da espécie do endereço no CNEFE; usada só na janela de menor dano, nunca no algoritmo.
+ATIVIDADE = {"1": "residencial", "2": "residencial", "3": "agropecuaria", "4": "ensino",
+             "5": "saude", "6": "outros", "8": "religioso"}
 
 ABREVIACOES = [
     (r"^CORREGO DO ", ["COR. DO ", "CORR DO ", "CGO DO ", ""]),
@@ -107,6 +111,7 @@ def construir(semente: int | None = None, fator_ruido: float | None = None):
     uc["TITULAR"] = [f"{rng.choice(NOMES)} {rng.choice(SOBRENOMES)} {rng.choice(SOBRENOMES)}" for _ in range(n)]
     uc["CLASSE"] = np.where(rural & uc["COD_ESPECIE"].isin(["1", "3"]), "Rural", uc["COD_ESPECIE"].map(CLASSE))
     uc["NOME_IMOVEL"] = [_nome_imovel(r, rng) if z else "" for (_, r), z in zip(uc.iterrows(), rural)]
+    uc["ATIVIDADE"] = uc["COD_ESPECIE"].map(ATIVIDADE).fillna("outros")  # sem sorteio: não muda o resto
 
     partes = uc[["NOM_TIPO_SEGLOGR", "NOM_TITULO_SEGLOGR", "NOM_SEGLOGR"]].fillna("")
     uc["LOGRADOURO"] = partes.agg(" ".join, axis=1).str.replace(r"\s+", " ", regex=True).str.strip()
@@ -167,7 +172,7 @@ def construir(semente: int | None = None, fator_ruido: float | None = None):
     lon = np.where(ausente, np.nan, pts.x.round(6))
     uc["LATITUDE"], uc["LONGITUDE"] = lat, lon
 
-    publicas = ["UC", "TITULAR", "CLASSE", "NOME_IMOVEL", "LOGRADOURO", "NUMERO", "BAIRRO_LOCALIDADE",
+    publicas = ["UC", "TITULAR", "CLASSE", "ATIVIDADE", "NOME_IMOVEL", "LOGRADOURO", "NUMERO", "BAIRRO_LOCALIDADE",
                 "NM_DIST", "LATITUDE", "LONGITUDE", "COD_TRAFO", "ALIMENTADOR", "CHAVES_MONTANTE"]
     ucs = gpd.GeoDataFrame(uc[publicas].rename(columns={"NM_DIST": "DISTRITO"}),
                            geometry=gpd.points_from_xy(lon, lat), crs=C.CRS_GEO)

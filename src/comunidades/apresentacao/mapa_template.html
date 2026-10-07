@@ -133,6 +133,28 @@ aside:not(.simulado) .abas { display: none; }
 .linha-botoes > button { flex: 1 1 auto; }
 .largo { width: 100%; }
 
+/* Janela de menor dano e cargas sensíveis */
+.jan-princ { background: var(--sup2); border-left: 4px solid var(--ambar); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.jan-hora { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.jan-exp { font-size: 13.5px; color: var(--texto2); line-height: 1.4; }
+.jan-atual { font-size: 13px; font-weight: 600; color: var(--confirmado); }
+.jan-princ button { background: var(--sup); }
+.jan-outras { display: grid; gap: 4px; margin-top: 10px; }
+.jan-outra { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.jan-outra .jan-hora { font-size: 15px; font-weight: 500; }
+.jan-outra .jan-exp { font-size: 12.5px; }
+.jan-outra button { flex: none; font-size: 13.5px; padding: 0 12px; }
+.comparacao { margin: 10px 0 0; font-size: 14px; font-weight: 500; color: var(--desligado); }
+.cargas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.carga { display: grid; gap: 4px; min-width: 0; }
+.carga-n { display: flex; align-items: center; gap: 8px; }
+.carga svg { width: 24px; height: 24px; flex: none; color: var(--texto2); }
+.carga b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.carga span { font-size: 12.5px; color: var(--texto2); line-height: 1.25; overflow-wrap: anywhere; }
+.carga.zero b, .carga.zero svg, .carga.zero span { color: var(--apagado); }
+.alerta-saude { margin: 12px 0 0; font-size: 14px; padding: 10px 12px; border-radius: 10px; border-left: 4px solid var(--desligado);
+  background: color-mix(in srgb, var(--desligado) 12%, var(--sup)); }
+
 /* Aviso */
 .aviso-txt { font-size: 19px; line-height: 1.55; margin: 0; }
 .cmp { display: grid; gap: 6px; }
@@ -297,10 +319,22 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
           <label>Início<input type="time" id="avIni" value="08:00"></label>
           <label>Fim<input type="time" id="avFim" value="14:00"></label>
         </div>
+        <div id="blocoJanela">
+          <div class="rot">Janela sugerida</div>
+          <div id="janelaMelhor"></div>
+          <p class="comparacao oculto" id="janelaComparacao"></p>
+          <div id="janelaOutras"></div>
+        </div>
         <div>
           <div class="nota ruim oculto" id="avHoraErro" style="margin:0 0 8px">O horário de fim deve ser depois do início.</div>
           <div class="prazo"><span class="selo" id="selo"></span><span class="de" id="seloFalta"></span></div>
           <p class="nota">Unidades com equipamento vital exigem 5 dias úteis (não há cadastro desses clientes nesta demonstração).</p>
+        </div>
+        <div>
+          <div class="rot">Cargas sensíveis na área</div>
+          <div class="cargas" id="cargas"></div>
+          <p class="alerta-saude oculto" id="alertaSaude">Há unidades de saúde na área. Considere contato direto além do aviso.</p>
+          <p class="nota">Horários de sensibilidade são hipóteses de demonstração, a validar por região.</p>
         </div>
         <div class="linha-botoes"><button data-acao="sortear">Sortear ramal rural</button><button id="btnLimpar">Limpar</button></div>
         <button class="prim largo" id="btnVerAviso">Ver o aviso</button>
@@ -736,6 +770,95 @@ function limpar() {
   estadoSimulado(false);
 }
 
+// ---------- Janela de menor dano (mesmo cálculo de nucleo/impacto.py; perfis hipotéticos) ----------
+const PF = D.perfis, EXP = PF.expediente, SLOTS = 24 * 60 / EXP.passo;
+const sobrep = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+const contagemAtiv = c => Object.fromEntries(PF.atividades.map((a, i) => [a, c.ativ[i]]));
+const tipoDia = (a, m, d) => { const w = new Date(+a, +m - 1, +d).getDay(); return w === 0 ? 'domingo' : w === 6 ? 'sabado' : 'util'; };
+const minutos = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
+const hhmm = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const qtd = n => n.toLocaleString('pt-BR');
+function notaDano(cont, tipo, inicio, duracao) {
+  const fim = inicio + duracao; let total = 0;
+  for (const a of PF.atividades) {
+    const n = cont[a] || 0; if (!n) continue;
+    const w = PF.pesos[a][tipo];
+    for (let s = 0; s < SLOTS; s++) { const o = sobrep(inicio, fim, s * EXP.passo, (s + 1) * EXP.passo); if (o) total += n * w[s] * o; }
+  }
+  return total;
+}
+function iniciosPossiveis(duracao) {
+  if (duracao <= 0) return [];
+  const r = [], ultimo = Math.min(EXP.ultimoInicio, EXP.fim - duracao);
+  for (let i = EXP.inicio; i <= ultimo; i += EXP.passo) r.push(i);
+  return r;
+}
+function explicar(cont, tipo, inicio, fim) {
+  const conflitos = [], evitados = [];
+  for (const a of PF.atividades) {
+    const n = cont[a] || 0; if (!n) continue;
+    for (const [nome, dias, p0, p1, nivel] of PF.periodos[a]) {
+      if (!dias.includes(tipo)) continue;
+      const o = sobrep(inicio, fim, p0, p1);
+      if (o && nivel >= PF.niveis.medio) conflitos.push([n * nivel * o, conflitos.length, `${nome} de ${qtd(n)} ${PF.rotulos[a][n === 1 ? 0 : 1]}`]);
+      else if (!o && nivel === PF.niveis.alto && sobrep(EXP.inicio, EXP.fim, p0, p1)) evitados.push(nome);
+    }
+  }
+  conflitos.sort((x, y) => (y[0] - x[0]) || (x[1] - y[1]));
+  const pega = conflitos.slice(0, 2).map(c => c[2]);
+  if (pega.length) return `Pega ${listaPt(pega)}` + (evitados.length ? `; evita ${listaPt(evitados)}` : '');
+  if (evitados.length) return `Evita ${listaPt(evitados)}`;
+  if (notaDano(cont, tipo, inicio, fim - inicio)) return 'Só atinge horários de baixa sensibilidade';
+  return 'Sem conflito com os horários sensíveis';
+}
+function avaliarJanelas(cont, tipo, duracao) {
+  return iniciosPossiveis(duracao).map(i => ({ inicio: i, fim: i + duracao, nota: notaDano(cont, tipo, i, duracao) }))
+    .sort((x, y) => (x.nota - y.nota) || (x.inicio - y.inicio));
+}
+function sugerirJanelas(cont, tipo, duracao, quantas = 3) {
+  return avaliarJanelas(cont, tipo, duracao).slice(0, quantas).map(j => ({ ...j, explicacao: explicar(cont, tipo, j.inicio, j.fim) }));
+}
+const ICONE = {
+  saude: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>',
+  ensino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 10 12 5l9 5-9 5-9-5Z"/><path d="M7 12.5V17c3 2 7 2 10 0v-4.5"/></svg>',
+  agropecuaria: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-14 14Z"/><path d="M5 19 13 11"/></svg>',
+};
+function usarJanela(inicio, fim) { elIni.value = hhmm(inicio); elFim.value = hhmm(fim); pararLeitura(); atualizarAviso(); }
+function atualizarJanela(c, f) {
+  const cont = contagemAtiv(c), tipo = f.d ? tipoDia(f.a, f.m, f.d) : null;
+  const ini = minutos(f.ini), dur = minutos(f.fim) - ini;
+  const horas = (a, b) => `${horaPt(hhmm(a))} às ${horaPt(hhmm(b))}`;
+  const comp = $('janelaComparacao'); comp.classList.add('oculto');
+  $('janelaOutras').innerHTML = '';
+  let msg = '';
+  if (!tipo) msg = 'Informe a data para sugerir a janela.';
+  else if (dur <= 0) msg = 'Ajuste o início e o fim da obra.';
+  const sug = msg ? [] : sugerirJanelas(cont, tipo, dur);
+  if (!msg && !sug.length) msg = `Uma obra de ${(dur / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h não cabe no expediente (${horaPt(hhmm(EXP.inicio))} às ${horaPt(hhmm(EXP.fim))}).`;
+  if (msg) { $('janelaMelhor').innerHTML = `<p class="nota" style="margin:0">${esc(msg)}</p>`; }
+  else {
+    const atual = j => j.inicio === ini && j.fim === ini + dur;
+    const botao = j => atual(j) ? '<span class="jan-atual">Janela atual</span>' : `<button data-ini="${j.inicio}" data-fim="${j.fim}">Usar esta janela</button>`;
+    const [m, ...outras] = sug;
+    $('janelaMelhor').innerHTML = `<div class="jan-princ"><div><div class="jan-hora">${horas(m.inicio, m.fim)}</div><div class="jan-exp">${esc(m.explicacao)}</div></div><div>${botao(m)}</div></div>`;
+    $('janelaOutras').innerHTML = outras.length ? `<div class="jan-outras">${outras.map(j =>
+      `<div class="jan-outra"><div><div class="jan-hora">${horas(j.inicio, j.fim)}</div><div class="jan-exp">${esc(j.explicacao)}</div></div>${botao(j)}</div>`).join('')}</div>` : '';
+    // Compara a janela escolhida com a sugerida (mesma duração)
+    const escolhida = notaDano(cont, tipo, ini, dur);
+    if (m.nota > 0 && escolhida / m.nota >= PF.razaoMuitoPior) {
+      comp.textContent = `A janela escolhida atinge ${(escolhida / m.nota).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} vezes mais carga sensível que a sugerida.`;
+      comp.classList.remove('oculto');
+    } else if (m.nota === 0 && escolhida > 0) {
+      comp.textContent = 'A janela escolhida atinge carga sensível que a sugerida evita.'; comp.classList.remove('oculto');
+    }
+    document.querySelectorAll('#blocoJanela button[data-ini]').forEach(b => b.addEventListener('click', () => usarJanela(+b.dataset.ini, +b.dataset.fim)));
+  }
+  // Cargas sensíveis na área (só contagens)
+  $('cargas').innerHTML = PF.sensiveis.map(a => { const n = cont[a] || 0;
+    return `<div class="carga${n ? '' : ' zero'}"><div class="carga-n">${ICONE[a]}<b>${qtd(n)}</b></div><span>${esc(PF.rotulos[a][n === 1 ? 0 : 1])}</span></div>`; }).join('');
+  $('alertaSaude').classList.toggle('oculto', !(cont.saude > 0));
+}
+
 // ---------- Aviso editável ----------
 let codAtual = null, avisoAtual = null, lendo = null;
 const textos = { antigo: '', novo: '' };
@@ -813,6 +936,7 @@ function atualizarAviso() {
   $('ganho').innerHTML = red > 0
     ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
     : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
+  atualizarJanela(c, f);
   preencherRoteiro(c, f, ant, sD);
 }
 [elData, elIni, elFim, elTel].forEach(el => el.addEventListener('input', () => { pararLeitura(); atualizarAviso(); }));
