@@ -156,6 +156,10 @@ aside:not(.simulado) .abas { display: none; }
   background: color-mix(in srgb, var(--desligado) 12%, var(--sup)); }
 
 /* Aviso */
+.aviso-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.idioma { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--apagado); }
+.idioma select { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--linha);
+  background: var(--sup2); color: var(--texto); font: inherit; font-size: 14px; }
 .aviso-txt { font-size: 19px; line-height: 1.55; margin: 0; }
 .cmp { display: grid; gap: 6px; }
 .cmp-l { display: flex; justify-content: space-between; font-size: 14px; color: var(--texto2); }
@@ -274,7 +278,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 </head>
 <body>
 <header class="topo">
-  <div class="marca"><!--__LOGO__--><div><div class="nome" id="appNome">Farol</div><div class="lugar">Leopoldina/MG · demonstração</div></div></div>
+  <div class="marca"><!--__LOGO__--><div><div class="nome" id="appNome">Farol</div><div class="lugar" id="appLugar"></div></div></div>
   <div class="busca">
     <svg class="lupa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
     <input type="text" id="busca" placeholder="Buscar chave ou comunidade" autocomplete="off" role="combobox"
@@ -328,7 +332,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
         <div>
           <div class="nota ruim oculto" id="avHoraErro" style="margin:0 0 8px">O horário de fim deve ser depois do início.</div>
           <div class="prazo"><span class="selo" id="selo"></span><span class="de" id="seloFalta"></span></div>
-          <p class="nota">Unidades com equipamento vital exigem 5 dias úteis (não há cadastro desses clientes nesta demonstração).</p>
+          <p class="nota" id="notaPrazos"></p>
         </div>
         <div>
           <div class="rot">Cargas sensíveis na área</div>
@@ -344,7 +348,8 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
     <!-- Aba Aviso -->
     <section class="aba oculto" id="aba-aviso" role="tabpanel" aria-labelledby="tab-aviso">
       <div>
-        <div class="rot">Texto para o rádio</div>
+        <div class="aviso-cab"><div class="rot" style="margin:0">Texto para o rádio</div>
+          <label class="idioma">Idioma <select id="avIdioma" aria-label="Idioma do aviso"></select></label></div>
         <p class="aviso-txt" id="avisoNovo"></p>
       </div>
       <div class="cmp">
@@ -355,7 +360,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
         <p class="ganho" id="ganho"></p>
       </div>
       <div class="campo">
-        <label>Telefone de atendimento<input type="text" id="avTel" value="0800 XXX XXXX" autocomplete="off"></label>
+        <label>Telefone de atendimento<input type="text" id="avTel" autocomplete="off"></label>
         <p class="nota" id="avTelNota">Telefone de exemplo, a confirmar com a distribuidora.</p>
       </div>
       <div class="linha-botoes"><button class="ouvir" data-alvo="novo">▶ Ouvir</button><button id="btnCopiar">Copiar texto</button></div>
@@ -395,11 +400,14 @@ const D = /*__DADOS__*/null;
 const APP_NOME = 'Farol';
 const SLOGAN = 'Cada comunidade avisada pelo nome.';
 // Prazo legal de aviso para as demais unidades: 72 horas (REN ANEEL 1.000/2021, art. 436)
-const PRAZO_LEGAL_HORAS = 72;
+const DIST = D.distribuidora;  // configuração da distribuidora (distribuidoras/*.toml)
+const PRAZO_LEGAL_HORAS = DIST.prazoLegalHoras;
 // Prazo interno de planejamento: prática da empresa, a confirmar
-const PRAZO_INTERNO_DIAS = 15;
-const PALAVRAS_POR_SEGUNDO = 2.5;  // mesma locução de desligamento.py (~150 palavras/min)
-const DISTRIBUIDORA = 'Distribuidora (demonstração)';
+const PRAZO_INTERNO_DIAS = DIST.prazoInternoDias;
+const PRAZO_VITAL_DIAS_UTEIS = DIST.prazoVitalDiasUteis;
+// Mesma locução de desligamento.py (~150 palavras/min); aproximação usada para todos os idiomas
+const PALAVRAS_POR_SEGUNDO = 2.5;
+const DISTRIBUIDORA = DIST.nome;
 const ZOOM_CHAVES = 13;     // as chaves aparecem sozinhas a partir deste zoom
 const ZOOM_NOMES = 12;      // nomes das comunidades a partir deste zoom
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -429,7 +437,7 @@ aplicarTema();
 const escuro = () => document.documentElement.dataset.theme === 'dark' ||
   (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
 
-// ---------- Mapa base (travado em Leopoldina) ----------
+// ---------- Mapa base (travado no município) ----------
 const mapa = L.map('mapa', { preferCanvas: true, zoomControl: false, attributionControl: false,
   maxZoom: 17, zoomSnap: 1, maxBoundsViscosity: 1 });
 L.control.attribution({ prefix: 'Rede e clientes fictícios · território real (IBGE 2022) · Leaflet' }).addTo(mapa);
@@ -771,7 +779,7 @@ function limpar() {
 }
 
 // ---------- Janela de menor dano (mesmo cálculo de nucleo/impacto.py; perfis hipotéticos) ----------
-const PF = D.perfis, EXP = PF.expediente, SLOTS = 24 * 60 / EXP.passo;
+const PF = D.perfis, EXP = PF.expediente, SLOT = PF.slot, SLOTS = 24 * 60 / PF.slot;
 const sobrep = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 const contagemAtiv = c => Object.fromEntries(PF.atividades.map((a, i) => [a, c.ativ[i]]));
 const tipoDia = (a, m, d) => { const w = new Date(+a, +m - 1, +d).getDay(); return w === 0 ? 'domingo' : w === 6 ? 'sabado' : 'util'; };
@@ -783,7 +791,7 @@ function notaDano(cont, tipo, inicio, duracao) {
   for (const a of PF.atividades) {
     const n = cont[a] || 0; if (!n) continue;
     const w = PF.pesos[a][tipo];
-    for (let s = 0; s < SLOTS; s++) { const o = sobrep(inicio, fim, s * EXP.passo, (s + 1) * EXP.passo); if (o) total += n * w[s] * o; }
+    for (let s = 0; s < SLOTS; s++) { const o = sobrep(inicio, fim, s * SLOT, (s + 1) * SLOT); if (o) total += n * w[s] * o; }
   }
   return total;
 }
@@ -878,21 +886,52 @@ function classificar(c) {
   return { inteiras, parciais, vizinhas: c.com.filter(x => x[5]) };
 }
 
-// Mesmo texto de aviso_novo() em desligamento.py: com a mesma data e horário, sai idêntico
-function montarAviso(c, data, horario) {
-  const { inteiras, parciais, vizinhas } = classificar(c);
-  let quem = listaPt(inteiras);
-  if (parciais.length) quem = quem ? `${quem}, e de parte de ${listaPt(parciais)}` : `parte de ${listaPt(parciais)}`;
-  if (vizinhas.length) quem = `${quem}, além de localidades vizinhas`;
-  const distritos = unicos(c.com.map(x => x[6] === 'Leopoldina' ? 'Sede' : x[6])).sort();
-  const onde = `distrito${distritos.length > 1 ? 's' : ''} ${listaPt(distritos)}`;
-  return `Atenção, moradores de ${quem}, em Leopoldina (${onde}): ` +
-    `no dia ${data}, das ${horario}, haverá desligamento programado de energia para ` +
-    `manutenção na rede. Programe-se!`;
+// ---------- Aviso por idioma: mesmas regras de nucleo/idiomas.py (modelos vêm do Python) ----------
+const IDI = D.idiomas.modelos, MESES_EN = D.idiomas.mesesEn;
+const preencher = (modelo, v) => modelo.replace(/\{(\w+)\}/g, (_, k) => v[k]);
+const semAcento = s => s.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();  // tira acentos (como unicodedata "Mn")
+function somDeI(palavra) {  // começa com som de "i" (i-, hi-), sem formar ditongo (hielo, hierba)
+  let s = semAcento(palavra);
+  if (s.startsWith('hi')) s = s.slice(1);
+  return s.startsWith('i') && !['a', 'e', 'o', 'u'].includes(s.slice(1, 2));
+}
+function listaIdioma(itens, idioma) {
+  const m = IDI[idioma];
+  if (itens.length <= 1) return itens.join('');
+  return itens.slice(0, -1).join(', ') + (somDeI(itens[itens.length - 1]) ? m.e_antes_de_i : m.e) + itens[itens.length - 1];
+}
+const formatarData = (dia, mes, idioma) => IDI[idioma].data === 'mes_dia' ? `${MESES_EN[mes - 1]} ${dia}` : `${pad2(dia)}/${pad2(mes)}`;
+function formatarHora(minutos, idioma) {
+  const h = Math.floor(minutos / 60), m = minutos % 60, r = IDI[idioma].relogio;
+  if (r === 'pt') return `${h}h${m ? pad2(m) : ''}`;
+  if (r === '12h') return `${h % 12 || 12}:${pad2(m)} ${h < 12 ? 'a.m.' : 'p.m.'}`;
+  return `${h}:${pad2(m)}`;
+}
+const formatarHorario = (ini, fim, idioma) => formatarHora(ini, idioma) + IDI[idioma].entre + formatarHora(fim, idioma);
+const comTelefone = (texto, tel, idioma) => tel ? texto + preencher(IDI[idioma].telefone, { telefone: tel }) : texto;
+
+// Mesmo texto de aviso_novo() em desligamento.py: com a mesma data, horário e idioma, sai idêntico
+function montarAviso(c, data, horario, idioma = D.idiomas.padrao) {
+  const { inteiras, parciais, vizinhas } = classificar(c), m = IDI[idioma];
+  let quem = listaIdioma(inteiras, idioma);
+  if (parciais.length) quem = preencher(quem ? (vizinhas.length ? m.parte_com_vizinhas : m.parte_com) : m.parte_so, { quem, parciais: listaIdioma(parciais, idioma) });
+  if (vizinhas.length) quem = preencher(m.vizinhas, { quem });
+  const distritos = unicos(c.com.map(x => x[6] === DIST.municipio ? 'Sede' : x[6])).sort();
+  const onde = preencher(distritos.length > 1 ? m.onde_n : m.onde_1, { distritos: listaIdioma(distritos, idioma) });
+  return preencher(m.frase, { quem, municipio: DIST.municipio, onde, data, horario });
 }
 
-const elData = $('avData'), elIni = $('avIni'), elFim = $('avFim'), elTel = $('avTel');
+const elData = $('avData'), elIni = $('avIni'), elFim = $('avFim'), elTel = $('avTel'), elIdioma = $('avIdioma');
 elData.value = isoData(new Date(Date.now() + (PRAZO_INTERNO_DIAS + 1) * 864e5));  // sugestão: dentro do prazo interno
+elTel.value = DIST.telefone;
+// Textos da tela que vêm da configuração da distribuidora
+$('appLugar').textContent = `${DIST.municipio}/${DIST.uf} · demonstração`;
+$('notaPrazos').textContent = `Unidades com equipamento vital exigem ${PRAZO_VITAL_DIAS_UTEIS} dias úteis (não há cadastro desses clientes nesta demonstração). Prazos: ${DIST.norma}.`;
+// Idioma do aviso (só o aviso e o roteiro; o resto da tela continua em português)
+let idiomaAtual = DIST.idiomaPadrao in IDI ? DIST.idiomaPadrao : D.idiomas.padrao;
+elIdioma.innerHTML = Object.entries(IDI).map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('');
+elIdioma.value = idiomaAtual;
+elIdioma.addEventListener('change', () => { idiomaAtual = elIdioma.value; pararLeitura(); atualizarAviso(); });
 const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
 function campos() {
   const [a, m, d] = (elData.value || '').split('-');
@@ -901,14 +940,15 @@ function campos() {
     horario: `${horaPt(ini)} às ${horaPt(fim)}`, ini, fim, tel: elTel.value.trim() };
 }
 
-// Antecedência: do momento atual até o início do desligamento
+// Antecedência: do momento atual até o início do desligamento (cod e h permitem traduzir no roteiro)
 function antecedencia(f) {
-  if (!f.d) return { classe: 'neutro', texto: 'Informe a data do desligamento', falta: '' };
+  if (!f.d) return { classe: 'neutro', cod: 'semData', texto: 'Informe a data do desligamento', falta: '' };
   const h = (new Date(`${f.a}-${f.m}-${f.d}T${f.ini}`) - Date.now()) / 36e5;
   const falta = h < 0 ? 'a data já passou' : h < 48 ? `faltam ${Math.floor(h)} h` : `faltam ${Math.floor(h / 24)} dias`;
-  if (h < PRAZO_LEGAL_HORAS) return { classe: 'vermelho', texto: `Abaixo do prazo legal de ${PRAZO_LEGAL_HORAS} horas`, falta };
-  if (h < PRAZO_INTERNO_DIAS * 24) return { classe: 'amarelo', texto: `Abaixo do prazo interno de ${PRAZO_INTERNO_DIAS} dias`, falta };
-  return { classe: 'verde', texto: 'Antecedência OK', falta };
+  const base = { h, falta };
+  if (h < PRAZO_LEGAL_HORAS) return { ...base, classe: 'vermelho', cod: 'legal', texto: `Abaixo do prazo legal de ${PRAZO_LEGAL_HORAS} horas` };
+  if (h < PRAZO_INTERNO_DIAS * 24) return { ...base, classe: 'amarelo', cod: 'interno', texto: `Abaixo do prazo interno de ${PRAZO_INTERNO_DIAS} dias` };
+  return { ...base, classe: 'verde', cod: 'ok', texto: 'Antecedência OK' };
 }
 
 function atualizarAviso() {
@@ -920,7 +960,9 @@ function atualizarAviso() {
   $('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
   const c = avisoAtual;
   if (!c) return;
-  textos.novo = montarAviso(c, f.dataCurta, f.horario) + (f.tel ? ` Dúvidas: ${f.tel}.` : '');
+  const L = idiomaAtual;
+  const dataTxt = f.d ? formatarData(+f.d, +f.m, L) : '__/__';
+  textos.novo = comTelefone(montarAviso(c, dataTxt, formatarHorario(minutos(f.ini), minutos(f.fim), L), L), f.tel, L);
   // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
   textos.antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
   const sA = segundos(textos.antigo), sD = segundos(textos.novo);
@@ -969,44 +1011,104 @@ let seqHash = 0, hashPronto = Promise.resolve();
 
 // Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
 const logoSVG = document.querySelector('.marca svg').outerHTML;
+// Textos do roteiro por idioma (o pt-BR é o mesmo de antes, palavra por palavra)
+const RT = {
+  'pt-BR': {
+    slogan: SLOGAN, titulo: 'Aviso de desligamento programado', avisoN: 'Aviso nº',
+    gerado: (a, m, d, h) => `gerado em ${d}/${m}/${a} às ${h}`,
+    leitura: 'Texto para leitura', duracao: s => `Duração estimada: cerca de ${s} segundos (locução de ~150 palavras por minuto).`,
+    resumo: 'Resumo', data: 'Data', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sem data)',
+    horario: 'Horário', horarioV: h => `das ${h}`, inteiras: 'Comunidades inteiras', parte: 'Comunidades em parte',
+    vizinhas: 'Localidades vizinhas', vizSim: n => `Sim: ${n} ${n === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome`, nao: 'Não',
+    telefone: 'Telefone de atendimento', exemplo: ' (exemplo, a confirmar)',
+    registro: 'Registro', chave: 'Chave aberta', alim: 'Alimentador', ucs: 'UCs afetadas',
+    citadas: 'Comunidades citadas', vizNao: 'Vizinhas não citadas', uc: n => n === 1 ? 'UC' : 'UCs', antecedencia: 'Antecedência',
+    ant: { ok: 'Antecedência OK', legal: h => `Abaixo do prazo legal de ${h} horas`, interno: d => `Abaixo do prazo interno de ${d} dias`,
+      semData: 'Informe a data do desligamento', passou: 'a data já passou', faltamH: h => `faltam ${h} h`, faltamD: d => `faltam ${d} dias` },
+    prazos: (l, i, v) => `Prazo legal: ${l} horas; prazo interno: ${i} dias (a confirmar). Unidades com equipamento vital: ${v} dias úteis.`,
+    rodape1: 'Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).',
+    rodape2: 'Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.',
+    verif: 'Código de verificação: qualquer alteração no texto gera um código diferente.',
+  },
+  en: {
+    slogan: 'Every community warned by name.', titulo: 'Scheduled power outage notice', avisoN: 'Notice no.',
+    gerado: (a, m, d, h) => `generated on ${MESES_EN[+m - 1]} ${+d}, ${a} at ${h}`,
+    leitura: 'Script to read on air', duracao: s => `Estimated duration: about ${s} seconds (read at ~150 words per minute).`,
+    resumo: 'Summary', data: 'Date', dataLonga: (a, m, d) => `${MESES_EN[+m - 1]} ${+d}, ${a}`, semData: '(no date)',
+    horario: 'Time', horarioV: h => `from ${h}`, inteiras: 'Whole communities', parte: 'Partially affected communities',
+    vizinhas: 'Nearby areas', vizSim: n => `Yes: ${n} ${n === 1 ? 'locality' : 'localities'} not named`, nao: 'No',
+    telefone: 'Customer service phone', exemplo: ' (example, to be confirmed)',
+    registro: 'Record', chave: 'Open switch', alim: 'Feeder', ucs: 'Affected consumer units',
+    citadas: 'Named communities', vizNao: 'Nearby areas not named', uc: n => n === 1 ? 'unit' : 'units', antecedencia: 'Advance notice',
+    ant: { ok: 'Advance notice OK', legal: h => `Below the legal minimum of ${h} hours`, interno: d => `Below the internal target of ${d} days`,
+      semData: 'Enter the outage date', passou: 'the date has passed', faltamH: h => `${h} h left`, faltamD: d => `${d} days left` },
+    prazos: (l, i, v) => `Legal minimum: ${l} hours; internal target: ${i} days (to be confirmed). Units with life-support equipment: ${v} business days.`,
+    rodape1: 'Fictitious power grid and customers. Real territorial data (IBGE 2022 Census).',
+    rodape2: 'No personal data: contains only community names and counts of consumer units.',
+    verif: 'Verification code: any change to the text produces a different code.',
+  },
+  es: {
+    slogan: 'Cada comunidad avisada por su nombre.', titulo: 'Aviso de corte programado', avisoN: 'Aviso n.º',
+    gerado: (a, m, d, h) => `generado el ${d}/${m}/${a} a las ${h}`,
+    leitura: 'Texto para leer al aire', duracao: s => `Duración estimada: unos ${s} segundos (locución de ~150 palabras por minuto).`,
+    resumo: 'Resumen', data: 'Fecha', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sin fecha)',
+    horario: 'Horario', horarioV: h => `de ${h}`, inteiras: 'Comunidades enteras', parte: 'Comunidades en parte',
+    vizinhas: 'Localidades vecinas', vizSim: n => `Sí: ${n} ${n === 1 ? 'localidad no mencionada' : 'localidades no mencionadas'} por su nombre`, nao: 'No',
+    telefone: 'Teléfono de atención', exemplo: ' (ejemplo, a confirmar)',
+    registro: 'Registro', chave: 'Seccionador abierto', alim: 'Alimentador', ucs: 'Unidades consumidoras afectadas',
+    citadas: 'Comunidades mencionadas', vizNao: 'Vecinas no mencionadas', uc: n => n === 1 ? 'unidad' : 'unidades', antecedencia: 'Antelación',
+    ant: { ok: 'Antelación suficiente', legal: h => `Por debajo del plazo legal de ${h} horas`, interno: d => `Por debajo del plazo interno de ${d} días`,
+      semData: 'Indique la fecha del corte', passou: 'la fecha ya pasó', faltamH: h => `faltan ${h} h`, faltamD: d => `faltan ${d} días` },
+    prazos: (l, i, v) => `Plazo legal: ${l} horas; plazo interno: ${i} días (a confirmar). Unidades con equipos de soporte vital: ${v} días hábiles.`,
+    rodape1: 'Red eléctrica y clientes ficticios. Datos territoriales reales (Censo IBGE 2022).',
+    rodape2: 'Documento sin datos personales: solo contiene nombres de comunidades y conteos de unidades consumidoras.',
+    verif: 'Código de verificación: cualquier cambio en el texto genera un código distinto.',
+  },
+};
 function preencherRoteiro(c, f, ant, sD) {
   const { inteiras, parciais, vizinhas } = classificar(c);
   const agora = new Date();
   const gerado = `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
   const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${codAtual}`;
+  const L = idiomaAtual, T = RT[L];
   const ou = l => l.length ? esc(l.join(', ')) : '—';
-  const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${x[1] === 1 ? 'UC' : 'UCs'})`).join('; ') : '—';
+  const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${T.uc(x[1])})`).join('; ') : '—';
   const frases = textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
+  const [dg, hg] = gerado.split(' '), [gd, gm, ga] = dg.split('/');
+  const antTxt = ant.cod === 'semData' ? T.ant.semData : ant.cod === 'legal' ? T.ant.legal(PRAZO_LEGAL_HORAS)
+    : ant.cod === 'interno' ? T.ant.interno(PRAZO_INTERNO_DIAS) : T.ant.ok;
+  const faltaTxt = ant.cod === 'semData' ? '' : ant.h < 0 ? T.ant.passou : ant.h < 48 ? T.ant.faltamH(Math.floor(ant.h)) : T.ant.faltamD(Math.floor(ant.h / 24));
   $('roteiro').innerHTML = `
-    <div class="rt-marca">${logoSVG}<div><div class="rt-nome">${APP_NOME}</div><div class="rt-slogan">${SLOGAN}</div></div></div>
-    <h1>Aviso de desligamento programado</h1>
-    <div class="rt-meta">${DISTRIBUIDORA} · Aviso nº <b>${numero}</b> · gerado em ${gerado.replace(' ', ' às ')}</div>
-    <h2>Texto para leitura</h2>
+    <div class="rt-marca">${logoSVG}<div><div class="rt-nome">${APP_NOME}</div><div class="rt-slogan">${T.slogan}</div></div></div>
+    <h1>${T.titulo}</h1>
+    <div class="rt-meta">${esc(DISTRIBUIDORA)} · ${T.avisoN} <b>${numero}</b> · ${T.gerado(ga, gm, gd, hg)}</div>
+    <h2>${T.leitura}</h2>
     <div class="rt-leitura">${frases}</div>
-    <div class="rt-dur">Duração estimada: cerca de ${sD} segundos (locução de ~150 palavras por minuto).</div>
-    <h2>Resumo</h2>
+    <div class="rt-dur">${T.duracao(sD)}</div>
+    <h2>${T.resumo}</h2>
     <table>
-      <tr><th>Data</th><td>${f.dataLonga}</td></tr>
-      <tr><th>Horário</th><td>das ${f.horario}</td></tr>
-      <tr><th>Comunidades inteiras</th><td>${ou(inteiras)}</td></tr>
-      <tr><th>Comunidades em parte</th><td>${ou(parciais)}</td></tr>
-      <tr><th>Localidades vizinhas</th><td>${vizinhas.length ? `Sim: ${vizinhas.length} ${vizinhas.length === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome` : 'Não'}</td></tr>
-      <tr><th>Telefone de atendimento</th><td>${f.tel ? esc(f.tel) : '—'}${/x/i.test(f.tel) ? ' (exemplo, a confirmar)' : ''}</td></tr>
+      <tr><th>${T.data}</th><td>${f.d ? T.dataLonga(f.a, f.m, f.d) : T.semData}</td></tr>
+      <tr><th>${T.horario}</th><td>${T.horarioV(formatarHorario(minutos(f.ini), minutos(f.fim), L))}</td></tr>
+      <tr><th>${T.inteiras}</th><td>${ou(inteiras)}</td></tr>
+      <tr><th>${T.parte}</th><td>${ou(parciais)}</td></tr>
+      <tr><th>${T.vizinhas}</th><td>${vizinhas.length ? T.vizSim(vizinhas.length) : T.nao}</td></tr>
+      <tr><th>${T.telefone}</th><td>${f.tel ? esc(f.tel) : '—'}${/x/i.test(f.tel) ? T.exemplo : ''}</td></tr>
     </table>
-    <h2>Registro</h2>
+    <h2>${T.registro}</h2>
     <table>
-      <tr><th>Chave aberta</th><td>${esc(codAtual)}</td></tr>
-      <tr><th>Alimentador</th><td>${esc(c.alim)}</td></tr>
-      <tr><th>UCs afetadas</th><td>${fmt(c.n)}</td></tr>
-      <tr><th>Comunidades citadas</th><td>${comUCs(citadas(c))}</td></tr>
-      <tr><th>Vizinhas não citadas</th><td>${comUCs(vizinhas)}</td></tr>
-      <tr><th>Antecedência</th><td>${ant.texto}${ant.falta ? ` (${ant.falta})` : ''}. Prazo legal: ${PRAZO_LEGAL_HORAS} horas; prazo interno: ${PRAZO_INTERNO_DIAS} dias (a confirmar). Unidades com equipamento vital: 5 dias úteis.</td></tr>
+      <tr><th>${T.chave}</th><td>${esc(codAtual)}</td></tr>
+      <tr><th>${T.alim}</th><td>${esc(c.alim)}</td></tr>
+      <tr><th>${T.ucs}</th><td>${fmt(c.n)}</td></tr>
+      <tr><th>${T.citadas}</th><td>${comUCs(citadas(c))}</td></tr>
+      <tr><th>${T.vizNao}</th><td>${comUCs(vizinhas)}</td></tr>
+      <tr><th>${T.antecedencia}</th><td>${antTxt}${faltaTxt ? ` (${faltaTxt})` : ''}. ${T.prazos(PRAZO_LEGAL_HORAS, PRAZO_INTERNO_DIAS, PRAZO_VITAL_DIAS_UTEIS)}</td></tr>
     </table>
-    <p class="rt-rodape">Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).<br>
-      Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.</p>
+    <p class="rt-rodape">${T.rodape1}<br>
+      ${T.rodape2}</p>
     <p class="rt-verif">SHA-256: <code id="rtCodigo">calculando…</code><br>
-      Código de verificação: qualquer alteração no texto gera um código diferente.</p>`;
-  // Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular)
+      ${T.verif}</p>`;
+  // Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular).
+  // Data, horário e "gerado" ficam sempre no formato canônico (dd/mm/aaaa, 8h às 14h), em qualquer idioma.
   const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\nchave=${codAtual}\ngerado=${gerado}`;
   const minha = ++seqHash;
   hashPronto = sha256hex(entrada)
@@ -1032,8 +1134,11 @@ document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click
   pararLeitura();
   if (estava || !avisoAtual) return;
   const fala = new SpeechSynthesisUtterance(textos[alvo]);
-  fala.lang = 'pt-BR';
-  const voz = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith('pt-BR'));
+  // o aviso novo usa a voz do idioma escolhido; o de hoje é sempre em português
+  const lang = alvo === 'novo' ? IDI[idiomaAtual].voz : 'pt-BR';
+  fala.lang = lang;
+  const vozes = speechSynthesis.getVoices().map(v => [v, v.lang.replace('_', '-')]);
+  const voz = (vozes.find(([, l]) => l === lang) || vozes.find(([, l]) => l.startsWith(lang.slice(0, 2))) || [])[0];
   if (voz) fala.voice = voz;
   fala.onend = pararLeitura;
   lendo = alvo; b.textContent = '■ Parar';
@@ -1112,7 +1217,7 @@ function sortear() {
 document.querySelectorAll('[data-acao="sortear"]').forEach(b => b.addEventListener('click', sortear));
 $('btnLimpar').addEventListener('click', limpar);
 
-// ---------- Abertura: município inteiro, travado em Leopoldina ----------
+// ---------- Abertura: município inteiro, travado nele ----------
 Object.keys(ligada).forEach(aplicarCamada);
 const limMun = C.municipio.getBounds();
 mapa.setMaxBounds(limMun.pad(0.15));

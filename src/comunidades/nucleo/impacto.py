@@ -1,8 +1,8 @@
 """Janela de menor dano e cargas sensíveis de um desligamento.
 
-Puro: recebe a contagem de UCs afetadas por atividade (nunca nomes) e devolve notas e
-sugestões. É uma sugestão para a equipe, que continua decidindo. Os pesos vêm de
-perfis_carga.py, que são hipóteses de demonstração.
+Puro: recebe a contagem de UCs afetadas por atividade (nunca nomes), os perfis e o
+expediente (vindos da configuração da distribuidora) e devolve notas e sugestões.
+É uma sugestão para a equipe, que continua decidindo. Os perfis são hipóteses.
 
 Tempos em minutos desde a meia-noite. A nota é inteira (quantidade × peso × minutos),
 para o navegador reproduzir exatamente o mesmo resultado.
@@ -11,8 +11,10 @@ para o navegador reproduzir exatamente o mesmo resultado.
 from datetime import date
 
 from . import perfis_carga as P
+from .perfis_carga import Expediente
 
-SLOTS = 24 * 60 // P.PASSO_MIN  # meias horas do dia
+SLOT_MIN = 30                  # granularidade dos pesos ao longo do dia
+SLOTS = 24 * 60 // SLOT_MIN    # meias horas do dia
 
 
 def tipo_dia(d: date) -> str:
@@ -27,12 +29,11 @@ def _sobreposicao(a0: int, a1: int, b0: int, b1: int) -> int:
     return max(0, min(a1, b1) - max(a0, b0))
 
 
-def pesos(atividade: str, tipo: str, perfis: dict | None = None) -> list[int]:
+def pesos(perfil: P.Perfil, tipo: str) -> list[int]:
     """Nível de sensibilidade de cada meia hora do dia (o maior entre o padrão e os períodos)."""
-    perfil = (perfis or P.PERFIS)[atividade]
     w = []
     for s in range(SLOTS):
-        ini = s * P.PASSO_MIN
+        ini = s * SLOT_MIN
         nivel = perfil.padrao[tipo]
         for p in perfil.periodos:
             if tipo in p.dias and _min(p.inicio_h) <= ini < _min(p.fim_h):
@@ -41,30 +42,30 @@ def pesos(atividade: str, tipo: str, perfis: dict | None = None) -> list[int]:
     return w
 
 
-def _nota(contagem: dict, tipo: str, inicio: int, duracao: int, perfis: dict | None = None) -> int:
+def _nota(contagem: dict, tipo: str, inicio: int, duracao: int, perfis: dict) -> int:
     fim, total = inicio + duracao, 0
-    for atividade in P.ATIVIDADES:
+    for atividade, perfil in perfis.items():
         n = contagem.get(atividade, 0)
         if not n:
             continue
-        w = pesos(atividade, tipo, perfis)
+        w = pesos(perfil, tipo)
         for s in range(SLOTS):
-            o = _sobreposicao(inicio, fim, s * P.PASSO_MIN, (s + 1) * P.PASSO_MIN)
+            o = _sobreposicao(inicio, fim, s * SLOT_MIN, (s + 1) * SLOT_MIN)
             if o:
                 total += n * w[s] * o
     return total
 
 
-def nota_dano(contagem: dict, data: date, inicio: int, duracao: int, perfis: dict | None = None) -> int:
+def nota_dano(contagem: dict, data: date, inicio: int, duracao: int, perfis: dict) -> int:
     """Soma, por atividade, quantidade × peso × minutos de cada meia hora dentro da janela."""
     return _nota(contagem, tipo_dia(data), inicio, duracao, perfis)
 
 
-def inicios_possiveis(duracao: int) -> list[int]:
+def inicios_possiveis(duracao: int, exp: Expediente) -> list[int]:
     if duracao <= 0:
         return []
-    ultimo = min(P.EXPEDIENTE_ULTIMO_INICIO_MIN, P.EXPEDIENTE_FIM_MIN - duracao)
-    return list(range(P.EXPEDIENTE_INICIO_MIN, ultimo + 1, P.PASSO_MIN))
+    ultimo = min(exp.ultimo_inicio, exp.fim - duracao)
+    return list(range(exp.inicio, ultimo + 1, exp.passo))
 
 
 def _lista(itens: list[str]) -> str:
@@ -75,12 +76,11 @@ def _qtd(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
 
-def explicar(contagem: dict, tipo: str, inicio: int, fim: int, perfis: dict | None = None) -> str:
+def explicar(contagem: dict, tipo: str, inicio: int, fim: int, perfis: dict, exp: Expediente) -> str:
     """Uma linha: os maiores conflitos da janela e os horários de peso alto que ela evita."""
-    perfis = perfis or P.PERFIS
     conflitos, evitados = [], []
-    for atividade in P.ATIVIDADES:
-        n, perfil = contagem.get(atividade, 0), perfis[atividade]
+    for atividade, perfil in perfis.items():
+        n = contagem.get(atividade, 0)
         if not n:
             continue
         for p in perfil.periodos:
@@ -91,7 +91,7 @@ def explicar(contagem: dict, tipo: str, inicio: int, fim: int, perfis: dict | No
             if o and p.nivel >= P.MEDIO:
                 rotulo = perfil.singular if n == 1 else perfil.plural
                 conflitos.append((n * p.nivel * o, len(conflitos), f"{p.nome} de {_qtd(n)} {rotulo}"))
-            elif not o and p.nivel == P.ALTO and _sobreposicao(P.EXPEDIENTE_INICIO_MIN, P.EXPEDIENTE_FIM_MIN, p0, p1):
+            elif not o and p.nivel == P.ALTO and _sobreposicao(exp.inicio, exp.fim, p0, p1):
                 evitados.append(p.nome)
     conflitos.sort(key=lambda c: (-c[0], c[1]))
     pega = [c[2] for c in conflitos[:2]]
@@ -104,21 +104,22 @@ def explicar(contagem: dict, tipo: str, inicio: int, fim: int, perfis: dict | No
     return "Sem conflito com os horários sensíveis"
 
 
-def avaliar_janelas(contagem: dict, data: date, duracao: int, perfis: dict | None = None) -> list[dict]:
+def avaliar_janelas(contagem: dict, data: date, duracao: int, perfis: dict, exp: Expediente) -> list[dict]:
     """Todas as janelas do expediente, da menor para a maior nota (empate: a que começa antes)."""
     tipo = tipo_dia(data)
     js = [{"inicio": i, "fim": i + duracao, "nota": _nota(contagem, tipo, i, duracao, perfis)}
-          for i in inicios_possiveis(duracao)]
+          for i in inicios_possiveis(duracao, exp)]
     js.sort(key=lambda j: (j["nota"], j["inicio"]))
     for j in js:
         j["tipo"] = tipo
     return js
 
 
-def sugerir_janelas(contagem: dict, data: date, duracao: int, quantas: int = 3, perfis: dict | None = None) -> list[dict]:
-    melhores = avaliar_janelas(contagem, data, duracao, perfis)[:quantas]
+def sugerir_janelas(contagem: dict, data: date, duracao: int, perfis: dict, exp: Expediente,
+                    quantas: int = 3) -> list[dict]:
+    melhores = avaliar_janelas(contagem, data, duracao, perfis, exp)[:quantas]
     for j in melhores:
-        j["explicacao"] = explicar(contagem, j["tipo"], j["inicio"], j["fim"], perfis)
+        j["explicacao"] = explicar(contagem, j["tipo"], j["inicio"], j["fim"], perfis, exp)
     return melhores
 
 
@@ -127,17 +128,17 @@ def cargas_sensiveis(contagem: dict) -> dict:
     return {a: int(contagem.get(a, 0)) for a in P.SENSIVEIS}
 
 
-def perfis_para_mapa() -> dict:
+def perfis_para_mapa(perfis: dict, exp: Expediente, razao_muito_pior: float) -> dict:
     """Perfis e expediente no formato que o navegador usa para repetir o mesmo cálculo."""
     return {
-        "atividades": list(P.ATIVIDADES),
-        "pesos": {a: {t: pesos(a, t) for t in P.TIPOS_DIA} for a in P.ATIVIDADES},
-        "periodos": {a: [[p.nome, list(p.dias), _min(p.inicio_h), _min(p.fim_h), p.nivel] for p in P.PERFIS[a].periodos]
-                     for a in P.ATIVIDADES},
-        "rotulos": {a: [P.PERFIS[a].singular, P.PERFIS[a].plural] for a in P.ATIVIDADES},
+        "atividades": list(perfis),
+        "pesos": {a: {t: pesos(p, t) for t in P.TIPOS_DIA} for a, p in perfis.items()},
+        "periodos": {a: [[q.nome, list(q.dias), _min(q.inicio_h), _min(q.fim_h), q.nivel] for q in p.periodos]
+                     for a, p in perfis.items()},
+        "rotulos": {a: [p.singular, p.plural] for a, p in perfis.items()},
         "sensiveis": list(P.SENSIVEIS),
         "niveis": {"medio": P.MEDIO, "alto": P.ALTO},
-        "expediente": {"inicio": P.EXPEDIENTE_INICIO_MIN, "ultimoInicio": P.EXPEDIENTE_ULTIMO_INICIO_MIN,
-                       "fim": P.EXPEDIENTE_FIM_MIN, "passo": P.PASSO_MIN},
-        "razaoMuitoPior": P.RAZAO_MUITO_PIOR,
+        "slot": SLOT_MIN,
+        "expediente": {"inicio": exp.inicio, "ultimoInicio": exp.ultimo_inicio, "fim": exp.fim, "passo": exp.passo},
+        "razaoMuitoPior": razao_muito_pior,
     }

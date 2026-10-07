@@ -6,6 +6,7 @@ import pandas as pd
 from rapidfuzz import fuzz, process
 
 from .. import config as C
+from .. import distribuidora as dist_
 from ..nucleo.desligamento import _sem_sufixo, duracao_s, simular
 from ..nucleo.nomes import normalizar
 
@@ -23,7 +24,9 @@ def _alinhar(previstos: pd.Series, reais: set) -> pd.Series:
     return previstos.map(mapa)
 
 
-def avaliar():
+def avaliar(dist=None):
+    """dist: configuração da distribuidora (padrão: distribuidoras/demo-leopoldina.toml)."""
+    dist = dist or dist_.carregar()
     g = gpd.read_file(C.SAIDA / "ucs_comunidade.gpkg")
     gab = pd.read_csv(C.SINTETICO / "gabarito_uc.csv", dtype={"UC": str})
     df = g.merge(gab[["UC", "COMUNIDADE", "ZONA", "RUIDO_LOCALIDADE", "RUIDO_COORD"]], on="UC")
@@ -39,7 +42,7 @@ def avaliar():
     ch = gpd.read_file(C.SINTETICO / "chaves.gpkg")
     linhas = []
     for cod in ch["COD_CHAVE"]:
-        d = simular(df, cod)
+        d = simular(df, cod, dist.regras)
         if d.ucs.empty:
             continue
         real_uc = _chave_nome(d.ucs["COMUNIDADE"])

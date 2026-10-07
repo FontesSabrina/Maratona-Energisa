@@ -41,6 +41,7 @@ Nenhum dado de cliente real da distribuidora foi usado.
   chave=<código da chave>
   gerado=<dd/mm/aaaa hh:mm>
   ```
+- Com o aviso em inglês ou espanhol, o `texto` entra no idioma escolhido, mas `data`, `horario` e `gerado` continuam nos formatos acima (dd/mm/aaaa, "8h às 14h" e dd/mm/aaaa hh:mm).
 - Para conferir, basta recalcular. Em Python: `hashlib.sha256(entrada.encode("utf-8")).hexdigest()`.
 - **Limite:** o código detecta alteração no texto em relação ao que foi gerado, mas **não é assinatura digital**. Quem altera o texto pode calcular um código novo. Para servir de prova, o código precisa ficar registrado num sistema da distribuidora no momento da geração (ver abaixo).
 

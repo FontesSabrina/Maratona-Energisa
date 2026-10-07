@@ -1,0 +1,118 @@
+"""Configuração da distribuidora: lê distribuidoras/*.toml e entrega os valores prontos.
+
+Tudo o que muda de uma distribuidora para outra (nome, telefone, município, prazos,
+expediente, limites do aviso e perfis de sensibilidade) fica num único arquivo.
+Este módulo lê o arquivo; o núcleo só recebe os valores, sem ler nada.
+"""
+
+import os
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+from . import config as C
+from .nucleo import idiomas
+from .nucleo.desligamento import RegrasAviso
+from .nucleo.perfis_carga import NIVEIS, TIPOS_DIA, Expediente, expediente_de_dict, perfis_de_dict
+
+PASTA = C.RAIZ / "distribuidoras"
+PADRAO = PASTA / "demo-leopoldina.toml"
+VARIAVEL = "FAROL_DISTRIBUIDORA"  # caminho alternativo, se definido
+
+
+@dataclass(frozen=True)
+class Distribuidora:
+    arquivo: Path
+    nome: str
+    telefone: str
+    municipio: str
+    uf: str
+    idioma_padrao: str
+    prazo_legal_horas: int
+    prazo_vital_dias_uteis: int
+    prazo_interno_dias: int
+    norma: str
+    regras: RegrasAviso
+    expediente: Expediente
+    razao_muito_pior: float
+    perfis: dict
+
+    def para_mapa(self) -> dict:
+        """O que a apresentação precisa saber da distribuidora (nada de dados de clientes)."""
+        return {"nome": self.nome, "telefone": self.telefone, "municipio": self.municipio, "uf": self.uf,
+                "idiomaPadrao": self.idioma_padrao, "prazoLegalHoras": self.prazo_legal_horas,
+                "prazoVitalDiasUteis": self.prazo_vital_dias_uteis, "prazoInternoDias": self.prazo_interno_dias,
+                "norma": self.norma}
+
+
+class ConfiguracaoInvalida(ValueError):
+    pass
+
+
+def _exigir(d: dict, caminho: str, tipo):
+    """Busca 'secao.campo' e confere tipo e preenchimento, com mensagem clara."""
+    atual = d
+    for parte in caminho.split("."):
+        if not isinstance(atual, dict) or parte not in atual:
+            raise ConfiguracaoInvalida(f"campo obrigatório ausente: {caminho}")
+        atual = atual[parte]
+    if tipo is float and isinstance(atual, int) and not isinstance(atual, bool):
+        atual = float(atual)
+    if not isinstance(atual, tipo) or isinstance(atual, bool):
+        raise ConfiguracaoInvalida(f"{caminho} deve ser {tipo.__name__}, veio {atual!r}")
+    if (isinstance(atual, str) and not atual.strip()) or (isinstance(atual, (int, float)) and atual <= 0):
+        raise ConfiguracaoInvalida(f"{caminho} está vazio ou zerado")
+    return atual
+
+
+def _validar_perfis(d: dict) -> dict:
+    perfis = d.get("perfis")
+    if not isinstance(perfis, dict) or not perfis:
+        raise ConfiguracaoInvalida("nenhum perfil em [perfis.*]")
+    for nome, p in perfis.items():
+        for campo in ("singular", "plural"):
+            _exigir(perfis, f"{nome}.{campo}", str)
+        for t in TIPOS_DIA:
+            if p.get("padrao", {}).get(t) not in NIVEIS:
+                raise ConfiguracaoInvalida(f"perfis.{nome}.padrao.{t} deve ser um de {list(NIVEIS)}")
+        for i, q in enumerate(p.get("periodos", [])):
+            onde = f"perfis.{nome}.periodos[{i}]"
+            if q.get("nivel") not in NIVEIS:
+                raise ConfiguracaoInvalida(f"{onde}.nivel deve ser um de {list(NIVEIS)}")
+            if not q.get("nome") or not q.get("dias") or any(x not in TIPOS_DIA for x in q["dias"]):
+                raise ConfiguracaoInvalida(f"{onde}: precisa de nome e de dias entre {list(TIPOS_DIA)}")
+            if not (0 <= q.get("inicio_h", -1) < q.get("fim_h", -1) <= 24):
+                raise ConfiguracaoInvalida(f"{onde}: inicio_h e fim_h inválidos")
+    return perfis
+
+
+def carregar(arquivo: str | Path | None = None) -> Distribuidora:
+    caminho = Path(arquivo or os.environ.get(VARIAVEL) or PADRAO)
+    with open(caminho, "rb") as f:
+        d = tomllib.load(f)
+    idioma = _exigir(d, "distribuidora.idioma_padrao", str)
+    if idioma not in idiomas.IDIOMAS:
+        raise ConfiguracaoInvalida(f"distribuidora.idioma_padrao deve ser um de {list(idiomas.IDIOMAS)}")
+    municipio = _exigir(d, "distribuidora.municipio", str)
+    return Distribuidora(
+        arquivo=caminho,
+        nome=_exigir(d, "distribuidora.nome", str),
+        telefone=_exigir(d, "distribuidora.telefone", str),
+        municipio=municipio,
+        uf=_exigir(d, "distribuidora.uf", str),
+        idioma_padrao=idioma,
+        prazo_legal_horas=_exigir(d, "regulatorio.prazo_legal_horas", int),
+        prazo_vital_dias_uteis=_exigir(d, "regulatorio.prazo_vital_dias_uteis", int),
+        prazo_interno_dias=_exigir(d, "regulatorio.prazo_interno_dias", int),
+        norma=_exigir(d, "regulatorio.norma", str),
+        regras=RegrasAviso(
+            limiar_total=_exigir(d, "aviso.limiar_total", float),
+            limite_fragmento=_exigir(d, "aviso.limite_fragmento", int),
+            limite_participacao=_exigir(d, "aviso.limite_participacao", float),
+            municipio=municipio,
+            assinatura_aviso_atual=_exigir(d, "distribuidora.assinatura_aviso_atual", str)),
+        expediente=expediente_de_dict({k: _exigir(d, f"expediente.{k}", float if k != "passo_min" else int)
+                                       for k in ("inicio_min_h", "ultimo_inicio_h", "fim_max_h", "passo_min")}),
+        razao_muito_pior=_exigir(d, "janela.razao_muito_pior", float),
+        perfis=perfis_de_dict(_validar_perfis(d)),
+    )

@@ -17,8 +17,9 @@ from .. import config as C
 from ..fontes import osm
 from ..nucleo.algoritmo import territorios_voronoi
 from ..nucleo.desligamento import duracao_s, locais_antigos, simular
+from .. import distribuidora as dist_
+from ..nucleo import idiomas
 from ..nucleo.impacto import perfis_para_mapa
-from ..nucleo.perfis_carga import ATIVIDADES
 from ..nucleo.nomes import exibir
 from ..validacao.avaliacao import avaliar
 
@@ -49,8 +50,10 @@ def _territorios_reais(pontos: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return t.join(pontos.groupby("COMUNIDADE").size().rename("N_UC"), on="NOME")
 
 
-def construir():
-    df, por_uc, _, cen = avaliar()  # df: UCs com previsão + gabarito (só para a camada de validação)
+def construir(dist=None):
+    dist = dist or dist_.carregar()
+    atividades = list(dist.perfis)
+    df, por_uc, _, cen = avaliar(dist)  # df: UCs com previsão + gabarito (só para a camada de validação)
     gab = pd.read_csv(C.SINTETICO / "gabarito_uc.csv", dtype={"UC": str}).set_index("UC")
     df = df.join(gab[["LAT_REAL", "LON_REAL"]], on="UC")
 
@@ -95,7 +98,7 @@ def construir():
         cod = r["COD_CHAVE"]
         if cod not in cen.index:
             continue
-        d = simular(df, cod)
+        d = simular(df, cod, dist.regras)
         e = cen.loc[cod]
         cenarios[cod] = {
             "alim": r["ALIMENTADOR"], "n": len(d.ucs), "rural": round(float(e["RURAL"]), 2),
@@ -108,8 +111,8 @@ def construir():
             "sAntes": round(duracao_s(d.aviso_antigo)), "sDepois": round(duracao_s(d.aviso_novo)),
             "prec": round(float(e["PRECISAO"]), 2), "cob": round(float(e["COBERTURA"]), 2),
             "cobUC": round(float(e["COBERTURA_UC"]), 3),
-            # UCs afetadas por atividade (só contagens), na ordem de perfis_carga.ATIVIDADES
-            "ativ": [int(n) for n in d.ucs["ATIVIDADE"].value_counts().reindex(ATIVIDADES, fill_value=0)],
+            # UCs afetadas por atividade (só contagens), na ordem dos perfis da distribuidora
+            "ativ": [int(n) for n in d.ucs["ATIVIDADE"].value_counts().reindex(atividades, fill_value=0)],
         }
 
     # Camadas geográficas
@@ -150,7 +153,8 @@ def construir():
 
     dados = {"camadas": camadas, "ucs": ucs, "classes": classes, "locCad": loc_cad, "trafos": trafos,
              "comPrev": com_prev, "comReal": com_real, "cenarios": cenarios, "metricas": metricas,
-             "perfis": perfis_para_mapa(),
+             "perfis": perfis_para_mapa(dist.perfis, dist.expediente, dist.razao_muito_pior),
+             "distribuidora": dist.para_mapa(), "idiomas": idiomas.para_mapa(),
              "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
     favicon = base64.b64encode((MARCA / "farol-pequeno.svg").read_bytes()).decode()
     html = (TEMPLATE.read_text(encoding="utf-8")

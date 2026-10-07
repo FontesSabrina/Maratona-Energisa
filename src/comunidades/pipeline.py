@@ -9,6 +9,7 @@ O nucleo não lê nem grava arquivos: é aqui que os dados são carregados e os 
 import geopandas as gpd
 
 from . import config as C
+from . import distribuidora as dist_
 from .apresentacao import mapa
 from .fontes import dados, ibge, osm
 from .nucleo import algoritmo
@@ -35,22 +36,27 @@ ETAPAS = [
     ("Rede elétrica fictícia", rede.construir),
     ("Cadastro fictício de UCs", clientes.construir),
     ("Algoritmo de comunidades", rodar_algoritmo),
-    ("Mapa interativo (inclui avaliação)", mapa.construir),
+    ("Mapa interativo (inclui avaliação)", "mapa"),
 ]
 SO_ALGORITMO = {"Algoritmo de comunidades", "Mapa interativo (inclui avaliação)"}
 
 
 def executar(argv: list[str]) -> None:
     """Executa o pipeline completo: dados reais -> rede fictícia -> algoritmo -> avaliação -> mapa.
-    Com --so-algoritmo, reaproveita os dados e o cadastro já gerados."""
+    Com --so-algoritmo, reaproveita os dados e o cadastro já gerados.
+    Com --distribuidora arquivo.toml, usa outra configuração (padrão: distribuidoras/demo-leopoldina.toml)."""
     pular_dados = "--so-algoritmo" in argv
+    arquivo = argv[argv.index("--distribuidora") + 1] if "--distribuidora" in argv else None
+    dist = dist_.carregar(arquivo)
+    if arquivo:
+        print(f"Distribuidora: {dist.arquivo}", flush=True)
     for nome, f in ETAPAS:
         if pular_dados and nome not in SO_ALGORITMO:
             continue
         print(f"> {nome}...", flush=True)
-        f()
+        mapa.construir(dist) if f == "mapa" else f()
 
-    _, por_uc, _, cen = avaliacao.avaliar()
+    _, por_uc, _, cen = avaliacao.avaliar(dist)
     print("\nAcerto por UC (cadastro digitado x algoritmo):")
     print(por_uc.to_string())
     print(f"\nCenários: {len(cen)} | cobertura média {cen.COBERTURA.mean():.1%} | "

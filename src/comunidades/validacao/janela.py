@@ -3,7 +3,8 @@
 Compara, num dia útil, o horário padrão suposto (começando às 8h) com a janela sugerida
 de mesma duração, e mede a diferença entre a pior e a melhor janela do expediente.
 Roda com dois perfis lado a lado: o anterior (sem o resfriamento do leite) e o atual.
-O resultado depende inteiramente dos perfis hipotéticos de nucleo/perfis_carga.py.
+O resultado depende inteiramente dos perfis hipotéticos da configuração da distribuidora
+(distribuidoras/demo-leopoldina.toml).
 
 Uso: py -m uv run python -m comunidades.validacao.janela
 """
@@ -14,9 +15,9 @@ from datetime import date
 import pandas as pd
 
 from .. import config as C
+from .. import distribuidora as dist_
 from ..nucleo.desligamento import simular
 from ..nucleo.impacto import avaliar_janelas, nota_dano, tipo_dia
-from ..nucleo.perfis_carga import ATIVIDADES, PERFIS
 from .avaliacao import avaliar
 
 DATA = date(2026, 11, 12)          # quinta-feira (dia útil), a data padrão do aviso
@@ -24,26 +25,32 @@ INICIO_PADRAO = 8 * 60             # suposição nossa: hoje a obra começa às 
 DURACOES_H = (2, 4, 6)             # 6 h = 8h às 14h, o horário padrão do aviso
 LIMIAR_RURAL = 0.8
 
-# Perfil anterior: o atual sem os períodos de resfriamento do leite (só para comparação)
-_agro = PERFIS["agropecuaria"]
-PERFIS_ANTERIOR = {**PERFIS, "agropecuaria": replace(
-    _agro, periodos=tuple(p for p in _agro.periodos if "resfriamento" not in p.nome))}
-VERSOES = {"sem resfriamento": PERFIS_ANTERIOR, "com resfriamento": PERFIS}
+VERSOES = ("sem resfriamento", "com resfriamento")
+
+
+def versoes_dos_perfis(perfis: dict) -> dict:
+    """Perfil anterior (o atual sem os períodos de resfriamento do leite) e o atual, para comparação."""
+    agro = perfis["agropecuaria"]
+    anterior = {**perfis, "agropecuaria": replace(
+        agro, periodos=tuple(p for p in agro.periodos if "resfriamento" not in p.nome))}
+    return dict(zip(VERSOES, (anterior, perfis)))
 
 
 def _hora(m: int) -> str:
     return f"{m // 60}h" + (f"{m % 60:02d}" if m % 60 else "")
 
 
-def calcular() -> pd.DataFrame:
-    df, _, _, cen = avaliar()
+def calcular(dist=None) -> pd.DataFrame:
+    dist = dist or dist_.carregar()
+    atividades, versoes = list(dist.perfis), versoes_dos_perfis(dist.perfis)
+    df, _, _, cen = avaliar(dist)
     linhas = []
     for cod in cen.loc[cen["RURAL"] >= LIMIAR_RURAL, "CHAVE"]:
-        d = simular(df, cod)
-        cont = d.ucs["ATIVIDADE"].value_counts().reindex(ATIVIDADES, fill_value=0).astype(int).to_dict()
-        for versao, perfis in VERSOES.items():
+        d = simular(df, cod, dist.regras)
+        cont = d.ucs["ATIVIDADE"].value_counts().reindex(atividades, fill_value=0).astype(int).to_dict()
+        for versao, perfis in versoes.items():
             for h in DURACOES_H:
-                js = avaliar_janelas(cont, DATA, h * 60, perfis)
+                js = avaliar_janelas(cont, DATA, h * 60, perfis, dist.expediente)
                 linhas.append({
                     "PERFIL": versao, "CHAVE": cod, "UCS": len(d.ucs), "SAUDE": cont["saude"],
                     "ENSINO": cont["ensino"], "AGROPECUARIA": cont["agropecuaria"], "DURACAO_H": h,
@@ -80,7 +87,7 @@ if __name__ == "__main__":
     n = len(ramais)
     print(f"== Janela de menor dano · {n} ramais rurais (>= {LIMIAR_RURAL:.0%} rural) · "
           f"dia útil ({DATA:%d/%m/%Y}, tipo '{tipo_dia(DATA)}') ==")
-    print("ATENÇÃO: os perfis de sensibilidade são HIPÓTESES de demonstração (nucleo/perfis_carga.py),")
+    print("ATENÇÃO: os perfis de sensibilidade são HIPÓTESES de demonstração (distribuidoras/demo-leopoldina.toml),")
     print("a validar com a distribuidora e por região. O 'horário padrão' (começar às 8h: 8h às 14h para 6 h,")
     print("8h às 12h para 4 h e 8h às 10h para 2 h) é uma SUPOSIÇÃO NOSSA, não o horário real da distribuidora.")
     print("Perfis comparados: 'sem resfriamento' (anterior) e 'com resfriamento' (atual: + resfriamento do leite")
