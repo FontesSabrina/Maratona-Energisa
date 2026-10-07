@@ -20,6 +20,8 @@ EXPANSOES = [
 VAZIO = re.compile(r"^(|ZONA RURAL|Z RURAL|AREA RURAL|INTERIOR|S/?N|RURAL|NAO INFORMADO)$")
 PROPRIEDADE = re.compile(r"^(FAZ|FAZENDA|SIT|SITIO|ST|CHACARA|CHAC|HARAS|GRANJA)\b\.?")
 
+# Reserva: grafia feita à mão (para Leopoldina). Só vale para palavras que as fontes do
+# município (fontes/grafia.py) não trazem acentuadas.
 ACENTOS = {
     "CORREGO": "Córrego", "RIBEIRAO": "Ribeirão", "SAO": "São", "ABAIBA": "Abaíba",
     "PROVIDENCIA": "Providência", "ESPERANCA": "Esperança", "BRAUNA": "Braúna", "TOME": "Tomé",
@@ -51,12 +53,16 @@ def classificar(nome_normalizado: str) -> str:
     return "nome"
 
 
-def exibir(nome: str) -> str:
-    """'CORREGO SAO JOAO' -> 'Córrego São João'."""
+def exibir(nome: str, acentos: dict | None = None) -> str:
+    """'CORREGO SAO JOAO' -> 'Córrego São João'.
+
+    acentos: grafia vinda das fontes do município ({"CEMITERIO": "Cemitério"}), montada em
+    fontes/grafia.py; o dicionário manual ACENTOS é só a reserva."""
+    acentos = acentos or {}
     partes = []
     for i, p in enumerate(normalizar(nome).split()):
         if i > 0 and p in MINUSCULAS:
             partes.append(p.lower())
         else:
-            partes.append(ACENTOS.get(p, p.capitalize()))
+            partes.append(acentos.get(p) or ACENTOS.get(p) or p.capitalize())
     return " ".join(partes)

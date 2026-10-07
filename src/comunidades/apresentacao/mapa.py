@@ -14,7 +14,7 @@ import pandas as pd
 import shapely
 
 from .. import config as C
-from ..fontes import osm
+from ..fontes import grafia, osm
 from ..nucleo.algoritmo import territorios_voronoi
 from ..nucleo.desligamento import duracao_s, locais_antigos, simular
 from .. import distribuidora as dist_
@@ -73,7 +73,8 @@ def construir(dist=None):
     # Índices compactos
     trafo_idx = {c: i for i, c in enumerate(tr["COD_TRAFO"])}
     com_prev = sorted(df["COMUNIDADE_PREVISTA"].unique())
-    df["COMUNIDADE"] = df["COMUNIDADE"].map(exibir)  # grafia com acentos para exibição
+    acentos = grafia.carregar()
+    df["COMUNIDADE"] = df["COMUNIDADE"].map(lambda n: exibir(n, acentos))  # grafia com acentos para exibição
     com_real = sorted(df["COMUNIDADE"].unique())
     ip, ir = {c: i for i, c in enumerate(com_prev)}, {c: i for i, c in enumerate(com_real)}
     origem = {"cadastro": 0, "trafo (sem coordenada)": 1, "trafo (coordenada incoerente)": 2}

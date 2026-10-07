@@ -11,7 +11,7 @@ import geopandas as gpd
 from . import config as C
 from . import distribuidora as dist_
 from .apresentacao import mapa
-from .fontes import dados, ibge, osm
+from .fontes import dados, grafia, ibge, osm
 from .nucleo import algoritmo
 from .simulacao import clientes, rede
 from .validacao import avaliacao
@@ -22,7 +22,7 @@ def rodar_algoritmo():
     ucs = gpd.read_file(C.SINTETICO / "ucs.gpkg")
     trafos = gpd.read_file(C.SINTETICO / "transformadores.gpkg")
     municipio = gpd.read_file(C.INTERIM / "municipio.gpkg").to_crs(C.CRS_METRICO).union_all()
-    g = algoritmo.identificar(ucs, trafos)
+    g = algoritmo.identificar(ucs, trafos, grafia.carregar())
     g.to_crs(C.CRS_GEO).to_file(C.SAIDA / "ucs_comunidade.gpkg")
     t = algoritmo.territorios(g, municipio)
     t.to_crs(C.CRS_GEO).to_file(C.SAIDA / "comunidades.gpkg")
@@ -33,6 +33,7 @@ ETAPAS = [
     ("Dados do IBGE (download na primeira vez)", dados.garantir),
     ("IBGE: camadas reais e gabarito", ibge.construir),
     ("OSM: malha viária", osm.carregar),
+    ("Grafia dos nomes (IBGE e OSM)", grafia.construir),
     ("Rede elétrica fictícia", rede.construir),
     ("Cadastro fictício de UCs", clientes.construir),
     ("Algoritmo de comunidades", rodar_algoritmo),

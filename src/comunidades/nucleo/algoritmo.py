@@ -135,7 +135,8 @@ def absorver_fragmentos(df: pd.DataFrame) -> pd.Series:
     return rot
 
 
-def identificar(ucs: gpd.GeoDataFrame, trafos: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def identificar(ucs: gpd.GeoDataFrame, trafos: gpd.GeoDataFrame, acentos: dict | None = None) -> gpd.GeoDataFrame:
+    """acentos: grafia dos nomes vinda das fontes do município (ver nomes.exibir)."""
     df = ucs.drop(columns="geometry").copy()
     df = df.join(corrigir_coordenadas(ucs, trafos))
 
@@ -147,7 +148,7 @@ def identificar(ucs: gpd.GeoDataFrame, trafos: gpd.GeoDataFrame) -> gpd.GeoDataF
 
     xy = df[["X", "Y"]].to_numpy()
     nome, conf = votar(xy, df["VOTO"].to_numpy(dtype=object), df["COD_TRAFO"].to_numpy())
-    df["NOME"] = [exibir(n) if n else "Sem identificação" for n in nome]
+    df["NOME"] = [exibir(n, acentos) if n else "Sem identificação" for n in nome]
     df["CONFIANCA"] = conf.round(3)
     df["COMUNIDADE_PREVISTA"] = separar_homonimos(df)
     df["COMUNIDADE_PREVISTA"] = absorver_fragmentos(df)

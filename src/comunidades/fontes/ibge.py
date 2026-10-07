@@ -11,7 +11,9 @@ import re
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import KNeighborsClassifier
+from rapidfuzz import fuzz
+from rapidfuzz.distance import Levenshtein
+from sklearn.neighbors import KDTree, KNeighborsClassifier
 from unidecode import unidecode
 
 from .. import config as C
@@ -23,6 +25,15 @@ PREFIXO_PROPRIEDADE = re.compile(
 )
 MIN_ENDERECOS = 5  # comunidades com menos endereços são absorvidas pelos vizinhos
 K_VIZINHOS = 9
+
+# Grafias diferentes da mesma comunidade no CNEFE (BELISARIO x BELISARO): o rótulo menos
+# frequente vira o mais frequente, endereço por endereço, quando os nomes diferem em até
+# 2 letras, são parecidos, não diferem só por número (INCONFIDENCIA I x II) e o endereço
+# fica perto de um endereço da outra grafia, no mesmo distrito.
+GRAFIA_MAX_LETRAS = 2
+GRAFIA_MIN_SIMILARIDADE = 88
+GRAFIA_MAX_DISTANCIA_M = 5000
+NUMERAL = re.compile(r"^(?:[IVX]+|\d+)$")
 
 ESPECIES = {
     "1": "Domicílio particular",
@@ -90,6 +101,44 @@ def _rotulo_valido(nome: str, rural: bool) -> bool:
     return True
 
 
+def _so_numero(a: str, b: str) -> bool:
+    ta, tb = a.split(), b.split()
+    dif = [x for x in ta if x not in tb] + [x for x in tb if x not in ta]
+    return bool(dif) and all(NUMERAL.match(x) for x in dif)
+
+
+def unificar_grafias(g: gpd.GeoDataFrame, xy: np.ndarray) -> tuple[pd.Series, pd.DataFrame]:
+    """Rótulos com a grafia unificada e a lista das junções feitas (para conferência)."""
+    rot = g["ROTULO_ORIGINAL"].copy()
+    valido = np.array([_rotulo_valido(r, z == "Rural") for r, z in zip(rot, g["ZONA"])])
+    cont = rot[valido].value_counts()
+    nomes = list(cont.index)  # do mais para o menos frequente
+    juncoes = []
+    for i, menor in enumerate(nomes):
+        alvos = [maior for maior in nomes[:i]
+                 if cont[maior] >= cont[menor] and min(len(maior), len(menor)) >= 4
+                 and Levenshtein.distance(maior, menor) <= GRAFIA_MAX_LETRAS
+                 and fuzz.ratio(maior, menor) >= GRAFIA_MIN_SIMILARIDADE and not _so_numero(maior, menor)]
+        if not alvos:
+            continue
+        maior = alvos[0]  # a grafia mais frequente entre as candidatas
+        idx_menor = np.where(valido & (rot == menor).to_numpy())[0]
+        idx_maior = np.where(valido & (rot == maior).to_numpy())[0]
+        for distrito in pd.unique(g["NM_DIST"].iloc[idx_menor]):
+            a = idx_menor[(g["NM_DIST"].iloc[idx_menor] == distrito).to_numpy()]
+            b = idx_maior[(g["NM_DIST"].iloc[idx_maior] == distrito).to_numpy()]
+            if not len(b):
+                continue
+            dist, _ = KDTree(xy[b]).query(xy[a], k=1)
+            perto = a[dist[:, 0] <= GRAFIA_MAX_DISTANCIA_M]
+            if len(perto):
+                rot.iloc[perto] = maior
+                juncoes.append({"DE": menor, "PARA": maior, "DISTRITO": distrito, "ENDERECOS": len(perto),
+                                "FICARAM": len(a) - len(perto), "DIST_MEDIANA_KM": round(float(np.median(dist[:, 0]) / 1000), 2),
+                                "DIST_MAX_KM": round(float(dist[dist[:, 0] <= GRAFIA_MAX_DISTANCIA_M, 0].max() / 1000), 2)})
+    return rot, pd.DataFrame(juncoes, columns=["DE", "PARA", "DISTRITO", "ENDERECOS", "FICARAM", "DIST_MEDIANA_KM", "DIST_MAX_KM"])
+
+
 def gabarito(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Atribui a comunidade real (limpa) a cada endereço. Rural e urbano são tratados à parte."""
     g = g.copy()
@@ -97,12 +146,14 @@ def gabarito(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     g["ZONA"] = np.where(g["SITUACAO"] == "Rural", "Rural", "Urbana")
     m = g.to_crs(C.CRS_METRICO)
     xy = np.c_[m.geometry.x, m.geometry.y]
+    g["ROTULO_UNIFICADO"], juncoes = unificar_grafias(g, xy)
+    juncoes.to_csv(C.INTERIM / "grafias_unificadas.csv", index=False)
     g["COMUNIDADE"] = None
     g["REATRIBUIDO"] = False
 
     for zona in ("Rural", "Urbana"):
         idx = np.where(g["ZONA"] == zona)[0]
-        rot = g["ROTULO_ORIGINAL"].iloc[idx]
+        rot = g["ROTULO_UNIFICADO"].iloc[idx]
         valido = rot.map(lambda n: _rotulo_valido(n, zona == "Rural"))
         cont = rot[valido].value_counts()
         valido &= rot.map(cont).fillna(0) >= MIN_ENDERECOS
@@ -128,7 +179,7 @@ def construir():
     g = gabarito(enderecos(s))
     cols = ["COD_UNICO_ENDERECO", "CD_SETOR", "NM_DIST", "ZONA", "ESPECIE", "COD_ESPECIE",
             "NOM_TIPO_SEGLOGR", "NOM_TITULO_SEGLOGR", "NOM_SEGLOGR", "NUM_ENDERECO",
-            "DSC_ESTABELECIMENTO", "ROTULO_ORIGINAL", "COMUNIDADE", "REATRIBUIDO", "geometry"]
+            "DSC_ESTABELECIMENTO", "ROTULO_ORIGINAL", "ROTULO_UNIFICADO", "COMUNIDADE", "REATRIBUIDO", "geometry"]
     g[cols].to_file(C.INTERIM / "enderecos_gabarito.gpkg")
     return g
 

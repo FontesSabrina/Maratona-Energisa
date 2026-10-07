@@ -29,6 +29,11 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez
 - Janela de menor dano (ramais rurais, perfis hipotéticos): py -m uv run python -m comunidades.validacao.janela
 
+## Referências para comparação (desde o passo 10b)
+- Métricas: saida/metricas_passo10b.txt (Leopoldina) e saida/muriae/metricas_passo10b.txt (Muriaé). Substituem as métricas do passo 2 como referência de "antes e depois".
+- Avisos e janelas para os testes JS × Python: saida/referencias_passo10b/ e saida/muriae/referencias_passo10b/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
+- Esses arquivos ficam fora do git (saida/ é ignorada): se faltarem, regenere rodando o pipeline e grave de novo.
+
 ## Regras de trabalho
 - Explique o plano antes de editar e espere minha confirmação.
 - Mudanças pequenas e testadas, uma etapa por vez.
