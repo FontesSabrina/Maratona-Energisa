@@ -1,4 +1,4 @@
-"""Malha viária REAL do OpenStreetMap para Leopoldina (base para traçar a rede elétrica fictícia)."""
+"""Malha viária REAL do OpenStreetMap do município (base para traçar a rede elétrica fictícia)."""
 
 import geopandas as gpd
 import networkx as nx

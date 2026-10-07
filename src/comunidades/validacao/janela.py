@@ -3,8 +3,8 @@
 Compara, num dia útil, o horário padrão suposto (começando às 8h) com a janela sugerida
 de mesma duração, e mede a diferença entre a pior e a melhor janela do expediente.
 Roda com dois perfis lado a lado: o anterior (sem o resfriamento do leite) e o atual.
-O resultado depende inteiramente dos perfis hipotéticos da configuração da distribuidora
-(distribuidoras/demo-leopoldina.toml).
+O resultado depende inteiramente dos perfis hipotéticos da configuração da distribuidora ativa
+(distribuidoras/demo-leopoldina.toml por padrão).
 
 Uso: py -m uv run python -m comunidades.validacao.janela
 """
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     n = len(ramais)
     print(f"== Janela de menor dano · {n} ramais rurais (>= {LIMIAR_RURAL:.0%} rural) · "
           f"dia útil ({DATA:%d/%m/%Y}, tipo '{tipo_dia(DATA)}') ==")
-    print("ATENÇÃO: os perfis de sensibilidade são HIPÓTESES de demonstração (distribuidoras/demo-leopoldina.toml),")
+    print(f"ATENÇÃO: os perfis de sensibilidade são HIPÓTESES de demonstração (distribuidoras/{C.ARQ_DISTRIBUIDORA.name}),")
     print("a validar com a distribuidora e por região. O 'horário padrão' (começar às 8h: 8h às 14h para 6 h,")
     print("8h às 12h para 4 h e 8h às 10h para 2 h) é uma SUPOSIÇÃO NOSSA, não o horário real da distribuidora.")
     print("Perfis comparados: 'sem resfriamento' (anterior) e 'com resfriamento' (atual: + resfriamento do leite")

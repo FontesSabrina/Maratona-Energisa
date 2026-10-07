@@ -2,9 +2,9 @@
 # Copie este arquivo (por exemplo, distribuidoras/minha-empresa.toml), preencha os campos
 # e rode:  py -m uv run comunidades --distribuidora distribuidoras/minha-empresa.toml
 #
-# Atenção: este arquivo configura textos, prazos, limites e perfis. Os DADOS do município
-# (IBGE, CNEFE, OpenStreetMap) e o cadastro ainda vêm de src/comunidades/config.py e das
-# etapas de fontes/ e simulacao/; trocar de município exige também trocar essas fontes.
+# O município (codigo_ibge, municipio e uf) define os dados reais baixados do IBGE e do
+# OpenStreetMap e as pastas data/<municipio>/ e saida/<municipio>/. Também é possível partir
+# de uma coordenada:  py -m uv run comunidades --coordenada "-21.13,-42.37"
 # Todos os campos são obrigatórios: se faltar algum, o pipeline para e diz qual.
 
 [distribuidora]
@@ -13,6 +13,8 @@ assinatura_aviso_atual = ""    # quem assina o aviso usado hoje, na comparação
 telefone = ""                  # telefone de atendimento citado no aviso
 municipio = ""                 # nome do município como dito no rádio; o distrito com este nome vira "Sede"
 uf = ""                        # sigla do estado
+codigo_ibge = ""               # código IBGE do município, 7 dígitos (consulte servicodados.ibge.gov.br)
+# sigla_rede = ""              # opcional: sigla da rede fictícia (ex.: "LPD"); sem ela, vem do nome do município
 idioma_padrao = "pt-BR"        # "pt-BR", "en" ou "es"
 
 [regulatorio]

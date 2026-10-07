@@ -1,4 +1,4 @@
-"""Camadas REAIS do IBGE (Censo 2022) para Leopoldina e construção do gabarito.
+"""Camadas REAIS do IBGE (Censo 2022) do município configurado e construção do gabarito.
 
 Gabarito = comunidade de cada endereço, a partir do campo DSC_LOCALIDADE do CNEFE,
 limpo: rótulos genéricos ("ESTRADA", "FAZENDA"...), nomes de propriedade
@@ -16,8 +16,8 @@ from unidecode import unidecode
 
 from .. import config as C
 
-# Rótulos que não são nome de comunidade
-GENERICOS = {"ESTRADA", "FAZENDA", "CENTRO", "ESTRADA PARA ABAIBA", "SITIO", "ZONA RURAL"}
+# Rótulos que não são nome de comunidade ("ESTRADA PARA X" já cai no prefixo abaixo)
+GENERICOS = {"ESTRADA", "FAZENDA", "CENTRO", "SITIO", "ZONA RURAL"}
 PREFIXO_PROPRIEDADE = re.compile(
     r"^(SITIO|FAZENDA|HARAS|CONDOMINIO|ASSOCIACAO|GROTA APOS|RODOVIA|ESTRADA|CHACARA)\b"
 )
@@ -85,7 +85,7 @@ def enderecos(s: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 def _rotulo_valido(nome: str, rural: bool) -> bool:
     if not nome or nome in GENERICOS or PREFIXO_PROPRIEDADE.match(nome):
         return False
-    if rural and nome == "LEOPOLDINA":  # "Leopoldina" na zona rural não diz qual comunidade
+    if rural and nome == normalizar(C.NOME_MUNICIPIO):  # o nome da sede, na zona rural, não diz qual comunidade
         return False
     return True
 
@@ -119,8 +119,10 @@ def gabarito(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def construir():
     s = setores()
+    mun = municipio(s)
+    C.definir_crs(mun.to_crs(C.CRS_GEO).union_all())  # zona UTM pela posição do município
     distritos(s).to_file(C.INTERIM / "distritos.gpkg")
-    municipio(s).to_file(C.INTERIM / "municipio.gpkg")
+    mun.to_file(C.INTERIM / "municipio.gpkg")
     s.to_file(C.INTERIM / "setores.gpkg")
     localidades_oficiais().to_file(C.INTERIM / "localidades_oficiais.gpkg")
     g = gabarito(enderecos(s))

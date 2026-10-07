@@ -1,4 +1,4 @@
-"""Rede elétrica FICTÍCIA sobre a base real de Leopoldina.
+"""Rede elétrica FICTÍCIA sobre a base real do município configurado.
 
 - Transformadores: agrupamento dos endereços reais (CNEFE) próximos entre si.
 - Rede de média tensão: árvore de caminhos mínimos, pelas vias reais do OSM, da
@@ -136,12 +136,12 @@ def _alimentadores(T: nx.DiGraph, raiz, carga: dict, xy_no: dict) -> tuple:
     for i, pacote in enumerate(grupos):
         for c in pacote:
             for n in nx.dfs_preorder_nodes(T, c):
-                alim[n] = f"LPD-{i + 1:02d}"
+                alim[n] = f"{C.SIGLA_REDE}-{i + 1:02d}"
     # Nós do tronco (entre a SE e as cabeças) herdam o alimentador do filho mais carregado
     for n in reversed(list(nx.topological_sort(T))):
         if n not in alim:
             filhos = sorted(T.successors(n), key=lambda f: -jusante[f])
-            alim[n] = alim[filhos[0]] if filhos else "LPD-01"
+            alim[n] = alim[filhos[0]] if filhos else f"{C.SIGLA_REDE}-01"
     return alim, jusante
 
 
@@ -207,7 +207,7 @@ def construir():
         geometry=[geom_trecho(u, v) for u, v in T.edges], crs=C.CRS_METRICO,
     )
 
-    se = gpd.GeoDataFrame({"COD_SE": ["SE-LPD"], "NOME": ["Subestação Leopoldina (fictícia)"]},
+    se = gpd.GeoDataFrame({"COD_SE": [f"SE-{C.SIGLA_REDE}"], "NOME": [f"Subestação {C.NOME_MUNICIPIO} (fictícia)"]},
                           geometry=[Point(G.nodes[raiz]["x"], G.nodes[raiz]["y"])], crs=C.CRS_METRICO)
 
     # Chave posicionada a ~30 m do início do ramal

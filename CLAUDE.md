@@ -18,6 +18,9 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Tudo o que muda de uma distribuidora para outra (nome, telefone, município, prazos, expediente, limites do aviso e perfis de sensibilidade) fica em distribuidoras/demo-leopoldina.toml. Para outra empresa, copiar distribuidoras/MODELO.toml.
 - O pipeline lê esse arquivo (src/comunidades/distribuidora.py) e passa os valores ao nucleo; o nucleo não lê arquivos. Outra configuração: py -m uv run comunidades --distribuidora distribuidoras/arquivo.toml
 - Os modelos do aviso por idioma (pt-BR, en, es) ficam em src/comunidades/nucleo/idiomas.py.
+- O município (codigo_ibge, municipio, uf) também vem desse arquivo: dele saem os downloads do IBGE, a projeção UTM, a sigla da rede fictícia (ou sigla_rede, opcional) e as pastas. Leopoldina fica em data/interim, data/sintetico e saida/; os outros em data/<municipio>/ e saida/<municipio>/.
+- Outro município: py -m uv run comunidades --distribuidora distribuidoras/demo-muriae.toml, ou por coordenada: py -m uv run comunidades --coordenada "-21.13,-42.37" (se não houver arquivo para o município, cria distribuidoras/auto-<municipio>.toml para revisar).
+- Avaliação, robustez e janela de outro município: $env:FAROL_DISTRIBUIDORA="distribuidoras/demo-muriae.toml" antes do comando.
 
 ## Como rodar (Windows)
 - Pipeline completo: py -m uv run comunidades

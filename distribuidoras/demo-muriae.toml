@@ -1,4 +1,4 @@
-# Configuração da distribuidora: demonstração em Leopoldina/MG.
+# Configuração da distribuidora: demonstração em Muriaé/MG (cópia do demo-leopoldina, só o município muda).
 # Tudo o que muda de uma distribuidora para outra fica aqui. O pipeline lê este arquivo
 # e passa os valores ao núcleo e à apresentação (o núcleo não lê arquivos).
 # Campos marcados "a confirmar" são suposições desta demonstração.
@@ -8,9 +8,9 @@
 nome = "Distribuidora (demonstração)"       # como aparece no roteiro para a rádio
 assinatura_aviso_atual = "Energisa"         # quem assina o aviso de hoje ("A Energisa informa...")
 telefone = "0800 XXX XXXX"                  # atendimento citado no aviso (a confirmar)
-municipio = "Leopoldina"                    # citado no aviso ("em Leopoldina"); o distrito com este nome vira "Sede"
+municipio = "Muriaé"                        # citado no aviso ("em Muriaé"); o distrito com este nome vira "Sede"
 uf = "MG"
-codigo_ibge = "3138401"                     # código IBGE do município (define os dados baixados e as pastas)
+codigo_ibge = "3143906"                     # código IBGE do município (define os dados baixados e as pastas)
 # sigla_rede = "LPD"                        # opcional: sigla da rede fictícia; sem ela, vem do nome do município
 idioma_padrao = "pt-BR"                     # idioma inicial do aviso: "pt-BR", "en" ou "es"
 
