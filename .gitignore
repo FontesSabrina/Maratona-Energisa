@@ -1,0 +1,15 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Dados (baixados/gerados pelo pipeline: `uv run comunidades`)
+data/
+saida/*
+!saida/mapa_comunidades.html

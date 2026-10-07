@@ -1,0 +1,142 @@
+"""Mapa interativo (HTML autônomo, Leaflet): camadas reais + fictícias + resultado,
+com painel para simular o desligamento de qualquer chave."""
+
+import json
+from pathlib import Path
+
+import geopandas as gpd
+import networkx as nx
+import numpy as np
+import pandas as pd
+import shapely
+
+from . import config as C
+from . import osm
+from .algoritmo import territorios_voronoi
+from .avaliacao import avaliar
+from .desligamento import duracao_s, locais_antigos, simular
+from .nomes import exibir
+
+TEMPLATE = Path(__file__).with_name("mapa_template.html")
+ARQ_SAIDA = C.SAIDA / "mapa_comunidades.html"
+
+
+def _gj(gdf: gpd.GeoDataFrame, props: list[str], simplificar_m: float = 0) -> dict:
+    g = gdf.to_crs(C.CRS_METRICO)
+    if simplificar_m:
+        g["geometry"] = g.geometry.simplify(simplificar_m)
+    g = g.to_crs(C.CRS_WEB)
+    g["geometry"] = shapely.set_precision(g.geometry.values, 1e-5)
+    return json.loads(g[props + ["geometry"]].to_json(drop_id=True))
+
+
+def _territorios_reais(pontos: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    t = territorios_voronoi(pontos, "COMUNIDADE").rename(columns={"COMUNIDADE": "NOME"})
+    return t.join(pontos.groupby("COMUNIDADE").size().rename("N_UC"), on="NOME")
+
+
+def construir():
+    df, por_uc, _, cen = avaliar()  # df: UCs com previsão + gabarito (só para a camada de validação)
+    gab = pd.read_csv(C.SINTETICO / "gabarito_uc.csv", dtype={"UC": str}).set_index("UC")
+    df = df.join(gab[["LAT_REAL", "LON_REAL"]], on="UC")
+
+    tr = gpd.read_file(C.SINTETICO / "transformadores.gpkg")
+    ch = gpd.read_file(C.SINTETICO / "chaves.gpkg")
+    mt = gpd.read_file(C.SINTETICO / "rede_mt.gpkg")
+    se = gpd.read_file(C.SINTETICO / "subestacao.gpkg")
+
+    # Trechos de MT a jusante de cada chave
+    T = nx.DiGraph(list(zip(mt["NO_DE"], mt["NO_PARA"])))
+    trecho_por_no = {n: i for i, n in enumerate(mt["NO_PARA"])}
+    mt_chave = {}
+    for _, r in ch.iterrows():
+        mt_chave[r["COD_CHAVE"]] = [trecho_por_no[n] for n in nx.dfs_preorder_nodes(T, r["NO_PARA"])
+                                    if n in trecho_por_no]
+
+    # Índices compactos
+    trafo_idx = {c: i for i, c in enumerate(tr["COD_TRAFO"])}
+    com_prev = sorted(df["COMUNIDADE_PREVISTA"].unique())
+    df["COMUNIDADE"] = df["COMUNIDADE"].map(exibir)  # grafia com acentos para exibição
+    com_real = sorted(df["COMUNIDADE"].unique())
+    ip, ir = {c: i for i, c in enumerate(com_prev)}, {c: i for i, c in enumerate(com_real)}
+    origem = {"cadastro": 0, "trafo (sem coordenada)": 1, "trafo (coordenada incoerente)": 2}
+
+    ucs = [[round(r.LAT_REAL, 5), round(r.LON_REAL, 5), trafo_idx[r.COD_TRAFO], ip[r.COMUNIDADE_PREVISTA],
+            ir[r.COMUNIDADE], int(r.CONFIANCA * 100), int(r.ACERTO), origem[r.ORIGEM_COORD],
+            1 if r.CLASSE == "Rural" else 0]
+           for r in df.itertuples()]
+    ucs_txt = [[r.UC, r.TITULAR.title(), r.CLASSE, (r.NOME_IMOVEL or r.LOGRADOURO).title(),
+                str(r.BAIRRO_LOCALIDADE or "")] for r in df.itertuples()]
+
+    # Cenários pré-calculados (mesma lógica do módulo desligamento)
+    trafos_por_chave = {}
+    for i, lista in enumerate(tr["CHAVES_MONTANTE"].fillna("")):
+        for c in filter(None, lista.split(";")):
+            trafos_por_chave.setdefault(c, []).append(i)
+    cen = cen.set_index("CHAVE")
+    cenarios = {}
+    for _, r in ch.iterrows():
+        cod = r["COD_CHAVE"]
+        if cod not in cen.index:
+            continue
+        d = simular(df, cod)
+        e = cen.loc[cod]
+        cenarios[cod] = {
+            "alim": r["ALIMENTADOR"], "n": len(d.ucs), "rural": round(float(e["RURAL"]), 2),
+            "trafos": trafos_por_chave.get(cod, []), "mt": mt_chave.get(cod, []),
+            "com": [[c.COMUNIDADE_PREVISTA, int(c.UC_AFETADAS), int(c.UC_TOTAL), bool(c.PARCIAL),
+                     round(float(c.CONFIANCA), 2)] for c in d.comunidades.itertuples()],
+            "real": d.ucs["COMUNIDADE"].value_counts().reset_index().values.tolist(),
+            "antigo": d.aviso_antigo, "novo": d.aviso_novo, "nLocais": len(locais_antigos(d.ucs)),
+            "sAntes": round(duracao_s(d.aviso_antigo)), "sDepois": round(duracao_s(d.aviso_novo)),
+            "prec": round(float(e["PRECISAO"]), 2), "cob": round(float(e["COBERTURA"]), 2),
+        }
+
+    # Camadas geográficas
+    pts_real = gpd.GeoDataFrame(df[["COMUNIDADE", "COD_TRAFO"]], crs=C.CRS_GEO,
+                                geometry=gpd.points_from_xy(df["LON_REAL"], df["LAT_REAL"]))
+    prev = gpd.read_file(C.SAIDA / "comunidades.gpkg")
+    camadas = {
+        "municipio": _gj(gpd.read_file(C.INTERIM / "municipio.gpkg"), ["NM_MUN"], 20),
+        "distritos": _gj(gpd.read_file(C.INTERIM / "distritos.gpkg"), ["NM_DIST"], 20),
+        "setores": _gj(gpd.read_file(C.INTERIM / "setores.gpkg"), ["CD_SETOR", "SITUACAO"], 10),
+        "localidades": _gj(gpd.read_file(C.INTERIM / "localidades_oficiais.gpkg"), ["NM_LOCALIDADE", "CT_LOCALIDADE"]),
+        "gabarito": _gj(_territorios_reais(pts_real), ["NOME", "N_UC"], 15),
+        "vias": _gj(gpd.read_file(osm.ARQ_VIAS).assign(
+            MAIOR=lambda g: g["highway"].str.contains("trunk|primary|secondary|tertiary").astype(int)
+        ), ["MAIOR"], 8),
+        "previstas": _gj(prev.rename(columns={"COMUNIDADE": "NOME"}), ["NOME", "N_UC", "CONFIANCA_MEDIA"], 15),
+        "se": _gj(se, ["NOME"]),
+        "mt": _gj(mt, ["ALIMENTADOR"], 3),
+        "chaves": _gj(ch, ["COD_CHAVE", "ALIMENTADOR", "UC_JUSANTE"]),
+    }
+    trw = tr.to_crs(C.CRS_WEB)
+    trafos = [[round(p.y, 5), round(p.x, 5), c, int(n), a]
+              for p, c, n, a in zip(trw.geometry, trw["COD_TRAFO"], trw["N_UC"], trw["ALIMENTADOR"])]
+
+    rural = cen[cen["RURAL"] >= 0.8]
+    metricas = {
+        "acertoRuralCadastro": round(float(por_uc.loc["Rural", "ACERTO_CADASTRO"]) * 100, 1),
+        "acertoRural": round(float(por_uc.loc["Rural", "ACERTO"]) * 100, 1),
+        "acertoUrbanoCadastro": round(float(por_uc.loc["Urbana", "ACERTO_CADASTRO"]) * 100, 1),
+        "acertoUrbano": round(float(por_uc.loc["Urbana", "ACERTO"]) * 100, 1),
+        "cobertura": round(float(cen["COBERTURA"].mean()) * 100, 1),
+        "precisao": round(float(cen["PRECISAO"].mean()) * 100, 1),
+        "segAntes": round(float(rural["SEG_ANTES"].mean())), "segDepois": round(float(rural["SEG_DEPOIS"].mean())),
+        "nCenarios": len(cen), "nUC": len(df), "nComunidades": len(com_prev), "nTrafos": len(tr),
+        "nChaves": len(ch), "kmMT": round(float(mt.to_crs(C.CRS_METRICO).length.sum() / 1000)),
+    }
+
+    dados = {"camadas": camadas, "ucs": ucs, "ucsTxt": ucs_txt, "trafos": trafos,
+             "comPrev": com_prev, "comReal": com_real, "cenarios": cenarios, "metricas": metricas,
+             "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
+    html = TEMPLATE.read_text(encoding="utf-8").replace(
+        "/*__DADOS__*/null", json.dumps(dados, ensure_ascii=False, separators=(",", ":"))
+    )
+    ARQ_SAIDA.write_text(html, encoding="utf-8")
+    return ARQ_SAIDA
+
+
+if __name__ == "__main__":
+    p = construir()
+    print(f"Mapa: {p} ({p.stat().st_size / 1e6:.1f} MB)")

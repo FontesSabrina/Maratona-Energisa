@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comunidades Afetadas · Leopoldina</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --hair: #e1e0d9; --border: rgba(11,11,11,0.10);
+  --accent: #2a78d6; --critical: #d03b3b; --good: #006300; --serious: #ec835a;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  --uc: #52514e; --trafo: #0b0b0b; --via: #b9b7ae; --limite: #0b0b0b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --hair: #2c2c2a; --border: rgba(255,255,255,0.10);
+    --accent: #3987e5; --critical: #e66767; --good: #0ca30c; --serious: #ec835a;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --uc: #c3c2b7; --trafo: #ffffff; --via: #4a4945; --limite: #ffffff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
+  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --hair: #2c2c2a; --border: rgba(255,255,255,0.10);
+  --accent: #3987e5; --critical: #e66767; --good: #0ca30c; --serious: #ec835a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  --uc: #c3c2b7; --trafo: #ffffff; --via: #4a4945; --limite: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.app { display: grid; grid-template-columns: 400px 1fr; height: 100vh; }
+aside { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 18px 18px 40px; }
+#mapa { height: 100%; background: var(--page); }
+h1 { font-size: 18px; margin: 0 0 2px; letter-spacing: -0.01em; }
+.sub { color: var(--ink-2); margin: 0 0 16px; font-size: 13px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 10px; font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { background: var(--surface-2); border-radius: 10px; padding: 10px 10px 9px; }
+.tile .v { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+.tile .v small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.tile .l { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.3; }
+.de { color: var(--muted); font-size: 13px; font-weight: 500; }
+.ctrl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input[type=text] { flex: 1 1 200px; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--page); color: var(--ink); font: inherit; }
+button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--ink); font: inherit; cursor: pointer; }
+button.prim { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+button:hover { filter: brightness(0.96); }
+label.chk { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-size: 13px; margin-top: 8px; cursor: pointer; }
+.grupo { margin-bottom: 12px; }
+.grupo .t { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+.camada { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 13px; }
+.sw { width: 18px; height: 12px; border-radius: 3px; flex: none; }
+.sw.linha { height: 3px; border-radius: 2px; }
+.sw.ponto { width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; }
+.alims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; margin: 2px 0 4px 26px; font-size: 12px; color: var(--ink-2); }
+.alims span { display: flex; align-items: center; gap: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--hair); }
+td { padding: 5px 6px 5px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
+.badge.total { background: var(--critical); color: #fff; border-color: transparent; }
+.aviso { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 6px; font-size: 13.5px; }
+.aviso.antigo { border-left-color: var(--muted); color: var(--ink-2); max-height: 220px; overflow-y: auto; font-size: 12.5px; }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin: 10px 0 6px; }
+.comp { display: grid; gap: 10px; }
+.card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface); }
+.card.novo { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.card .cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.card .tit { font-weight: 650; font-size: 13.5px; }
+.card .tit small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+.card .met { display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-2); font-size: 12.5px; margin-bottom: 8px; }
+.card .met b { color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
+.barra { height: 8px; border-radius: 4px; background: var(--hair); margin-bottom: 10px; overflow: hidden; }
+.barra i { display: block; height: 100%; border-radius: 4px; }
+.card .txt { font-size: 13px; line-height: 1.5; max-height: 180px; overflow-y: auto; padding-right: 4px; }
+.card.antigo .txt { color: var(--ink-2); font-size: 12.5px; }
+button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
+.ganho { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.ganho b { font-size: 15px; }
+.pop .acao { margin-top: 10px; width: 100%; }
+.pop .coms { color: var(--ink-2); font-size: 12.5px; margin-top: 4px; }
+.ok { color: var(--good); font-weight: 600; } .ruim { color: var(--critical); font-weight: 600; }
+.nota { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.oculto { display: none; }
+.leaflet-container { font: inherit; background: var(--page); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip { background: var(--surface); color: var(--ink); border-color: var(--border); }
+.leaflet-popup-content { margin: 12px 14px; font-size: 13px; }
+.pop b { display: block; font-size: 14px; margin-bottom: 4px; }
+.pop .k { color: var(--muted); }
+.lbl { background: transparent !important; border: 0 !important; box-shadow: none !important; font-weight: 600; font-size: 11.5px;
+  color: var(--ink); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 2px var(--surface); padding: 0; }
+.lbl::before { display: none; }
+.lbl.dist { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.zoom-baixo .lbl.com { display: none; }
+.tema { position: absolute; top: 12px; right: 12px; z-index: 1000; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; height: auto; min-height: 100vh; }
+  #mapa { height: 55vh; order: -1; }
+  aside { border-right: 0; border-top: 1px solid var(--border); padding: 16px; }
+  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Comunidades afetadas por desligamento</h1>
+    <p class="sub">Leopoldina/MG · base real do Censo IBGE 2022 · rede elétrica e clientes fictícios</p>
+
+    <div class="tiles" id="tilesGerais"></div>
+
+    <h2>Simular desligamento programado</h2>
+    <div class="ctrl">
+      <input type="text" id="chave" list="listaChaves" placeholder="Código da chave (ex.: CF-0123)" autocomplete="off">
+      <datalist id="listaChaves"></datalist>
+      <button class="prim" id="btnSimular">Simular</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="soRural" checked> Listar só ramais rurais</label>
+    <div class="ctrl" style="margin-top:8px">
+      <button id="btnSortear">Sortear ramal rural</button>
+      <button id="btnLimpar">Limpar</button>
+    </div>
+    <p class="nota">Ou clique numa <b>chave</b> no mapa (bolinha preta com borda sobre a rede) e escolha “Simular desligamento”.</p>
+
+    <div id="resultado" class="oculto">
+      <h2 id="resTitulo">Resultado</h2>
+      <div class="tiles" id="tilesRes"></div>
+      <h2>Comparativo do aviso no rádio</h2>
+      <div class="comp">
+        <div class="card antigo">
+          <div class="cab"><div class="tit">Hoje: fazenda a fazenda<small>lista cada imóvel e cada rua</small></div><button class="ouvir" data-alvo="antigo">▶ Ouvir</button></div>
+          <div class="met" id="metAntigo"></div>
+          <div class="barra"><i id="barraAntigo" style="background:var(--muted)"></i></div>
+          <div class="txt" id="avisoAntigo"></div>
+        </div>
+        <div class="card novo">
+          <div class="cab"><div class="tit">Com o sistema: por comunidade<small>comunidades identificadas automaticamente</small></div><button class="ouvir" data-alvo="novo">▶ Ouvir</button></div>
+          <div class="met" id="metNovo"></div>
+          <div class="barra"><i id="barraNovo" style="background:var(--accent)"></i></div>
+          <div class="txt" id="avisoNovo"></div>
+        </div>
+        <div class="ganho" id="ganho"></div>
+      </div>
+      <h2>Comunidades identificadas</h2>
+      <table><thead><tr><th>Comunidade</th><th class="n">UCs afetadas</th><th>Situação</th></tr></thead><tbody id="tabCom"></tbody></table>
+      <h2>Validação com o gabarito IBGE</h2>
+      <div id="validacao"></div>
+    </div>
+
+    <h2>Camadas</h2>
+    <div id="camadas"></div>
+  </aside>
+  <div id="mapa"></div>
+</div>
+
+<script>
+const D = /*__DADOS__*/null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = n => n.toLocaleString('pt-BR');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------- Mapa base ----------
+const mapa = L.map('mapa', { preferCanvas: true, zoomControl: true }).setView([-21.53, -42.64], 11);
+const rend = L.canvas({ padding: 0.4 });
+const escuro = () => document.documentElement.dataset.theme === 'dark' ||
+  (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+const atribuicao = 'Base &copy; Esri · Vias &copy; OpenStreetMap · IBGE Censo 2022';
+let fundo = null;
+function trocarFundo() {
+  if (fundo) mapa.removeLayer(fundo);
+  fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    { attribution: atribuicao, maxZoom: 16 }).addTo(mapa);
+  fundo.bringToBack();
+}
+const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: 'Imagens &copy; Esri', maxZoom: 19 });
+trocarFundo();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { trocarFundo(); redesenharCores(); });
+mapa.on('zoomend', () => document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < 13));
+document.getElementById('mapa').classList.add('zoom-baixo');
+
+// Cores dos alimentadores: 8 slots categóricos em ordem fixa; o 9º repete o slot 1 tracejado
+const corAlim = a => css(`--s${((D.alimentadores.indexOf(a)) % 8) + 1}`);
+const tracoAlim = a => D.alimentadores.indexOf(a) >= 8 ? '6 5' : null;
+
+// ---------- Camadas ----------
+const C = {};
+const pane = (nome, z) => { mapa.createPane(nome).style.zIndex = z; return nome; };
+pane('poligonos', 350); pane('linhas', 400); pane('pontos', 450); pane('destaque', 500); pane('topo', 550);
+
+C.municipio = L.geoJSON(D.camadas.municipio, { pane: 'linhas', interactive: false,
+  style: () => ({ color: css('--limite'), weight: 2.5, fill: false }) });
+C.distritos = L.geoJSON(D.camadas.distritos, { pane: 'linhas',
+  style: () => ({ color: css('--ink-2'), weight: 1.5, dashArray: '6 4', fill: false }),
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.NM_DIST, { permanent: true, direction: 'center', className: 'lbl dist' }) });
+C.setores = L.geoJSON(D.camadas.setores, { pane: 'poligonos',
+  style: f => ({ color: css('--muted'), weight: 0.6, fillColor: f.properties.SITUACAO === 'Urbana' ? css('--s1') : css('--s6'), fillOpacity: 0.07 }),
+  onEachFeature: (f, l) => l.bindTooltip(`Setor ${f.properties.CD_SETOR} · ${f.properties.SITUACAO}`, { sticky: true }) });
+C.localidades = L.geoJSON(D.camadas.localidades, { pane: 'topo',
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 6, color: css('--surface'), weight: 2, fillColor: css('--ink'), fillOpacity: 1 }),
+  onEachFeature: (f, l) => l.bindTooltip(`${f.properties.NM_LOCALIDADE} <span style="color:var(--muted)">· ${f.properties.CT_LOCALIDADE} (IBGE)</span>`) });
+C.gabarito = L.geoJSON(D.camadas.gabarito, { pane: 'poligonos',
+  style: () => ({ color: css('--s7'), weight: 1.5, dashArray: '4 3', fillColor: css('--s7'), fillOpacity: 0.05 }),
+  onEachFeature: (f, l) => l.bindTooltip(`<b>${esc(f.properties.NOME)}</b><br>Comunidade real (IBGE/CNEFE) · ${fmt(f.properties.N_UC)} endereços`, { sticky: true }) });
+C.vias = L.geoJSON(D.camadas.vias, { pane: 'linhas', interactive: false,
+  style: f => ({ color: css('--via'), weight: f.properties.MAIOR ? 2 : 1 }) });
+C.previstas = L.geoJSON(D.camadas.previstas, { pane: 'poligonos',
+  style: () => ({ color: css('--ink-2'), weight: 0.8, opacity: 0.45, fillColor: css('--ink-2'), fillOpacity: 0.06 }),
+  onEachFeature: (f, l) => {
+    l.bindTooltip(f.properties.NOME.replace(/ \(.*\)$/, ''), { permanent: true, direction: 'center', className: 'lbl com' });
+    l.bindPopup(`<div class="pop"><b>${esc(f.properties.NOME)}</b>${fmt(f.properties.N_UC)} UCs · confiança média ${Math.round(f.properties.CONFIANCA_MEDIA * 100)}%</div>`);
+  } });
+C.mt = L.geoJSON(D.camadas.mt, { pane: 'linhas',
+  style: f => ({ color: corAlim(f.properties.ALIMENTADOR), weight: 2, dashArray: tracoAlim(f.properties.ALIMENTADOR) }),
+  onEachFeature: (f, l) => l.bindTooltip(`Alimentador ${f.properties.ALIMENTADOR}`, { sticky: true }) });
+C.se = L.geoJSON(D.camadas.se, { pane: 'topo',
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 9, color: css('--surface'), weight: 3, fillColor: css('--critical'), fillOpacity: 1 }),
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME) });
+// Chaves num canvas próprio, acima das casas, para ficarem sempre clicáveis
+const rendChaves = L.canvas({ pane: 'topo', padding: 0.4 });
+function popupChave(cod) {
+  const c = D.cenarios[cod], el = document.createElement('div');
+  el.className = 'pop';
+  if (!c) { el.innerHTML = `<b>${cod}</b>Sem clientes a jusante.`; return el; }
+  const nomes = c.com.slice(0, 4).map(x => esc(x[0].replace(/ \(.*\)$/, ''))).join(', ') + (c.com.length > 4 ? ` e mais ${c.com.length - 4}` : '');
+  el.innerHTML = `<b>Chave ${cod}</b>
+    <span class="k">Alimentador</span> ${c.alim}<br>
+    <span class="k">Abrindo esta chave, ficam sem energia:</span> <b style="display:inline">${fmt(c.n)}</b> clientes${c.rural >= 0.8 ? ' (zona rural)' : ''}
+    <div class="coms">Comunidades: ${nomes}</div>
+    <button class="prim acao">Simular desligamento</button>`;
+  el.querySelector('button').addEventListener('click', () => { mapa.closePopup(); document.getElementById('chave').value = cod; simular(cod); });
+  return el;
+}
+C.chaves = L.geoJSON(D.camadas.chaves, {
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rendChaves, radius: 6, color: css('--surface'), weight: 2, fillColor: css('--ink'), fillOpacity: 1 }),
+  onEachFeature: (f, l) => {
+    const p = f.properties;
+    l.bindTooltip(`<b>Chave ${p.COD_CHAVE}</b> · ${fmt(p.UC_JUSANTE)} clientes<br><span style="color:var(--muted)">clique para ver e simular</span>`);
+    l.bindPopup(() => popupChave(p.COD_CHAVE), { minWidth: 240 });
+  } });
+C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { renderer: rend, pane: 'pontos', radius: 3,
+  color: css('--trafo'), weight: 1, fillColor: css('--surface'), fillOpacity: 1 })
+  .bindTooltip(`<b>${t[2]}</b> · ${t[4]}<br>${t[3]} UCs`)));
+
+// UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu
+const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
+function popupUC(i) {
+  const u = D.ucs[i], t = D.ucsTxt[i];
+  return `<div class="pop"><b>${esc(t[1])}</b>
+    <span class="k">UC</span> ${t[0]} · ${esc(t[2])}<br>
+    <span class="k">Imóvel/endereço:</span> ${esc(t[3])}<br>
+    <span class="k">Localidade no cadastro:</span> ${t[4] ? esc(t[4]) : '<i>(vazio)</i>'}<br>
+    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (${u[5]}%)<br>
+    <span class="k">Comunidade real (IBGE):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}
+    ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
+    <span class="k">Transformador:</span> ${D.trafos[u[2]][2]} · ${D.trafos[u[2]][4]}</div>`;
+}
+function camadaUCs(filtro, estilo) {
+  const g = L.layerGroup();
+  D.ucs.forEach((u, i) => { if (!filtro(u)) return;
+    g.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, pane: 'pontos', ...estilo(u) }).on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
+  });
+  return g;
+}
+const estiloUC = () => ({ radius: 2.5, stroke: false, fillColor: css('--uc'), fillOpacity: 0.75 });
+C.ucsRurais = camadaUCs(u => u[8] === 1, estiloUC);
+C.ucsUrbanas = camadaUCs(u => u[8] === 0, estiloUC);
+C.erros = camadaUCs(u => u[6] === 0, () => ({ radius: 3.5, color: css('--surface'), weight: 1, fillColor: css('--serious'), fillOpacity: 1 }));
+let bt = null;
+C.bt = L.layerGroup();
+C.bt.on('add', () => { if (bt) return;
+  bt = D.ucs.filter(u => u[8] === 1).map(u => L.polyline([[D.trafos[u[2]][0], D.trafos[u[2]][1]], [u[0], u[1]]],
+    { renderer: rend, pane: 'linhas', color: css('--muted'), weight: 0.8, interactive: false }));
+  bt.forEach(l => C.bt.addLayer(l));
+});
+C.satelite = satelite;
+
+const GRUPOS = [
+  ['Dados reais (IBGE / OpenStreetMap)', [
+    ['municipio', 'Limite municipal', 'linha', '--limite', true],
+    ['distritos', 'Distritos (6)', 'linha', '--ink-2', true],
+    ['setores', 'Setores censitários (urbano/rural)', 'area', '--s6', false],
+    ['localidades', 'Localidades oficiais IBGE (15)', 'ponto', '--ink', true],
+    ['gabarito', 'Comunidades reais — gabarito CNEFE', 'area', '--s7', false],
+    ['vias', 'Vias (OSM)', 'linha', '--via', false],
+    ['satelite', 'Imagem de satélite', 'area', '--muted', false],
+  ]],
+  ['Distribuidora (fictício)', [
+    ['se', 'Subestação', 'ponto', '--critical', true],
+    ['mt', 'Rede de média tensão', 'linha', '--s1', true],
+    ['chaves', 'Chaves (abrir = desligar ramal)', 'ponto', '--ink', true],
+    ['trafos', 'Transformadores', 'ponto', '--trafo', false],
+    ['bt', 'Ramais de baixa tensão (rurais)', 'linha', '--muted', false],
+    ['ucsRurais', 'UCs rurais', 'ponto', '--uc', true],
+    ['ucsUrbanas', 'UCs urbanas', 'ponto', '--uc', false],
+  ]],
+  ['Resultado do algoritmo', [
+    ['previstas', 'Comunidades identificadas', 'area', '--ink-2', true],
+    ['erros', 'UCs com comunidade errada (validação)', 'ponto', '--serious', false],
+  ]],
+];
+const elCam = document.getElementById('camadas');
+GRUPOS.forEach(([titulo, itens]) => {
+  const g = document.createElement('div'); g.className = 'grupo';
+  g.innerHTML = `<div class="t">${titulo}</div>`;
+  itens.forEach(([id, nome, tipo, cor, on]) => {
+    const lb = document.createElement('label'); lb.className = 'camada';
+    const sw = tipo === 'area' ? `<span class="sw" style="background:color-mix(in srgb, var(${cor}) 25%, transparent);border:1.5px solid var(${cor})"></span>`
+      : tipo === 'linha' ? `<span class="sw linha" style="background:var(${cor})"></span>` : `<span class="sw ponto" style="background:var(${cor})"></span>`;
+    lb.innerHTML = `<input type="checkbox" ${on ? 'checked' : ''}> ${sw} ${nome}`;
+    const cb = lb.querySelector('input');
+    cb.addEventListener('change', () => cb.checked ? C[id].addTo(mapa) : mapa.removeLayer(C[id]));
+    if (on) C[id].addTo(mapa);
+    g.appendChild(lb);
+    if (id === 'mt') {
+      const a = document.createElement('div'); a.className = 'alims';
+      a.innerHTML = D.alimentadores.map((al, i) => `<span><span class="sw linha" style="width:14px;background:${i >= 8 ? `repeating-linear-gradient(90deg,var(--s${i % 8 + 1}) 0 4px,transparent 4px 7px)` : `var(--s${i % 8 + 1})`}"></span>${al}</span>`).join('');
+      g.appendChild(a);
+    }
+  });
+  elCam.appendChild(g);
+});
+
+function redesenharCores() {
+  ['municipio', 'distritos', 'setores', 'gabarito', 'vias', 'previstas', 'mt'].forEach(k => C[k].resetStyle && C[k].resetStyle());
+}
+
+// ---------- Indicadores gerais ----------
+const M = D.metricas;
+document.getElementById('tilesGerais').innerHTML = `
+  <div class="tile"><div class="v">${M.acertoRural.toLocaleString('pt-BR')}<small>%</small></div><div class="l">acerto da comunidade (UCs rurais) <span class="de">· cadastro: ${M.acertoRuralCadastro.toLocaleString('pt-BR')}%</span></div></div>
+  <div class="tile"><div class="v">${M.segDepois}<small> s</small></div><div class="l">aviso médio no rádio <span class="de">· hoje: ${M.segAntes} s</span></div></div>
+  <div class="tile"><div class="v">${M.cobertura.toLocaleString('pt-BR')}<small>%</small></div><div class="l">comunidades afetadas avisadas <span class="de">· ${fmt(M.nCenarios)} cenários</span></div></div>`;
+
+// ---------- Simulação ----------
+const listaChaves = document.getElementById('listaChaves');
+function montarLista() {
+  const so = document.getElementById('soRural').checked;
+  listaChaves.innerHTML = Object.entries(D.cenarios)
+    .filter(([, c]) => !so || c.rural >= 0.8)
+    .map(([k, c]) => `<option value="${k}">${c.alim} · ${fmt(c.n)} UCs · ${esc(c.com.slice(0, 3).map(x => x[0].replace(/ \(.*\)$/, '')).join(', '))}</option>`).join('');
+}
+montarLista();
+document.getElementById('soRural').addEventListener('change', montarLista);
+
+const destaque = L.layerGroup().addTo(mapa);
+function limpar() { pararLeitura(); destaque.clearLayers(); document.getElementById('resultado').classList.add('oculto'); }
+
+function simular(cod, enquadrar = true) {
+  const c = D.cenarios[cod.trim().toUpperCase()];
+  if (!c) { alert('Chave não encontrada: ' + cod); return; }
+  destaque.clearLayers();
+  // Trechos de MT desligados
+  const feats = D.camadas.mt.features;
+  c.mt.forEach(i => destaque.addLayer(L.geoJSON(feats[i], { pane: 'destaque', interactive: false, style: { color: css('--critical'), weight: 5, opacity: 0.85 } })));
+  // Comunidades identificadas
+  const nomes = new Map(c.com.map(x => [x[0], x]));
+  L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
+    { pane: 'destaque', interactive: false, style: f => ({ color: css('--critical'), weight: 2.5, dashArray: nomes.get(f.properties.NOME)[3] ? '6 4' : null, fillColor: css('--critical'), fillOpacity: 0.08 }) }).addTo(destaque);
+  // UCs desligadas
+  const tset = new Set(c.trafos), pts = [];
+  D.ucs.forEach((u, i) => { if (!tset.has(u[2])) return; pts.push([u[0], u[1]]);
+    destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, pane: 'destaque', radius: 3.5, color: css('--surface'), weight: 1, fillColor: css('--critical'), fillOpacity: 1 })
+      .on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
+  });
+  const ch = D.camadas.chaves.features.find(f => f.properties.COD_CHAVE === cod);
+  if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { renderer: rendChaves, radius: 9, color: css('--surface'), weight: 3, fillColor: css('--ink'), fillOpacity: 1 }).bindTooltip(`<b>${cod}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8] }));
+  if (enquadrar && pts.length) mapa.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 15 });
+
+  // Painel
+  const red = Math.round((1 - c.sDepois / c.sAntes) * 100);
+  document.getElementById('resTitulo').textContent = `Resultado · chave ${cod} (${c.alim})`;
+  document.getElementById('tilesRes').innerHTML = `
+    <div class="tile"><div class="v">${fmt(c.n)}</div><div class="l">UCs desligadas</div></div>
+    <div class="tile"><div class="v">${c.com.length}</div><div class="l">${c.com.length === 1 ? 'comunidade' : 'comunidades'} no aviso</div></div>
+    <div class="tile"><div class="v">${c.sDepois}<small> s</small></div><div class="l">no rádio <span class="de">· hoje ${c.sAntes} s${red > 0 ? ` (−${red}%)` : ''}</span></div></div>`;
+  document.getElementById('tabCom').innerHTML = c.com.map(([n, a, t, parc, conf]) =>
+    `<tr><td>${esc(n)}<div class="nota" style="margin:0">confiança ${Math.round(conf * 100)}%</div></td><td class="n">${fmt(a)} / ${fmt(t)}</td>
+     <td><span class="badge ${parc ? '' : 'total'}">${parc ? 'Parte' : 'Inteira'}</span></td></tr>`).join('');
+  // Comparativo: fazenda a fazenda x por comunidade
+  pararLeitura();
+  avisoAtual = c;
+  const pal = t => t.split(/\s+/).length;
+  const tempo = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+  document.getElementById('avisoAntigo').textContent = c.antigo;
+  document.getElementById('avisoNovo').textContent = c.novo;
+  document.getElementById('metAntigo').innerHTML = `<span><b>${fmt(c.nLocais)}</b> locais citados</span><span><b>${fmt(pal(c.antigo))}</b> palavras</span><span><b>${tempo(c.sAntes)}</b> no ar</span>`;
+  document.getElementById('metNovo').innerHTML = `<span><b>${c.com.length}</b> ${c.com.length === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(pal(c.novo))}</b> palavras</span><span><b>${tempo(c.sDepois)}</b> no ar</span>`;
+  document.getElementById('barraAntigo').style.width = '100%';
+  document.getElementById('barraNovo').style.width = `${Math.max(3, Math.min(100, c.sDepois / c.sAntes * 100))}%`;
+  document.getElementById('ganho').innerHTML = red > 0
+    ? `Aviso <b>${red}% mais curto</b>: ${tempo(c.sAntes - c.sDepois)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
+    : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
+  const real = c.real.map(([n, q]) => `${esc(n)} <span class="nota">(${q})</span>`).join(', ');
+  document.getElementById('validacao').innerHTML = `
+    <p style="margin:0 0 6px"><span class="k" style="color:var(--muted)">Comunidades reais atingidas:</span> ${real}</p>
+    <p style="margin:0">Cobertura <span class="${c.cob >= 1 ? 'ok' : 'ruim'}">${Math.round(c.cob * 100)}%</span> ·
+      Precisão <span class="${c.prec >= 1 ? 'ok' : 'ruim'}">${Math.round(c.prec * 100)}%</span></p>
+    <p class="nota">Cobertura = comunidades reais que entraram no aviso. Precisão = comunidades do aviso que de fato foram atingidas. O gabarito nunca é usado pelo algoritmo, só nesta conferência.</p>`;
+  document.getElementById('resultado').classList.remove('oculto');
+  document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Leitura em voz alta (voz do próprio navegador), para sentir a diferença no rádio
+let avisoAtual = null, lendo = null;
+function pararLeitura() {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  lendo = null;
+  document.querySelectorAll('button.ouvir').forEach(b => b.textContent = '▶ Ouvir');
+}
+document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click', () => {
+  if (!('speechSynthesis' in window)) { alert('Este navegador não tem leitura em voz alta.'); return; }
+  const alvo = b.dataset.alvo, estava = lendo === alvo;
+  pararLeitura();
+  if (estava || !avisoAtual) return;
+  const fala = new SpeechSynthesisUtterance(avisoAtual[alvo]);
+  fala.lang = 'pt-BR';
+  const voz = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith('pt-BR'));
+  if (voz) fala.voice = voz;
+  fala.onend = pararLeitura;
+  lendo = alvo; b.textContent = '■ Parar';
+  speechSynthesis.speak(fala);
+}));
+document.getElementById('btnSimular').addEventListener('click', () => simular(document.getElementById('chave').value));
+document.getElementById('chave').addEventListener('keydown', e => { if (e.key === 'Enter') simular(e.target.value); });
+document.getElementById('btnLimpar').addEventListener('click', limpar);
+document.getElementById('btnSortear').addEventListener('click', () => {
+  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && c.com.length >= 2);
+  const [k] = op[Math.floor(Math.random() * op.length)];
+  document.getElementById('chave').value = k; simular(k);
+});
+mapa.fitBounds(C.municipio.getBounds());
+// Link direto para um cenário: mapa_comunidades.html#CF-0123
+if (location.hash.length > 1) { const k = decodeURIComponent(location.hash.slice(1)); document.getElementById('chave').value = k; simular(k); }
+</script>
+</body>
+</html>
