@@ -107,6 +107,34 @@ button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
 .lbl.dist { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
 .zoom-baixo .lbl.com { display: none; }
 .tema { position: absolute; top: 12px; right: 12px; z-index: 1000; }
+/* Aviso editável (card "Com o sistema") */
+.campos { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin: 2px 0 6px; }
+.campos label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+.campos label.tel { grid-column: 1 / -1; }
+.campos input { flex: none; width: 100%; min-width: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--page); color: var(--ink); font: inherit; }
+.prazo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.selo { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; color: #fff; }
+.selo.verde { background: var(--good); } .selo.amarelo { background: var(--s4); color: #0b0b0b; } .selo.vermelho { background: var(--critical); }
+.selo.neutro { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+.acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+/* Roteiro para a rádio: só aparece na impressão (Salvar como PDF) */
+#roteiro { display: none; }
+@media print {
+  @page { size: A4; margin: 0; }  /* margem zero: o navegador não imprime cabeçalho/rodapé com a URL */
+  html, body { height: auto; background: #fff !important; color: #000; }
+  .app { display: none !important; }
+  #roteiro { display: block; padding: 16mm 18mm; color: #000; font: 10.5pt/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+}
+#roteiro h1 { font-size: 17pt; margin: 0 0 2pt; }
+#roteiro .rt-meta { color: #444; font-size: 9.5pt; border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 12pt; }
+#roteiro h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 14pt 0 6pt; }
+#roteiro .rt-leitura p { font-size: 15pt; line-height: 1.5; margin: 0 0 10pt; }
+#roteiro .rt-dur { color: #444; font-size: 10pt; }
+#roteiro table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+#roteiro th { width: 34%; text-align: left; font-weight: 600; color: #000; padding: 3pt 8pt 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
+#roteiro td { padding: 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
+#roteiro .rt-rodape { margin-top: 12pt; font-size: 9pt; color: #444; }
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; height: auto; min-height: 100vh; }
   #mapa { height: 55vh; order: -1; }
@@ -149,9 +177,20 @@ button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
         </div>
         <div class="card novo">
           <div class="cab"><div class="tit">Com o sistema: por comunidade<small>comunidades identificadas automaticamente</small></div><button class="ouvir" data-alvo="novo">▶ Ouvir</button></div>
+          <div class="campos">
+            <label>Data<input type="date" id="avData"></label>
+            <label>Início<input type="time" id="avIni" value="08:00"></label>
+            <label>Fim<input type="time" id="avFim" value="14:00"></label>
+            <label class="tel">Telefone de atendimento<input type="text" id="avTel" value="0800 XXX XXXX" autocomplete="off"></label>
+          </div>
+          <div class="nota" id="avTelNota" style="margin-top:0">Telefone de exemplo, a confirmar com a distribuidora.</div>
+          <div class="nota ruim oculto" id="avHoraErro" style="margin-top:2px">O horário de fim deve ser depois do início.</div>
+          <div class="prazo"><span class="selo" id="selo"></span><span class="de" id="seloFalta"></span></div>
+          <div class="nota" style="margin:0 0 10px">Unidades com equipamento vital exigem 5 dias úteis (não há cadastro desses clientes nesta demonstração).</div>
           <div class="met" id="metNovo"></div>
           <div class="barra"><i id="barraNovo" style="background:var(--accent)"></i></div>
           <div class="txt" id="avisoNovo"></div>
+          <div class="acoes"><button id="btnCopiar">Copiar texto</button><button class="prim" id="btnPdf">Gerar PDF para a rádio</button></div>
         </div>
         <div class="ganho" id="ganho"></div>
       </div>
@@ -166,9 +205,16 @@ button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
   </aside>
   <div id="mapa"></div>
 </div>
+<div id="roteiro"></div>
 
 <script>
 const D = /*__DADOS__*/null;
+// Prazo legal de aviso para as demais unidades: 72 horas (REN ANEEL 1.000/2021, art. 436)
+const PRAZO_LEGAL_HORAS = 72;
+// Prazo interno de planejamento: prática da empresa, a confirmar
+const PRAZO_INTERNO_DIAS = 15;
+const PALAVRAS_POR_SEGUNDO = 2.5;  // mesma locução de desligamento.py (~150 palavras/min)
+const DISTRIBUIDORA = 'Distribuidora (demonstração)';
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = n => n.toLocaleString('pt-BR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -390,32 +436,21 @@ function simular(cod, enquadrar = true) {
   if (enquadrar && pts.length) mapa.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 15 });
 
   // Painel
-  const red = Math.round((1 - c.sDepois / c.sAntes) * 100);
   const nCit = citadas(c).length;
   document.getElementById('resTitulo').textContent = `Resultado · chave ${cod} (${c.alim})`;
   document.getElementById('tilesRes').innerHTML = `
     <div class="tile"><div class="v">${fmt(c.n)}</div><div class="l">UCs desligadas</div></div>
     <div class="tile"><div class="v">${nCit}</div><div class="l">${nCit === 1 ? 'comunidade' : 'comunidades'} no aviso</div></div>
-    <div class="tile"><div class="v">${c.sDepois}<small> s</small></div><div class="l">no rádio <span class="de">· hoje ${c.sAntes} s${red > 0 ? ` (−${red}%)` : ''}</span></div></div>`;
+    <div class="tile" id="tileRadio"></div>`;
   // Citadas primeiro; fragmentos por último, em cinza
   const linhas = [...citadas(c), ...c.com.filter(x => x[5])];
   document.getElementById('tabCom').innerHTML = linhas.map(([n, a, t, parc, conf, frag]) =>
     `<tr${frag ? ' style="color:var(--muted)"' : ''}><td>${esc(n)}<div class="nota" style="margin:0">confiança ${Math.round(conf * 100)}%</div></td><td class="n">${fmt(a)} / ${fmt(t)}</td>
      <td><span class="badge ${parc || frag ? '' : 'total'}">${frag ? 'Vizinha (não citada)' : parc ? 'Parte' : 'Inteira'}</span></td></tr>`).join('');
-  // Comparativo: fazenda a fazenda x por comunidade
+  // Comparativo: fazenda a fazenda x por comunidade (texto montado com a data/horário dos campos)
   pararLeitura();
-  avisoAtual = c;
-  const pal = t => t.split(/\s+/).length;
-  const tempo = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
-  document.getElementById('avisoAntigo').textContent = c.antigo;
-  document.getElementById('avisoNovo').textContent = c.novo;
-  document.getElementById('metAntigo').innerHTML = `<span><b>${fmt(c.nLocais)}</b> locais citados</span><span><b>${fmt(pal(c.antigo))}</b> palavras</span><span><b>${tempo(c.sAntes)}</b> no ar</span>`;
-  document.getElementById('metNovo').innerHTML = `<span><b>${nCit}</b> ${nCit === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(pal(c.novo))}</b> palavras</span><span><b>${tempo(c.sDepois)}</b> no ar</span>`;
-  document.getElementById('barraAntigo').style.width = '100%';
-  document.getElementById('barraNovo').style.width = `${Math.max(3, Math.min(100, c.sDepois / c.sAntes * 100))}%`;
-  document.getElementById('ganho').innerHTML = red > 0
-    ? `Aviso <b>${red}% mais curto</b>: ${tempo(c.sAntes - c.sDepois)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
-    : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
+  avisoAtual = c; codAtual = cod;
+  atualizarAviso();
   const real = c.real.map(([n, q]) => `${esc(n)} <span class="nota">(${q})</span>`).join(', ');
   document.getElementById('validacao').innerHTML = `
     <p style="margin:0 0 6px"><span class="k" style="color:var(--muted)">Comunidades reais atingidas:</span> ${real}</p>
@@ -426,8 +461,150 @@ function simular(cod, enquadrar = true) {
   document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ---------- Aviso editável ----------
+let codAtual = null, avisoAtual = null, lendo = null;
+const textos = { antigo: '', novo: '' };
+const semSufixo = n => n.replace(/ \(.*\)$/, '');
+const listaPt = it => it.length <= 1 ? it.join('') : it.slice(0, -1).join(', ') + ' e ' + it[it.length - 1];
+const unicos = l => [...new Set(l)];
+const palavras = t => t.split(/\s+/).filter(Boolean).length;
+const segundos = t => Math.round(palavras(t) / PALAVRAS_POR_SEGUNDO);
+const tempo = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+const pad2 = n => String(n).padStart(2, '0');
+const isoData = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+// Inteiras, parciais e vizinhas, com as mesmas regras de aviso_novo() em desligamento.py
+function classificar(c) {
+  const cit = citadas(c);
+  const inteiras = unicos(cit.filter(x => !x[3]).map(x => semSufixo(x[0])));
+  const parciais = unicos(cit.filter(x => x[3]).map(x => semSufixo(x[0]))).filter(n => !inteiras.includes(n));
+  return { inteiras, parciais, vizinhas: c.com.filter(x => x[5]) };
+}
+
+// Mesmo texto de aviso_novo() em desligamento.py: com a mesma data e horário, sai idêntico
+function montarAviso(c, data, horario) {
+  const { inteiras, parciais, vizinhas } = classificar(c);
+  let quem = listaPt(inteiras);
+  if (parciais.length) quem = quem ? `${quem}, e de parte de ${listaPt(parciais)}` : `parte de ${listaPt(parciais)}`;
+  if (vizinhas.length) quem = `${quem}, além de localidades vizinhas`;
+  const distritos = unicos(c.com.map(x => x[6] === 'Leopoldina' ? 'Sede' : x[6])).sort();
+  const onde = `distrito${distritos.length > 1 ? 's' : ''} ${listaPt(distritos)}`;
+  return `Atenção, moradores de ${quem}, em Leopoldina (${onde}): ` +
+    `no dia ${data}, das ${horario}, haverá desligamento programado de energia para ` +
+    `manutenção na rede. Programe-se!`;
+}
+
+const elData = document.getElementById('avData'), elIni = document.getElementById('avIni'),
+  elFim = document.getElementById('avFim'), elTel = document.getElementById('avTel');
+elData.value = isoData(new Date(Date.now() + PRAZO_INTERNO_DIAS * 864e5));  // sugestão: dentro do prazo interno
+const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
+function campos() {
+  const [a, m, d] = (elData.value || '').split('-');
+  const ini = elIni.value || '08:00', fim = elFim.value || '14:00';
+  return { a, m, d, dataCurta: d ? `${d}/${m}` : '__/__', dataLonga: d ? `${d}/${m}/${a}` : '(sem data)',
+    horario: `${horaPt(ini)} às ${horaPt(fim)}`, ini, fim, tel: elTel.value.trim() };
+}
+
+// Antecedência: do momento atual até o início do desligamento
+function antecedencia(f) {
+  if (!f.d) return { classe: 'neutro', texto: 'Informe a data do desligamento', falta: '' };
+  const h = (new Date(`${f.a}-${f.m}-${f.d}T${f.ini}`) - Date.now()) / 36e5;
+  const falta = h < 0 ? 'a data já passou' : h < 48 ? `faltam ${Math.floor(h)} h` : `faltam ${Math.floor(h / 24)} dias`;
+  if (h < PRAZO_LEGAL_HORAS) return { classe: 'vermelho', texto: `Abaixo do prazo legal de ${PRAZO_LEGAL_HORAS} horas`, falta };
+  if (h < PRAZO_INTERNO_DIAS * 24) return { classe: 'amarelo', texto: `Abaixo do prazo interno de ${PRAZO_INTERNO_DIAS} dias`, falta };
+  return { classe: 'verde', texto: 'Antecedência OK', falta };
+}
+
+function atualizarAviso() {
+  const f = campos(), ant = antecedencia(f);
+  const selo = document.getElementById('selo');
+  selo.className = `selo ${ant.classe}`; selo.textContent = ant.texto;
+  document.getElementById('seloFalta').textContent = ant.falta ? `· ${ant.falta}` : '';
+  document.getElementById('avTelNota').classList.toggle('oculto', !/x/i.test(f.tel));
+  document.getElementById('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
+  const c = avisoAtual;
+  if (!c) return;
+  textos.novo = montarAviso(c, f.dataCurta, f.horario) + (f.tel ? ` Dúvidas: ${f.tel}.` : '');
+  // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
+  textos.antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
+  const sA = segundos(textos.antigo), sD = segundos(textos.novo), nCit = citadas(c).length;
+  const red = Math.round((1 - sD / sA) * 100);
+  document.getElementById('tileRadio').innerHTML = `<div class="v">${sD}<small> s</small></div><div class="l">no rádio <span class="de">· hoje ${sA} s${red > 0 ? ` (−${red}%)` : ''}</span></div>`;
+  document.getElementById('avisoAntigo').textContent = textos.antigo;
+  document.getElementById('avisoNovo').textContent = textos.novo;
+  document.getElementById('metAntigo').innerHTML = `<span><b>${fmt(c.nLocais)}</b> locais citados</span><span><b>${fmt(palavras(textos.antigo))}</b> palavras</span><span><b>${tempo(sA)}</b> no ar</span>`;
+  document.getElementById('metNovo').innerHTML = `<span><b>${nCit}</b> ${nCit === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(palavras(textos.novo))}</b> palavras</span><span><b>${tempo(sD)}</b> no ar</span>`;
+  document.getElementById('barraAntigo').style.width = '100%';
+  document.getElementById('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
+  document.getElementById('ganho').innerHTML = red > 0
+    ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
+    : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
+  preencherRoteiro(c, f, ant, sD);
+}
+[elData, elIni, elFim, elTel].forEach(el => el.addEventListener('input', () => { pararLeitura(); atualizarAviso(); }));
+atualizarAviso();
+
+// Copiar texto: navigator.clipboard e, se falhar (ex.: arquivo local), textarea + execCommand
+function copiarAlternativo(t) {
+  const ta = document.createElement('textarea');
+  ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+document.getElementById('btnCopiar').addEventListener('click', async e => {
+  const b = e.currentTarget;
+  let ok = false;
+  try { await navigator.clipboard.writeText(textos.novo); ok = true; } catch (err) { ok = copiarAlternativo(textos.novo); }
+  b.textContent = ok ? 'Copiado!' : 'Não foi possível copiar';
+  setTimeout(() => { b.textContent = 'Copiar texto'; }, 2000);
+});
+
+// Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
+function preencherRoteiro(c, f, ant, sD) {
+  const { inteiras, parciais, vizinhas } = classificar(c);
+  const agora = new Date();
+  const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${codAtual}`;
+  const ou = l => l.length ? esc(l.join(', ')) : '—';
+  const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${x[1] === 1 ? 'UC' : 'UCs'})`).join('; ') : '—';
+  const frases = textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
+  document.getElementById('roteiro').innerHTML = `
+    <h1>Aviso de desligamento programado</h1>
+    <div class="rt-meta">${DISTRIBUIDORA} · Aviso nº <b>${numero}</b> · gerado em <span id="rtGerado">${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+    <h2>Texto para leitura</h2>
+    <div class="rt-leitura">${frases}</div>
+    <div class="rt-dur">Duração estimada: cerca de ${sD} segundos (locução de ~150 palavras por minuto).</div>
+    <h2>Resumo</h2>
+    <table>
+      <tr><th>Data</th><td>${f.dataLonga}</td></tr>
+      <tr><th>Horário</th><td>das ${f.horario}</td></tr>
+      <tr><th>Comunidades inteiras</th><td>${ou(inteiras)}</td></tr>
+      <tr><th>Comunidades em parte</th><td>${ou(parciais)}</td></tr>
+      <tr><th>Localidades vizinhas</th><td>${vizinhas.length ? `Sim: ${vizinhas.length} ${vizinhas.length === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome` : 'Não'}</td></tr>
+      <tr><th>Telefone de atendimento</th><td>${f.tel ? esc(f.tel) : '—'}${/x/i.test(f.tel) ? ' (exemplo, a confirmar)' : ''}</td></tr>
+    </table>
+    <h2>Registro</h2>
+    <table>
+      <tr><th>Chave aberta</th><td>${esc(codAtual)}</td></tr>
+      <tr><th>Alimentador</th><td>${esc(c.alim)}</td></tr>
+      <tr><th>UCs afetadas</th><td>${fmt(c.n)}</td></tr>
+      <tr><th>Comunidades citadas</th><td>${comUCs(citadas(c))}</td></tr>
+      <tr><th>Vizinhas não citadas</th><td>${comUCs(vizinhas)}</td></tr>
+      <tr><th>Antecedência</th><td>${ant.texto}${ant.falta ? ` (${ant.falta})` : ''}. Prazo legal: ${PRAZO_LEGAL_HORAS} horas; prazo interno: ${PRAZO_INTERNO_DIAS} dias (a confirmar). Unidades com equipamento vital: 5 dias úteis.</td></tr>
+    </table>
+    <p class="rt-rodape">Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).<br>
+      Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.</p>`;
+}
+// Data e hora de geração = momento da impressão
+window.addEventListener('beforeprint', () => {
+  const el = document.getElementById('rtGerado'), agora = new Date();
+  if (el) el.textContent = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+});
+document.getElementById('btnPdf').addEventListener('click', () => { pararLeitura(); atualizarAviso(); window.print(); });
+
 // Leitura em voz alta (voz do próprio navegador), para sentir a diferença no rádio
-let avisoAtual = null, lendo = null;
 function pararLeitura() {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   lendo = null;
@@ -438,7 +615,7 @@ document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click
   const alvo = b.dataset.alvo, estava = lendo === alvo;
   pararLeitura();
   if (estava || !avisoAtual) return;
-  const fala = new SpeechSynthesisUtterance(avisoAtual[alvo]);
+  const fala = new SpeechSynthesisUtterance(textos[alvo]);
   fala.lang = 'pt-BR';
   const voz = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith('pt-BR'));
   if (voz) fala.voice = voz;

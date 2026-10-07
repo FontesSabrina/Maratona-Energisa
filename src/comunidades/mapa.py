@@ -85,7 +85,8 @@ def construir():
             "alim": r["ALIMENTADOR"], "n": len(d.ucs), "rural": round(float(e["RURAL"]), 2),
             "trafos": trafos_por_chave.get(cod, []), "mt": mt_chave.get(cod, []),
             "com": [[c.COMUNIDADE_PREVISTA, int(c.UC_AFETADAS), int(c.UC_TOTAL), bool(c.PARCIAL),
-                     round(float(c.CONFIANCA), 2), bool(c.FRAGMENTO)] for c in d.comunidades.itertuples()],
+                     round(float(c.CONFIANCA), 2), bool(c.FRAGMENTO), c.DISTRITO]
+                    for c in d.comunidades.itertuples()],
             "real": d.ucs["COMUNIDADE"].value_counts().reset_index().values.tolist(),
             "antigo": d.aviso_antigo, "novo": d.aviso_novo, "nLocais": len(locais_antigos(d.ucs)),
             "sAntes": round(duracao_s(d.aviso_antigo)), "sDepois": round(duracao_s(d.aviso_novo)),
