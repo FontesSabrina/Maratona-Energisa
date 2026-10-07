@@ -19,6 +19,7 @@ from ..nucleo.algoritmo import territorios_voronoi
 from ..nucleo.desligamento import duracao_s, locais_antigos, simular
 from .. import distribuidora as dist_
 from ..nucleo import idiomas
+from ..nucleo.abrangencia import MARGEM_DIVISA_M, fatores_metros
 from ..nucleo.impacto import perfis_para_mapa
 from ..nucleo.nomes import exibir
 from ..validacao.avaliacao import avaliar
@@ -156,6 +157,9 @@ def construir(dist=None):
              "comPrev": com_prev, "comReal": com_real, "cenarios": cenarios, "metricas": metricas,
              "perfis": perfis_para_mapa(dist.perfis, dist.expediente, dist.razao_muito_pior),
              "distribuidora": dist.para_mapa(), "idiomas": idiomas.para_mapa(),
+             # ponto da obra: fatores graus -> metros (centro do município) e clientes por alimentador (só contagens)
+             "rede": dict(zip(("kx", "ky"), fatores_metros(gpd.read_file(C.INTERIM / "municipio.gpkg").to_crs(C.CRS_GEO).union_all().centroid.y)),
+                          margemDivisaM=MARGEM_DIVISA_M, clientesPorAlimentador={a: int(n) for a, n in df["ALIMENTADOR"].value_counts().sort_index().items()}),
              "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
     favicon = base64.b64encode((MARCA / "farol-pequeno.svg").read_bytes()).decode()
     html = (TEMPLATE.read_text(encoding="utf-8")

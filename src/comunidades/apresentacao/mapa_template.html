@@ -155,6 +155,23 @@ aside:not(.simulado) .abas { display: none; }
 .alerta-saude { margin: 12px 0 0; font-size: 14px; padding: 10px 12px; border-radius: 10px; border-left: 4px solid var(--desligado);
   background: color-mix(in srgb, var(--desligado) 12%, var(--sup)); }
 
+/* Ponto da obra */
+.obra { background: var(--sup2); border-left: 4px solid var(--ambar); border-radius: 12px; padding: 14px; display: grid; gap: 10px; }
+.obra-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.obra-cab button { background: var(--sup); font-size: 13.5px; padding: 0 12px; }
+.obra-local { font-size: 14px; color: var(--texto2); line-height: 1.45; }
+.obra-local b { color: var(--texto); font-weight: 600; }
+.pop .obra-pop b { display: inline; font-size: inherit; margin: 0; }
+.inteiro { white-space: nowrap; }
+.obra-msg { font-size: 14px; margin: 0; }
+.obra-princ { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+.obra-ops { display: grid; gap: 4px; }
+.obra-op { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 14px; }
+.obra-op .mono { font-size: 15px; }
+.obra-op small { display: block; color: var(--texto2); font-size: 12.5px; }
+.obra-op button { flex: none; font-size: 13.5px; padding: 0 12px; background: var(--sup); }
+.obra-op.melhor button { background: var(--ambar); color: var(--noite); font-weight: 600; }
+
 /* Aviso */
 .aviso-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .idioma { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--apagado); }
@@ -303,6 +320,11 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 
     <!-- Aba Desligamento -->
     <section class="aba" id="aba-desligamento" role="tabpanel" aria-labelledby="tab-desligamento">
+      <div id="blocoObra" class="obra oculto">
+        <div class="obra-cab"><div class="rot" style="margin:0">Ponto da obra</div><button id="btnLimparObra">Limpar ponto</button></div>
+        <div class="obra-local" id="obraLocal"></div>
+        <div id="obraResultado"></div>
+      </div>
       <div id="vazio" class="aba">
         <p class="vazio-txt">Escolha um desligamento para ver quem fica sem luz e montar o aviso do rádio.</p>
         <p class="nota" style="margin:0">Busque uma chave ou comunidade no topo, clique numa chave no mapa (elas aparecem ao aproximar) ou sorteie um ramal rural.</p>
@@ -1194,12 +1216,24 @@ function marcar(i) {
   if (bs[i]) { bs[i].scrollIntoView({ block: 'nearest' }); elBusca.setAttribute('aria-activedescendant', bs[i].id); }
   ativa = i;
 }
-elBusca.addEventListener('input', () => { const s = sugestoes(elBusca.value); mostrarSugestoes(s, elBusca.value.trim() && !s.length ? 'Nenhuma chave ou comunidade encontrada.' : ''); });
+elBusca.addEventListener('input', () => {
+  const pt = lerCoordenada(elBusca.value);
+  if (pt) {  // coordenada: oferece marcar o ponto da obra
+    opcoes = []; ativa = -1;
+    elSug.innerHTML = `<li role="presentation"><button role="option" aria-selected="false" data-ponto="1"><span>Marcar ponto da obra</span><span class="sub mono">${pt[0]}, ${pt[1]}</span></button></li>`;
+    elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
+    elSug.querySelector('button[data-ponto]').addEventListener('click', () => marcarObra(pt[0], pt[1]));
+    return;
+  }
+  const s = sugestoes(elBusca.value); mostrarSugestoes(s, elBusca.value.trim() && !s.length ? 'Nenhuma chave ou comunidade encontrada.' : '');
+});
 elBusca.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' && opcoes.length) { e.preventDefault(); marcar((ativa + 1) % opcoes.length); }
   else if (e.key === 'ArrowUp' && opcoes.length) { e.preventDefault(); marcar((ativa - 1 + opcoes.length) % opcoes.length); }
   else if (e.key === 'Enter') {
     e.preventDefault();
+    const pt = lerCoordenada(elBusca.value);
+    if (pt) { marcarObra(pt[0], pt[1]); return; }
     const v = elBusca.value.trim().toUpperCase();
     if (ativa >= 0) simular(opcoes[ativa].cod);
     else if (D.cenarios[v]) simular(v);
@@ -1208,6 +1242,116 @@ elBusca.addEventListener('keydown', e => {
   }
 });
 document.addEventListener('click', e => { if (!e.target.closest('.busca')) fecharSugestoes(); });
+
+// ---------- Ponto da obra: trecho mais próximo e chave de menor abrangência ----------
+// Mesmo cálculo de nucleo/abrangencia.py (só soma, multiplicação, divisão e raiz).
+const REDE = D.rede, RAIO_REDE_M = DIST.raioRedeM;
+const TRECHOS = D.camadas.mt.features.map(f => f.geometry.coordinates);
+function lerCoordenada(texto) {  // "-21.5392, -42.6411" ou "-21,5392; -42,6411" -> [lat, lon]
+  const t = texto.trim();
+  let m = t.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!m) { m = t.match(/^(-?\d+(?:,\d+)?)\s*;\s*(-?\d+(?:,\d+)?)$/); if (m) m = [m[0], m[1].replace(',', '.'), m[2].replace(',', '.')]; }
+  if (!m) return null;
+  const lat = +m[1], lon = +m[2];
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null;
+}
+function distSegmento(lat, lon, p1, p2, kx, ky) {
+  const ax = (p1[0] - lon) * kx, ay = (p1[1] - lat) * ky;
+  const bx = (p2[0] - lon) * kx, by = (p2[1] - lat) * ky;
+  const dx = bx - ax, dy = by - ay, comp = dx * dx + dy * dy;
+  const t = comp === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / comp));
+  const px = ax + t * dx, py = ay + t * dy;
+  return Math.sqrt(px * px + py * py);
+}
+function trechoMaisProximo(lat, lon, trechos, kx, ky) {
+  let melhor = -1, dmin = Infinity;
+  for (let i = 0; i < trechos.length; i++) {
+    const c = trechos[i];
+    for (let j = 0; j + 1 < c.length; j++) {
+      const d = distSegmento(lat, lon, c[j], c[j + 1], kx, ky);
+      if (d < dmin) { melhor = i; dmin = d; }
+    }
+  }
+  return [melhor, dmin];
+}
+function chavesQueDesligam(trecho, cenarios) {
+  return Object.entries(cenarios).filter(([, c]) => c.mt.includes(trecho))
+    .map(([cod, c]) => ({ chave: cod, clientes: c.n, comunidades: citadas(c).length }))
+    .sort((a, b) => (a.clientes - b.clientes) || (a.comunidades - b.comunidades) || (a.chave < b.chave ? -1 : a.chave > b.chave ? 1 : 0));
+}
+// Dentro do município: no contorno simplificado ou a até MARGEM_DIVISA_M da borda (como em nucleo/abrangencia.py)
+const AREA = D.camadas.municipio.features.flatMap(f => f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : []);
+function dentroDaArea(lat, lon) {
+  if (AREA.some(p => noAnel(lon, lat, p[0]) && !p.slice(1).some(b => noAnel(lon, lat, b)))) return true;
+  return AREA.some(p => p.some(anel => anel.some((v, j) => j + 1 < anel.length && distSegmento(lat, lon, v, anel[j + 1], REDE.kx, REDE.ky) <= REDE.margemDivisaM)));
+}
+function analisarPonto(lat, lon) {
+  if (!dentroDaArea(lat, lon)) return { situacao: 'fora', trecho: -1, distancia_m: null, chaves: [] };
+  const [trecho, dist] = trechoMaisProximo(lat, lon, TRECHOS, REDE.kx, REDE.ky);
+  if (trecho < 0 || dist > RAIO_REDE_M) return { situacao: 'longe', trecho, distancia_m: dist, chaves: [] };
+  const chaves = chavesQueDesligam(trecho, D.cenarios);
+  return { situacao: chaves.length ? 'ok' : 'tronco', trecho, distancia_m: dist, chaves };
+}
+// Ponto dentro de polígono (GeoJSON Polygon/MultiPolygon, com buracos): raio cruzando as bordas
+function noAnel(lon, lat, anel) {
+  let dentro = false;
+  for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+    const [xi, yi] = anel[i], [xj, yj] = anel[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+function noPoligono(lat, lon, geom) {
+  const polis = geom.type === 'Polygon' ? [geom.coordinates] : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+  return polis.some(p => noAnel(lon, lat, p[0]) && !p.slice(1).some(b => noAnel(lon, lat, b)));
+}
+const ondeFica = (lat, lon, camada, prop) => (camada.features.find(f => noPoligono(lat, lon, f.geometry)) || { properties: {} }).properties[prop];
+
+const obraCamada = L.layerGroup().addTo(mapa);
+let obraAtual = null;
+function marcarObra(lat, lon) {
+  fecharSugestoes(); mapa.closePopup(); obraCamada.clearLayers();
+  const r = analisarPonto(lat, lon), fora = r.situacao === 'fora';
+  obraAtual = { lat, lon, ...r };
+  const comunidade = fora ? null : ondeFica(lat, lon, D.camadas.previstas, 'NOME');
+  const distrito = fora ? null : ondeFica(lat, lon, D.camadas.distritos, 'NM_DIST');
+  const alim = r.trecho >= 0 ? D.camadas.mt.features[r.trecho].properties.ALIMENTADOR : null;
+  if (r.trecho >= 0 && r.situacao !== 'longe') obraCamada.addLayer(L.geoJSON(D.camadas.mt.features[r.trecho],
+    { pane: 'destaqueTopo', interactive: false, style: { color: css('--ambar'), weight: 7, opacity: 0.95 } }));
+  obraCamada.addLayer(L.circleMarker([lat, lon], { pane: 'destaqueTopo', interactive: false, radius: 9,
+    color: css('--noite'), weight: 3, fillColor: css('--ambar'), fillOpacity: 1 }));
+  // Texto do lugar e do resultado (o mesmo no popup e no bloco da lateral)
+  const coord = `<span class="mono">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`;
+  const local = fora ? coord
+    : `${coord}<br>Comunidade: <b>${esc(comunidade || 'fora das comunidades identificadas')}</b> · distrito <b>${esc(distrito || '—')}</b>`
+      + (r.situacao !== 'longe' ? `<br>Média tensão mais próxima: alimentador <b class="inteiro">${esc(alim)}</b>, a <b class="inteiro">${fmt(Math.round(r.distancia_m))} m</b>` : '');
+  let msg;
+  if (fora) msg = 'Este ponto fica fora da área carregada. Gere o Farol para esse município.';
+  else if (r.situacao === 'longe') msg = `Não há rede de média tensão a menos de ${fmt(RAIO_REDE_M)} m deste ponto.`;
+  else if (r.situacao === 'tronco') msg = `Nenhuma chave de ramal isola este trecho: ele fica no tronco do alimentador ${alim}, perto da subestação. `
+    + `Desligar o alimentador inteiro deixaria ${fmt(REDE.clientesPorAlimentador[alim] || 0)} clientes sem luz. Avalie trabalho com a rede energizada (linha viva) ou gerador.`;
+  const frase = o => `Abrir a <span class="mono">${esc(o.chave)}</span> deixa <b>${fmt(o.clientes)}</b> ${o.clientes === 1 ? 'cliente' : 'clientes'} sem luz (${o.comunidades} ${o.comunidades === 1 ? 'comunidade' : 'comunidades'})`;
+  $('obraLocal').innerHTML = local;
+  $('obraResultado').innerHTML = msg ? `<p class="obra-msg">${esc(msg)}</p>` : `
+    <p class="obra-princ">${frase(r.chaves[0])}</p>
+    <div class="obra-ops">${r.chaves.map((o, i) => `<div class="obra-op${i === 0 ? ' melhor' : ''}"><div><span class="mono">${esc(o.chave)}</span>
+      <small>${fmt(o.clientes)} ${o.clientes === 1 ? 'cliente' : 'clientes'} · ${o.comunidades} ${o.comunidades === 1 ? 'comunidade' : 'comunidades'}</small></div>
+      <button data-chave="${esc(o.chave)}">Simular esta chave</button></div>`).join('')}</div>`;
+  $('obraResultado').querySelectorAll('button[data-chave]').forEach(b => b.addEventListener('click', () => simular(b.dataset.chave)));
+  $('blocoObra').classList.remove('oculto');
+  ativarAba('desligamento');
+  mapa.setView([lat, lon], Math.max(mapa.getZoom(), 15), { animate: false });
+  L.popup({ maxWidth: 300 }).setLatLng([lat, lon]).setContent(`<div class="pop"><b>Ponto da obra</b><div class="obra-pop">${local}<div class="coms">${msg ? esc(msg) : frase(r.chaves[0])}</div></div></div>`).openOn(mapa);
+}
+function limparObra() { obraCamada.clearLayers(); obraAtual = null; $('blocoObra').classList.add('oculto'); mapa.closePopup(); }
+$('btnLimparObra').addEventListener('click', limparObra);
+// Botão direito no mapa: marcar o ponto da obra ali
+mapa.on('contextmenu', e => {
+  const el = document.createElement('div'); el.className = 'pop';
+  el.innerHTML = '<button class="prim acao">Marcar ponto da obra aqui</button>';
+  el.querySelector('button').addEventListener('click', () => marcarObra(+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)));
+  L.popup().setLatLng(e.latlng).setContent(el).openOn(mapa);
+});
 
 // ---------- Botões da lateral ----------
 function sortear() {

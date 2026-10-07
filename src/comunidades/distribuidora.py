@@ -35,6 +35,7 @@ class Distribuidora:
     regras: RegrasAviso
     expediente: Expediente
     razao_muito_pior: float
+    raio_rede_m: float
     perfis: dict
 
     def para_mapa(self) -> dict:
@@ -42,7 +43,7 @@ class Distribuidora:
         return {"nome": self.nome, "telefone": self.telefone, "municipio": self.municipio, "uf": self.uf,
                 "idiomaPadrao": self.idioma_padrao, "prazoLegalHoras": self.prazo_legal_horas,
                 "prazoVitalDiasUteis": self.prazo_vital_dias_uteis, "prazoInternoDias": self.prazo_interno_dias,
-                "norma": self.norma}
+                "norma": self.norma, "raioRedeM": self.raio_rede_m}
 
 
 class ConfiguracaoInvalida(ValueError):
@@ -114,5 +115,6 @@ def carregar(arquivo: str | Path | None = None) -> Distribuidora:
         expediente=expediente_de_dict({k: _exigir(d, f"expediente.{k}", float if k != "passo_min" else int)
                                        for k in ("inicio_min_h", "ultimo_inicio_h", "fim_max_h", "passo_min")}),
         razao_muito_pior=_exigir(d, "janela.razao_muito_pior", float),
+        raio_rede_m=_exigir(d, "obra.raio_rede_m", float),
         perfis=perfis_de_dict(_validar_perfis(d)),
     )

@@ -34,6 +34,9 @@ limiar_total = 0.0             # fração das UCs de uma comunidade a partir da 
 limite_fragmento = 0           # até quantas UCs afetadas uma comunidade parcial pode virar "localidades vizinhas"
 limite_participacao = 0.0      # ...e abaixo de que fração das UCs da chave (ex.: 0.10)
 
+[obra]
+raio_rede_m = 0             # ponto da obra: distância máxima até a rede de média tensão, em metros (ex.: 500)
+
 [janela]
 razao_muito_pior = 0.0         # razão entre notas a partir da qual a janela escolhida é "muito pior" (ex.: 1.5)
 

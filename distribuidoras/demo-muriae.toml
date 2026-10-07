@@ -31,6 +31,9 @@ limiar_total = 0.9                          # >= 90% das UCs da comunidade afeta
 limite_fragmento = 2                        # até 2 UCs afetadas...
 limite_participacao = 0.10                  # ...e < 10% das UCs da chave -> "localidades vizinhas"
 
+[obra]
+raio_rede_m = 500           # ponto da obra: distância máxima até a rede de média tensão, em metros (a confirmar)
+
 [janela]
 razao_muito_pior = 1.5                      # a partir desta razão, avisa que a janela escolhida é muito pior
 
