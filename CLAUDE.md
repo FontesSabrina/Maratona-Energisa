@@ -11,6 +11,8 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - LGPD: nada de nomes de pessoas em telas de aviso; para cargas sensíveis, só contagens.
 - O aviso de rádio é o produto central. Recursos novos complementam o rádio, não o substituem.
 - Prazos de aviso: 72 horas para a maioria das unidades e 5 dias úteis para quem usa equipamento vital (REN 1.000/2021, art. 436). A empresa tem um prazo interno de planejamento de cerca de 15 dias (a confirmar), que deve ser configurável.
+- Arquitetura: o projeto será reorganizado em fontes/ (dados reais), simulacao/ (dados fictícios), nucleo/ (regras do produto, sem depender de onde vêm os dados), validacao/ (métricas e testes) e apresentacao/ (mapa, PDF e tela). Código novo já deve respeitar essa separação: o nucleo não lê arquivos nem conhece o IBGE.
+- Segurança e LGPD: minimização de dados. Nada de nome de titular, número de UC ou endereço em telas, no HTML gerado ou em PDFs; só comunidades, classes e contagens. O HTML gerado não pode chamar nenhum servidor além dos de fundo de mapa. Nenhum segredo, senha ou chave no código ou no git.
 
 ## Como rodar (Windows)
 - Pipeline completo: py -m uv run comunidades
