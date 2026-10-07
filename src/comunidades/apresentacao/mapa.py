@@ -23,6 +23,12 @@ from ..validacao.avaliacao import avaliar
 TEMPLATE = Path(__file__).with_name("mapa_template.html")
 ARQ_SAIDA = C.SAIDA / "mapa_comunidades.html"
 LEAFLET = Path(__file__).with_name("vendor") / "leaflet"   # Leaflet 1.9.4 embutido (sem CDN)
+PLEX = Path(__file__).with_name("vendor") / "ibm-plex"     # fontes IBM Plex embutidas (OFL)
+MARCA = Path(__file__).with_name("marca")                  # logo do Farol
+FONTES = [("IBM Plex Sans", "ibm-plex-sans-latin-400-normal.woff2", 400),
+          ("IBM Plex Sans", "ibm-plex-sans-latin-500-normal.woff2", 500),
+          ("IBM Plex Sans", "ibm-plex-sans-latin-600-normal.woff2", 600),
+          ("IBM Plex Mono", "ibm-plex-mono-latin-500-normal.woff2", 500)]
 FUNDO_MAPA = "https://server.arcgisonline.com"            # único servidor externo: fundos da Esri
 
 
@@ -99,6 +105,7 @@ def construir():
             "antigo": d.aviso_antigo, "novo": d.aviso_novo, "nLocais": len(locais_antigos(d.ucs)),
             "sAntes": round(duracao_s(d.aviso_antigo)), "sDepois": round(duracao_s(d.aviso_novo)),
             "prec": round(float(e["PRECISAO"]), 2), "cob": round(float(e["COBERTURA"]), 2),
+            "cobUC": round(float(e["COBERTURA_UC"]), 3),
         }
 
     # Camadas geográficas
@@ -140,13 +147,27 @@ def construir():
     dados = {"camadas": camadas, "ucs": ucs, "classes": classes, "locCad": loc_cad, "trafos": trafos,
              "comPrev": com_prev, "comReal": com_real, "cenarios": cenarios, "metricas": metricas,
              "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
+    favicon = base64.b64encode((MARCA / "farol-pequeno.svg").read_bytes()).decode()
     html = (TEMPLATE.read_text(encoding="utf-8")
+            .replace("<!--__LOGO__-->", (MARCA / "farol.svg").read_text(encoding="utf-8").strip())
+            .replace("__FAVICON__", f"data:image/svg+xml;base64,{favicon}")
+            .replace("/*__FONTES__*/", _fontes_embutidas())
             .replace("/*__LEAFLET_CSS__*/", (LEAFLET / "leaflet.css").read_text(encoding="utf-8"))
             .replace("/*__LEAFLET_JS__*/", (LEAFLET / "leaflet.js").read_text(encoding="utf-8"))
             .replace("/*__DADOS__*/null", json.dumps(dados, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")))
     html = html.replace("/*__CSP__*/", politica_seguranca(html))
     ARQ_SAIDA.write_text(html, encoding="utf-8", newline="\n")
     return ARQ_SAIDA
+
+
+def _fontes_embutidas() -> str:
+    """@font-face das fontes IBM Plex, embutidas como data: (sem servidor de fontes)."""
+    regras = []
+    for familia, arquivo, peso in FONTES:
+        b64 = base64.b64encode((PLEX / arquivo).read_bytes()).decode()
+        regras.append(f"@font-face{{font-family:'{familia}';font-style:normal;font-weight:{peso};font-display:swap;"
+                      f"src:url(data:font/woff2;base64,{b64}) format('woff2')}}")
+    return "\n".join(regras)
 
 
 def politica_seguranca(html: str) -> str:
@@ -159,7 +180,8 @@ def politica_seguranca(html: str) -> str:
         f"script-src {hashes}",
         "style-src 'unsafe-inline'",
         f"img-src {FUNDO_MAPA} data:",  # data: = imagem embutida (o Leaflet usa para cancelar blocos), sem conexão
-        "connect-src 'none'", "font-src 'none'", "media-src 'none'", "object-src 'none'",
+        "font-src data:",  # só as fontes embutidas no próprio arquivo, sem servidor
+        "connect-src 'none'", "media-src 'none'", "object-src 'none'",
         "frame-src 'none'", "worker-src 'none'", "base-uri 'none'", "form-action 'none'",
     ])
 

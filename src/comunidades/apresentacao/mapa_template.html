@@ -2,247 +2,415 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<!-- Só imagens de fundo de mapa da Esri (e imagens embutidas data:); nenhuma outra conexão externa. Os hashes dos scripts são calculados pelo mapa.py. -->
+<!-- Só imagens de fundo de mapa da Esri (e imagens/fontes embutidas data:); nenhuma outra conexão externa. Os hashes dos scripts são calculados pelo mapa.py. -->
 <meta http-equiv="Content-Security-Policy" content="/*__CSP__*/">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Comunidades Afetadas · Leopoldina</title>
+<title>Farol · Leopoldina</title>
+<link rel="icon" type="image/svg+xml" href="__FAVICON__">
 <!-- Leaflet 1.9.4 embutido (BSD 2-Clause; ver vendor/leaflet/LICENSE) -->
 <style>/*__LEAFLET_CSS__*/</style>
 <script>/*__LEAFLET_JS__*/</script>
+<!-- IBM Plex Sans e Mono embutidas (SIL OFL 1.1; ver vendor/ibm-plex/) -->
+<style>/*__FONTES__*/</style>
 <style>
+/* ---------- Cores do Farol ---------- */
 :root {
   color-scheme: light;
-  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f3f2ee;
-  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-  --hair: #e1e0d9; --border: rgba(11,11,11,0.10);
-  --accent: #2a78d6; --critical: #d03b3b; --good: #006300; --serious: #ec835a;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
-  --uc: #52514e; --trafo: #0b0b0b; --via: #b9b7ae; --limite: #0b0b0b;
+  --ambar: #F5B83D; --noite: #0E1620; --mare: #1C2A37; --nevoa: #E9EEF3;
+  --fundo: #F3F5F7; --sup: #FFFFFF; --sup2: #EDF1F4; --linha: #D5DDE4;
+  --texto: #12202C; --texto2: #3E4C59; --apagado: #5A6875; --num: #8A5A00;
+  --desligado: #C23B2A; --confirmado: #1B7D4B; --info: #1663C7;  /* confirmado: #1E8A52 escurecido até 4,5:1 sobre a superfície 2 */
+  --sobre-desligado: #FFFFFF; --sobre-confirmado: #FFFFFF;
+  /* alimentadores: nenhum parecido com o coral do desligado nem com o âmbar da marca (ΔE2000 >= 30) */
+  --s1:#2a78d6; --s2:#0f6a6b; --s3:#19a170; --s4:#c6109f; --s5:#651559; --s6:#008300; --s7:#4a3aa7; --s8:#2593b1;
+  --uc: #5A6875; --via: #B4BEC8; --sombra: 0 2px 10px rgba(14,22,32,.14);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-    --hair: #2c2c2a; --border: rgba(255,255,255,0.10);
-    --accent: #3987e5; --critical: #e66767; --good: #0ca30c; --serious: #ec835a;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
-    --uc: #c3c2b7; --trafo: #ffffff; --via: #4a4945; --limite: #ffffff;
+    --fundo: #0E1620; --sup: #15202B; --sup2: #1C2A37; --linha: #2A3A4A;
+    --texto: #E9EEF3; --texto2: #B4C0CC; --apagado: #93A1AF; --num: #F5B83D;
+    --desligado: #FF6E5A; --confirmado: #3FB97A; --info: #6CB4FF;
+    --sobre-desligado: #0E1620; --sobre-confirmado: #0E1620;
+    --s1:#3987e5; --s2:#94eef0; --s3:#199e70; --s4:#d411aa; --s5:#ea9ade; --s6:#008300; --s7:#9085e9; --s8:#35b2d4;
+    --uc: #93A1AF; --via: #3A4A5A; --sombra: 0 2px 12px rgba(0,0,0,.45);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321;
-  --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-  --hair: #2c2c2a; --border: rgba(255,255,255,0.10);
-  --accent: #3987e5; --critical: #e66767; --good: #0ca30c; --serious: #ec835a;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
-  --uc: #c3c2b7; --trafo: #ffffff; --via: #4a4945; --limite: #ffffff;
+  --fundo: #0E1620; --sup: #15202B; --sup2: #1C2A37; --linha: #2A3A4A;
+  --texto: #E9EEF3; --texto2: #B4C0CC; --apagado: #93A1AF; --num: #F5B83D;
+  --desligado: #FF6E5A; --confirmado: #3FB97A; --info: #6CB4FF;
+  --sobre-desligado: #0E1620; --sobre-confirmado: #0E1620;
+  --s1:#3987e5; --s2:#94eef0; --s3:#199e70; --s4:#d411aa; --s5:#ea9ade; --s6:#008300; --s7:#9085e9; --s8:#35b2d4;
+  --uc: #93A1AF; --via: #3A4A5A; --sombra: 0 2px 12px rgba(0,0,0,.45);
 }
+
+/* ---------- Base ---------- */
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--page); color: var(--ink);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-.app { display: grid; grid-template-columns: 400px 1fr; height: 100vh; }
-aside { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 18px 18px 40px; }
-#mapa { height: 100%; background: var(--page); }
-h1 { font-size: 18px; margin: 0 0 2px; letter-spacing: -0.01em; }
-.sub { color: var(--ink-2); margin: 0 0 16px; font-size: 13px; }
-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 10px; font-weight: 600; }
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.tile { background: var(--surface-2); border-radius: 10px; padding: 10px 10px 9px; }
-.tile .v { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
-.tile .v small { font-size: 12px; font-weight: 500; color: var(--muted); }
-.tile .l { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.3; }
-.de { color: var(--muted); font-size: 13px; font-weight: 500; }
-.ctrl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-input[type=text] { flex: 1 1 200px; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--page); color: var(--ink); font: inherit; }
-button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2);
-  color: var(--ink); font: inherit; cursor: pointer; }
-button.prim { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
-button:hover { filter: brightness(0.96); }
-label.chk { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-size: 13px; margin-top: 8px; cursor: pointer; }
-.grupo { margin-bottom: 12px; }
-.grupo .t { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
-.camada { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: 13px; }
-.sw { width: 18px; height: 12px; border-radius: 3px; flex: none; }
-.sw.linha { height: 3px; border-radius: 2px; }
-.sw.ponto { width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; }
-.alims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; margin: 2px 0 4px 26px; font-size: 12px; color: var(--ink-2); }
+html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto);
+  font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-weight: 500; }
+.oculto { display: none !important; }
+.so-ap { display: none !important; }
+html.apresentacao .so-ap { display: revert !important; }
+html.apresentacao .so-ap.bloco { display: block !important; }
+html.apresentacao button.sw.so-ap { display: flex !important; }
+a { color: var(--info); }
+button { min-height: 44px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--sup2); color: var(--texto);
+  font-family: inherit; font-size: 14.5px; font-weight: 500; line-height: 1.2; cursor: pointer; }
+button:hover { filter: brightness(1.06); }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+button.prim { background: var(--ambar); color: var(--noite); font-weight: 600; }
+input { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--linha); background: var(--fundo);
+  color: var(--texto); font: inherit; width: 100%; min-width: 0; }
+.rot { font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--apagado); margin: 0 0 8px; }
+.nota { font-size: 13px; color: var(--apagado); margin: 8px 0 0; }
+.de { color: var(--apagado); font-size: 13px; font-weight: 400; }
+.ruim { color: var(--desligado); font-weight: 600; } .ok { color: var(--confirmado); font-weight: 600; }
+
+/* ---------- Barra do topo ---------- */
+.topo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "marca busca acoes";
+  align-items: center; gap: 16px; padding: 10px 16px; background: var(--sup); box-shadow: var(--sombra); z-index: 1100; }
+.marca { grid-area: marca; display: flex; align-items: center; gap: 10px; }
+.marca svg { width: 36px; height: 36px; flex: none; }
+.marca .nome { font-size: 20px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
+.marca .lugar { font-size: 12px; color: var(--apagado); }
+.busca { grid-area: busca; position: relative; max-width: 560px; width: 100%; justify-self: center; }
+.busca input { background: var(--sup2); border-color: transparent; padding-left: 40px; }
+.busca .lupa { position: absolute; left: 12px; top: 12px; width: 20px; height: 20px; color: var(--apagado); pointer-events: none; }
+#sugestoes { position: absolute; top: calc(100% + 6px); left: 0; right: 0; margin: 0; padding: 6px; list-style: none;
+  background: var(--sup); border-radius: 12px; box-shadow: var(--sombra); max-height: 60vh; overflow-y: auto; z-index: 1200; }
+#sugestoes .grupo-sug { font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--apagado); padding: 10px 10px 4px; }
+#sugestoes button { display: block; width: 100%; text-align: left; background: transparent; padding: 8px 10px; border-radius: 8px; }
+#sugestoes button[aria-selected="true"], #sugestoes button:hover { background: var(--sup2); }
+#sugestoes .sub { display: block; font-size: 13px; color: var(--apagado); font-weight: 400; margin-top: 2px; }
+#sugestoes .vazio { padding: 10px; color: var(--apagado); font-size: 14px; }
+.acoes-topo { grid-area: acoes; display: flex; gap: 8px; min-width: 0; }
+.acoes-topo .curto { display: none; }
+.lbl.lbl-oculto { display: none; }
+#btnApresentacao[aria-pressed="true"] { background: var(--ambar); color: var(--noite); }
+
+/* ---------- Áreas ---------- */
+.app { display: grid; grid-template-columns: 420px minmax(0, 1fr); min-height: 0; }
+aside { background: var(--sup); overflow-y: auto; padding: 20px 20px 32px; min-height: 0; }
+.mapa-area { position: relative; min-height: 0; }
+#mapa { position: absolute; inset: 0; background: var(--fundo); }
+
+/* Validação geral (modo apresentação) */
+.valid { background: var(--sup2); border-radius: 14px; padding: 16px; margin-bottom: 20px; }
+.valid-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.valid-nums .num { font-size: 24px; }
+.valid-nums .leg { font-size: 12.5px; color: var(--texto2); line-height: 1.35; margin-top: 2px; }
+
+/* Abas */
+.abas { display: flex; gap: 4px; margin: 0 0 20px; border-bottom: 1px solid var(--linha); }
+.abas button { background: transparent; border-radius: 0; color: var(--texto2); padding: 0 12px; flex: 1;
+  border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.abas button[aria-selected="true"] { color: var(--texto); border-bottom-color: var(--ambar); font-weight: 600; }
+aside:not(.simulado) .abas { display: none; }
+.aba { display: grid; gap: 22px; }
+
+/* Desligamento */
+.vazio-txt { font-size: 16px; color: var(--texto2); margin: 0; }
+.chave-cab { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.chave-cab .mono { font-size: 26px; }
+.chave-cab .meta { color: var(--texto2); font-size: 14px; }
+.numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.num { font-size: 34px; font-weight: 600; line-height: 1.05; color: var(--num); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.num small { font-size: 16px; font-weight: 500; }
+.num-leg { font-size: 13px; color: var(--texto2); margin-top: 4px; line-height: 1.35; }
+.campos { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; }
+.campos label, .campo label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--apagado); min-width: 0; }
+.prazo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.selo { display: inline-block; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 99px; }
+.selo.verde { background: var(--confirmado); color: var(--sobre-confirmado); }
+.selo.amarelo { background: var(--ambar); color: var(--noite); }
+.selo.vermelho { background: var(--desligado); color: var(--sobre-desligado); }
+.selo.neutro { background: var(--sup2); color: var(--texto2); }
+.linha-botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.linha-botoes > button { flex: 1 1 auto; }
+.largo { width: 100%; }
+
+/* Aviso */
+.aviso-txt { font-size: 19px; line-height: 1.55; margin: 0; }
+.cmp { display: grid; gap: 6px; }
+.cmp-l { display: flex; justify-content: space-between; font-size: 14px; color: var(--texto2); }
+.cmp-l b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.trilho { height: 10px; border-radius: 5px; background: var(--sup2); overflow: hidden; margin-bottom: 6px; }
+.trilho i { display: block; height: 100%; border-radius: 5px; }
+#barraAntigo { background: var(--apagado); } #barraNovo { background: var(--ambar); }
+.ganho { font-size: 14px; color: var(--texto2); margin: 0; }
+.ganho b { color: var(--texto); }
+details.antigo summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--info); font-size: 14.5px; }
+details.antigo[open] summary { margin-bottom: 10px; }
+.antigo-txt { font-size: 14px; color: var(--texto2); max-height: 260px; overflow-y: auto; margin: 10px 0 0; }
+
+/* Comunidades */
+.lista-com { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.com-l1 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.com-nome { font-weight: 500; }
+.com-l2 { font-size: 13px; color: var(--texto2); margin: 2px 0 6px; }
+.selo-c { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+.selo-c.inteira { background: var(--desligado); color: var(--sobre-desligado); }
+.selo-c.parte { background: var(--sup2); color: var(--texto2); }
+.prop { height: 6px; border-radius: 3px; background: var(--sup2); overflow: hidden; }
+.prop i { display: block; height: 100%; background: var(--desligado); }
+.viz .com-nome, .viz .com-l2 { color: var(--apagado); }
+.viz .prop i { background: var(--apagado); }
+.valid-cen { background: var(--sup2); border-radius: 14px; padding: 16px; }
+.valid-cen p { margin: 0 0 8px; font-size: 14px; }
+.rodape-lat { font-size: 12.5px; color: var(--apagado); margin-top: 28px; }
+
+/* ---------- Mapa ---------- */
+.leaflet-container { font: inherit; background: var(--fundo); }
+.leaflet-destaque-pane, .leaflet-destaque-pane *, .leaflet-destaqueTopo-pane, .leaflet-destaqueTopo-pane * { pointer-events: none !important; }
+.ctl-mapa { display: grid; gap: 8px; }
+.ctl-mapa button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; background: var(--sup); color: var(--texto);
+  box-shadow: var(--sombra); font-size: 22px; }
+.ctl-mapa button[aria-expanded="true"] { background: var(--ambar); color: var(--noite); }
+.ctl-mapa svg { width: 22px; height: 22px; }
+#painelCamadas { position: absolute; top: 12px; right: 68px; z-index: 1000; width: min(320px, calc(100% - 84px));
+  max-height: calc(100% - 24px); overflow-y: auto; background: var(--sup); border-radius: 14px; box-shadow: var(--sombra); padding: 16px; }
+#painelCamadas .grupo + .grupo { margin-top: 16px; }
+button.sw { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; background: transparent;
+  padding: 0 2px; border-radius: 8px; text-align: left; font-weight: 400; }
+.sw-txt { display: flex; align-items: center; gap: 10px; }
+.sw-txt small { display: block; font-size: 12px; color: var(--apagado); }
+.amostra { width: 18px; height: 12px; border-radius: 3px; flex: none; }
+.amostra.linha { height: 3px; } .amostra.ponto { width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; }
+.chave-sw { width: 40px; height: 24px; border-radius: 12px; background: var(--linha); position: relative; flex: none; transition: background .15s; }
+.chave-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--sup); box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: left .15s; }
+button.sw[aria-checked="true"] .chave-sw { background: var(--ambar); }
+button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--noite); }
+.alims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; margin: 2px 0 6px 30px; font-size: 12.5px; color: var(--texto2); }
 .alims span { display: flex; align-items: center; gap: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--hair); }
-td { padding: 5px 6px 5px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
-td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border); color: var(--ink-2); white-space: nowrap; }
-.badge.total { background: var(--critical); color: #fff; border-color: transparent; }
-.aviso { background: var(--surface-2); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 6px; font-size: 13.5px; }
-.aviso.antigo { border-left-color: var(--muted); color: var(--ink-2); max-height: 220px; overflow-y: auto; font-size: 12.5px; }
-details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; margin: 10px 0 6px; }
-.comp { display: grid; gap: 10px; }
-.card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--surface); }
-.card.novo { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.card .cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-.card .tit { font-weight: 650; font-size: 13.5px; }
-.card .tit small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
-.card .met { display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-2); font-size: 12.5px; margin-bottom: 8px; }
-.card .met b { color: var(--ink); font-size: 15px; font-variant-numeric: tabular-nums; }
-.barra { height: 8px; border-radius: 4px; background: var(--hair); margin-bottom: 10px; overflow: hidden; }
-.barra i { display: block; height: 100%; border-radius: 4px; }
-.card .txt { font-size: 13px; line-height: 1.5; max-height: 180px; overflow-y: auto; padding-right: 4px; }
-.card.antigo .txt { color: var(--ink-2); font-size: 12.5px; }
-button.ouvir { padding: 4px 10px; font-size: 12.5px; white-space: nowrap; }
-.ganho { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-.ganho b { font-size: 15px; }
-.pop .acao { margin-top: 10px; width: 100%; }
-.pop .coms { color: var(--ink-2); font-size: 12.5px; margin-top: 4px; }
-.ok { color: var(--good); font-weight: 600; } .ruim { color: var(--critical); font-weight: 600; }
-.nota { color: var(--muted); font-size: 12px; margin-top: 8px; }
-.oculto { display: none; }
-.leaflet-container { font: inherit; background: var(--page); }
-.leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip { background: var(--surface); color: var(--ink); border-color: var(--border); }
-.leaflet-popup-content { margin: 12px 14px; font-size: 13px; }
-.pop b { display: block; font-size: 14px; margin-bottom: 4px; }
-.pop .k { color: var(--muted); }
-.lbl { background: transparent !important; border: 0 !important; box-shadow: none !important; font-weight: 600; font-size: 11.5px;
-  color: var(--ink); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 2px var(--surface); padding: 0; }
+.legenda { background: var(--sup); border-radius: 10px; box-shadow: var(--sombra); padding: 8px 12px; font-size: 12.5px; color: var(--texto2); display: grid; gap: 4px; }
+.legenda span { display: flex; align-items: center; gap: 8px; }
+.leg-ramal { width: 22px; height: 4px; border-radius: 2px; background: var(--desligado); }
+.leg-aviso { width: 18px; height: 12px; border: 2px solid var(--desligado); background: color-mix(in srgb, var(--desligado) 12%, transparent); border-radius: 2px; }
+.leg-viz { width: 18px; height: 12px; border: 2px dotted var(--desligado); border-radius: 2px; }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--sup) 88%, transparent) !important; color: var(--texto2) !important; font-size: 11.5px; }
+.leaflet-control-attribution a { color: var(--info) !important; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip { background: var(--sup); color: var(--texto); border-color: var(--linha); box-shadow: var(--sombra); }
+.leaflet-popup-content { margin: 14px 16px; font-size: 14px; line-height: 1.5; }
+.leaflet-container a.leaflet-popup-close-button { width: 36px; height: 36px; font-size: 22px; line-height: 36px; color: var(--apagado); }
+.pop b { display: block; font-size: 15px; margin-bottom: 4px; }
+.pop .k { color: var(--apagado); }
+.pop .coms { color: var(--texto2); font-size: 13.5px; margin-top: 4px; }
+.pop .acao { margin-top: 12px; width: 100%; }
+.lbl { background: transparent !important; border: 0 !important; box-shadow: none !important; font-weight: 600; font-size: 12px;
+  color: var(--texto); text-shadow: 0 0 3px var(--fundo), 0 0 3px var(--fundo), 0 0 2px var(--fundo); padding: 0; }
 .lbl::before { display: none; }
-.lbl.dist { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); }
+.lbl.dist { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto2); }
 .zoom-baixo .lbl.com { display: none; }
-.tema { position: absolute; top: 12px; right: 12px; z-index: 1000; }
-/* Aviso editável (card "Com o sistema") */
-.campos { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px; margin: 2px 0 6px; }
-.campos label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--ink-2); min-width: 0; }
-.campos label.tel { grid-column: 1 / -1; }
-.campos input { flex: none; width: 100%; min-width: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--page); color: var(--ink); font: inherit; }
-.prazo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
-.selo { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 99px; color: #fff; }
-.selo.verde { background: var(--good); } .selo.amarelo { background: var(--s4); color: #0b0b0b; } .selo.vermelho { background: var(--critical); }
-.selo.neutro { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
-.acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-/* Roteiro para a rádio: só aparece na impressão (Salvar como PDF) */
+
+/* ---------- Roteiro para a rádio: só aparece na impressão (Salvar como PDF) ---------- */
 #roteiro { display: none; }
 @media print {
   @page { size: A4; margin: 0; }  /* margem zero: o navegador não imprime cabeçalho/rodapé com a URL */
-  html, body { height: auto; background: #fff !important; color: #000; }
-  .app { display: none !important; }
-  #roteiro { display: block; padding: 16mm 18mm; color: #000; font: 10.5pt/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  html, body { display: block; height: auto; background: #fff !important; color: #000; }
+  .topo, .app { display: none !important; }
+  #roteiro { display: block; padding: 12mm 18mm 10mm; color: #000; font: 10.5pt/1.45 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
 }
+#roteiro .rt-marca { display: flex; align-items: center; gap: 8pt; margin-bottom: 6pt; }
+#roteiro .rt-marca svg { width: 26pt; height: 26pt; }
+#roteiro .rt-nome { font-size: 15pt; font-weight: 600; line-height: 1.1; }
+#roteiro .rt-slogan { font-size: 9pt; color: #444; }
 #roteiro h1 { font-size: 17pt; margin: 0 0 2pt; }
-#roteiro .rt-meta { color: #444; font-size: 9.5pt; border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 12pt; }
-#roteiro h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 14pt 0 6pt; }
-#roteiro .rt-leitura p { font-size: 15pt; line-height: 1.5; margin: 0 0 10pt; }
+#roteiro .rt-meta { color: #444; font-size: 9.5pt; border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 8pt; }
+#roteiro h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 11pt 0 5pt; }
+#roteiro .rt-leitura p { font-size: 14pt; line-height: 1.45; margin: 0 0 7pt; }
 #roteiro .rt-dur { color: #444; font-size: 10pt; }
-#roteiro table { width: 100%; border-collapse: collapse; font-size: 10pt; }
-#roteiro th { width: 34%; text-align: left; font-weight: 600; color: #000; padding: 3pt 8pt 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
-#roteiro td { padding: 3pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
-#roteiro .rt-rodape { margin-top: 12pt; font-size: 9pt; color: #444; }
-#roteiro .rt-verif { margin-top: 6pt; font-size: 8.5pt; color: #444; border-top: .5pt solid #bbb; padding-top: 6pt; }
-#roteiro .rt-verif code { font: 8.5pt ui-monospace, Consolas, monospace; color: #000; word-break: break-all; }
+#roteiro table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+#roteiro th { width: 30%; text-align: left; font-weight: 600; color: #000; padding: 2.5pt 8pt 2.5pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
+#roteiro td { padding: 2.5pt 0; border-bottom: .5pt solid #bbb; vertical-align: top; }
+#roteiro .rt-rodape { margin-top: 9pt; font-size: 9pt; color: #444; }
+#roteiro .rt-verif { margin-top: 6pt; font-size: 8.5pt; color: #444; border-top: .5pt solid #bbb; padding-top: 6pt; break-inside: avoid; }
+#roteiro .rt-verif code { font: 8.5pt "IBM Plex Mono", ui-monospace, Consolas, monospace; color: #000; word-break: break-all; }
+
+/* ---------- Celular ---------- */
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; height: auto; min-height: 100vh; }
-  #mapa { height: 55vh; order: -1; }
-  aside { border-right: 0; border-top: 1px solid var(--border); padding: 16px; }
-  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body { display: block; height: auto; }
+  .topo { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "marca acoes" "busca busca"; gap: 10px; position: sticky; top: 0; }
+  .marca { min-width: 0; } .marca > div { min-width: 0; }
+  .acoes-topo { justify-self: end; gap: 6px; }
+  .acoes-topo button { padding: 0 12px; font-size: 13.5px; }
+  .acoes-topo .longo { display: none; } .acoes-topo .curto { display: inline; }
+  .marca .lugar { font-size: 11.5px; }
+  .abas button { padding: 0 6px; }
+  .busca { max-width: none; }
+  .app { grid-template-columns: 1fr; }
+  .mapa-area { order: -1; height: 55vh; }
+  aside { padding: 16px; overflow: visible; }
+  .numeros { gap: 10px; } .num { font-size: 28px; }
+  .leaflet-bottom.leaflet-left .legenda { margin-bottom: 40px; }  /* acima dos créditos, que quebram em duas linhas */
+  .valid-nums .num { font-size: 20px; }
 }
 </style>
 </head>
 <body>
+<header class="topo">
+  <div class="marca"><!--__LOGO__--><div><div class="nome" id="appNome">Farol</div><div class="lugar">Leopoldina/MG · demonstração</div></div></div>
+  <div class="busca">
+    <svg class="lupa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+    <input type="text" id="busca" placeholder="Buscar chave ou comunidade" autocomplete="off" role="combobox"
+      aria-label="Buscar chave ou comunidade" aria-expanded="false" aria-controls="sugestoes" aria-autocomplete="list">
+    <ul id="sugestoes" role="listbox" class="oculto"></ul>
+  </div>
+  <div class="acoes-topo">
+    <button id="btnApresentacao" aria-pressed="false"><span class="longo">Modo apresentação</span><span class="curto">Apresentação</span></button>
+    <button id="btnTema" aria-label="Tema: automático"><span class="longo">Tema: automático</span><span class="curto">Auto</span></button>
+  </div>
+</header>
+
 <div class="app">
-  <aside>
-    <h1>Comunidades afetadas por desligamento</h1>
-    <p class="sub">Leopoldina/MG · base real do Censo IBGE 2022 · rede elétrica e clientes fictícios</p>
+  <aside id="lateral">
+    <section id="validGeral" class="valid so-ap bloco" aria-label="Validação com o Censo"></section>
 
-    <div class="tiles" id="tilesGerais"></div>
+    <nav class="abas" role="tablist" aria-label="Painéis">
+      <button role="tab" id="tab-desligamento" data-aba="desligamento" aria-selected="true" aria-controls="aba-desligamento">Desligamento</button>
+      <button role="tab" id="tab-aviso" data-aba="aviso" aria-selected="false" aria-controls="aba-aviso">Aviso</button>
+      <button role="tab" id="tab-comunidades" data-aba="comunidades" aria-selected="false" aria-controls="aba-comunidades">Comunidades</button>
+    </nav>
 
-    <h2>Simular desligamento programado</h2>
-    <div class="ctrl">
-      <input type="text" id="chave" list="listaChaves" placeholder="Código da chave (ex.: CF-0123)" autocomplete="off">
-      <datalist id="listaChaves"></datalist>
-      <button class="prim" id="btnSimular">Simular</button>
-    </div>
-    <label class="chk"><input type="checkbox" id="soRural" checked> Listar só ramais rurais</label>
-    <div class="ctrl" style="margin-top:8px">
-      <button id="btnSortear">Sortear ramal rural</button>
-      <button id="btnLimpar">Limpar</button>
-    </div>
-    <p class="nota">Ou clique numa <b>chave</b> no mapa (bolinha preta com borda sobre a rede) e escolha “Simular desligamento”.</p>
-
-    <div id="resultado" class="oculto">
-      <h2 id="resTitulo">Resultado</h2>
-      <div class="tiles" id="tilesRes"></div>
-      <h2>Comparativo do aviso no rádio</h2>
-      <div class="comp">
-        <div class="card antigo">
-          <div class="cab"><div class="tit">Hoje: fazenda a fazenda<small>lista cada imóvel e cada rua</small></div><button class="ouvir" data-alvo="antigo">▶ Ouvir</button></div>
-          <div class="met" id="metAntigo"></div>
-          <div class="barra"><i id="barraAntigo" style="background:var(--muted)"></i></div>
-          <div class="txt" id="avisoAntigo"></div>
-        </div>
-        <div class="card novo">
-          <div class="cab"><div class="tit">Com o sistema: por comunidade<small>comunidades identificadas automaticamente</small></div><button class="ouvir" data-alvo="novo">▶ Ouvir</button></div>
-          <div class="campos">
-            <label>Data<input type="date" id="avData"></label>
-            <label>Início<input type="time" id="avIni" value="08:00"></label>
-            <label>Fim<input type="time" id="avFim" value="14:00"></label>
-            <label class="tel">Telefone de atendimento<input type="text" id="avTel" value="0800 XXX XXXX" autocomplete="off"></label>
-          </div>
-          <div class="nota" id="avTelNota" style="margin-top:0">Telefone de exemplo, a confirmar com a distribuidora.</div>
-          <div class="nota ruim oculto" id="avHoraErro" style="margin-top:2px">O horário de fim deve ser depois do início.</div>
-          <div class="prazo"><span class="selo" id="selo"></span><span class="de" id="seloFalta"></span></div>
-          <div class="nota" style="margin:0 0 10px">Unidades com equipamento vital exigem 5 dias úteis (não há cadastro desses clientes nesta demonstração).</div>
-          <div class="met" id="metNovo"></div>
-          <div class="barra"><i id="barraNovo" style="background:var(--accent)"></i></div>
-          <div class="txt" id="avisoNovo"></div>
-          <div class="acoes"><button id="btnCopiar">Copiar texto</button><button class="prim" id="btnPdf">Gerar PDF para a rádio</button></div>
-        </div>
-        <div class="ganho" id="ganho"></div>
+    <!-- Aba Desligamento -->
+    <section class="aba" id="aba-desligamento" role="tabpanel" aria-labelledby="tab-desligamento">
+      <div id="vazio" class="aba">
+        <p class="vazio-txt">Escolha um desligamento para ver quem fica sem luz e montar o aviso do rádio.</p>
+        <p class="nota" style="margin:0">Busque uma chave ou comunidade no topo, clique numa chave no mapa (elas aparecem ao aproximar) ou sorteie um ramal rural.</p>
+        <button class="prim largo" data-acao="sortear">Sortear ramal rural</button>
       </div>
-      <h2>Comunidades identificadas</h2>
-      <table><thead><tr><th>Comunidade</th><th class="n">UCs afetadas</th><th>Situação</th></tr></thead><tbody id="tabCom"></tbody></table>
-      <h2>Validação com o gabarito IBGE</h2>
-      <div id="validacao"></div>
-    </div>
+      <div id="cheio" class="aba oculto">
+        <div>
+          <div class="rot">Chave aberta</div>
+          <div class="chave-cab"><span class="mono" id="cdChave"></span><span class="meta" id="cdMeta"></span></div>
+        </div>
+        <div class="numeros">
+          <div><div class="num" id="numClientes"></div><div class="num-leg">clientes sem luz</div></div>
+          <div><div class="num" id="numComunidades"></div><div class="num-leg" id="numComunidadesLeg">comunidades no aviso</div></div>
+          <div><div class="num" id="numRadio"></div><div class="num-leg">no rádio <span class="de" id="numRadioHoje"></span></div></div>
+        </div>
+        <div class="campos">
+          <label>Data<input type="date" id="avData"></label>
+          <label>Início<input type="time" id="avIni" value="08:00"></label>
+          <label>Fim<input type="time" id="avFim" value="14:00"></label>
+        </div>
+        <div>
+          <div class="nota ruim oculto" id="avHoraErro" style="margin:0 0 8px">O horário de fim deve ser depois do início.</div>
+          <div class="prazo"><span class="selo" id="selo"></span><span class="de" id="seloFalta"></span></div>
+          <p class="nota">Unidades com equipamento vital exigem 5 dias úteis (não há cadastro desses clientes nesta demonstração).</p>
+        </div>
+        <div class="linha-botoes"><button data-acao="sortear">Sortear ramal rural</button><button id="btnLimpar">Limpar</button></div>
+        <button class="prim largo" id="btnVerAviso">Ver o aviso</button>
+      </div>
+    </section>
 
-    <h2>Camadas</h2>
-    <div id="camadas"></div>
+    <!-- Aba Aviso -->
+    <section class="aba oculto" id="aba-aviso" role="tabpanel" aria-labelledby="tab-aviso">
+      <div>
+        <div class="rot">Texto para o rádio</div>
+        <p class="aviso-txt" id="avisoNovo"></p>
+      </div>
+      <div class="cmp">
+        <div class="cmp-l"><span>Hoje (fazenda a fazenda)</span><b id="tAntigo"></b></div>
+        <div class="trilho"><i id="barraAntigo"></i></div>
+        <div class="cmp-l"><span>Farol (por comunidade)</span><b id="tNovo"></b></div>
+        <div class="trilho"><i id="barraNovo"></i></div>
+        <p class="ganho" id="ganho"></p>
+      </div>
+      <div class="campo">
+        <label>Telefone de atendimento<input type="text" id="avTel" value="0800 XXX XXXX" autocomplete="off"></label>
+        <p class="nota" id="avTelNota">Telefone de exemplo, a confirmar com a distribuidora.</p>
+      </div>
+      <div class="linha-botoes"><button class="ouvir" data-alvo="novo">▶ Ouvir</button><button id="btnCopiar">Copiar texto</button></div>
+      <button class="prim largo" id="btnPdf">Gerar PDF para a rádio</button>
+      <details class="antigo">
+        <summary id="resumoAntigo">Ver o aviso de hoje</summary>
+        <button class="ouvir" data-alvo="antigo">▶ Ouvir</button>
+        <p class="antigo-txt" id="avisoAntigo"></p>
+      </details>
+    </section>
+
+    <!-- Aba Comunidades -->
+    <section class="aba oculto" id="aba-comunidades" role="tabpanel" aria-labelledby="tab-comunidades">
+      <div>
+        <div class="rot">Citadas no aviso</div>
+        <ul class="lista-com" id="listaCitadas"></ul>
+      </div>
+      <div id="blocoVizinhas">
+        <div class="rot">Vizinhas (entram como “localidades vizinhas”)</div>
+        <ul class="lista-com" id="listaVizinhas"></ul>
+      </div>
+      <div class="valid-cen so-ap bloco" id="validCen"></div>
+    </section>
+
+    <p class="rodape-lat">Rede elétrica e clientes fictícios. Território, endereços e vias reais (IBGE Censo 2022 e OpenStreetMap).</p>
   </aside>
-  <div id="mapa"></div>
+
+  <div class="mapa-area">
+    <div id="mapa"></div>
+    <div id="painelCamadas" class="oculto" role="dialog" aria-label="Camadas do mapa"></div>
+  </div>
 </div>
 <div id="roteiro"></div>
 
 <script>
 const D = /*__DADOS__*/null;
+const APP_NOME = 'Farol';
+const SLOGAN = 'Cada comunidade avisada pelo nome.';
 // Prazo legal de aviso para as demais unidades: 72 horas (REN ANEEL 1.000/2021, art. 436)
 const PRAZO_LEGAL_HORAS = 72;
 // Prazo interno de planejamento: prática da empresa, a confirmar
 const PRAZO_INTERNO_DIAS = 15;
 const PALAVRAS_POR_SEGUNDO = 2.5;  // mesma locução de desligamento.py (~150 palavras/min)
 const DISTRIBUIDORA = 'Distribuidora (demonstração)';
+const ZOOM_CHAVES = 13;     // as chaves aparecem sozinhas a partir deste zoom
+const ZOOM_NOMES = 12;      // nomes das comunidades a partir deste zoom
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = n => n.toLocaleString('pt-BR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $ = id => document.getElementById(id);
+document.getElementById('appNome').textContent = APP_NOME;
 
-// ---------- Mapa base ----------
-const mapa = L.map('mapa', { preferCanvas: true, zoomControl: true }).setView([-21.53, -42.64], 11);
-const rend = L.canvas({ padding: 0.4 });
+// Preferências do usuário (só conveniência; funciona mesmo sem localStorage)
+const lerPref = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (e) { return padrao; } };
+const gravarPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sem armazenamento: segue sem guardar */ } };
+
+// ---------- Tema: automático (segue o sistema), claro ou escuro ----------
+const TEMAS = ['auto', 'claro', 'escuro'];
+const ROTULO_TEMA = { auto: 'Tema: automático', claro: 'Tema: claro', escuro: 'Tema: escuro' };
+const ROTULO_CURTO = { auto: 'Auto', claro: 'Claro', escuro: 'Escuro' };
+let tema = lerPref('farol-tema', 'auto');
+if (!TEMAS.includes(tema)) tema = 'auto';
+function aplicarTema() {
+  const r = document.documentElement;
+  if (tema === 'auto') delete r.dataset.theme; else r.dataset.theme = tema === 'escuro' ? 'dark' : 'light';
+  const b = $('btnTema');
+  b.querySelector('.longo').textContent = ROTULO_TEMA[tema]; b.querySelector('.curto').textContent = ROTULO_CURTO[tema];
+  b.setAttribute('aria-label', ROTULO_TEMA[tema]);
+}
+aplicarTema();
 const escuro = () => document.documentElement.dataset.theme === 'dark' ||
   (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-const atribuicao = 'Base &copy; Esri · Vias &copy; OpenStreetMap · IBGE Censo 2022';
+
+// ---------- Mapa base (travado em Leopoldina) ----------
+const mapa = L.map('mapa', { preferCanvas: true, zoomControl: false, attributionControl: false,
+  maxZoom: 17, zoomSnap: 1, maxBoundsViscosity: 1 });
+L.control.attribution({ prefix: 'Rede e clientes fictícios · território real (IBGE 2022) · Leaflet' }).addTo(mapa);
+const atribuicao = 'Base &copy; Esri · Vias &copy; OpenStreetMap';
 let fundo = null;
 function trocarFundo() {
   if (fundo) mapa.removeLayer(fundo);
   fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-    { attribution: atribuicao, maxZoom: 16 }).addTo(mapa);
+    { attribution: atribuicao, maxZoom: 17, maxNativeZoom: 16, noWrap: true }).addTo(mapa);
   fundo.bringToBack();
 }
 const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  { attribution: 'Imagens &copy; Esri', maxZoom: 19 });
+  { attribution: 'Imagens &copy; Esri', maxZoom: 17, noWrap: true });
 trocarFundo();
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { trocarFundo(); redesenharCores(); });
-mapa.on('zoomend', () => document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < 13));
-document.getElementById('mapa').classList.add('zoom-baixo');
+mapa.on('zoomend', () => document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES));
 
 // Cores dos alimentadores: 8 slots categóricos em ordem fixa; o 9º repete o slot 1 tracejado
 const corAlim = a => css(`--s${((D.alimentadores.indexOf(a)) % 8) + 1}`);
@@ -251,224 +419,326 @@ const tracoAlim = a => D.alimentadores.indexOf(a) >= 8 ? '6 5' : null;
 // ---------- Camadas ----------
 const C = {};
 const pane = (nome, z) => { mapa.createPane(nome).style.zIndex = z; return nome; };
-pane('poligonos', 350); pane('linhas', 400); pane('pontos', 450); pane('destaque', 500); pane('topo', 550);
+// destaque acima de tudo e sem capturar cliques; chaves e pontos clicáveis num único canvas ('topo')
+pane('poligonos', 350); pane('linhas', 400); pane('pontos', 450); pane('topo', 550); pane('destaque', 600); pane('destaqueTopo', 650);
+const rend = L.canvas({ pane: 'topo', padding: 0.4 });
 
 C.municipio = L.geoJSON(D.camadas.municipio, { pane: 'linhas', interactive: false,
-  style: () => ({ color: css('--limite'), weight: 2.5, fill: false }) });
-C.distritos = L.geoJSON(D.camadas.distritos, { pane: 'linhas',
-  style: () => ({ color: css('--ink-2'), weight: 1.5, dashArray: '6 4', fill: false }),
+  style: () => ({ color: css('--texto'), weight: 2.5, fill: false }) });
+C.distritos = L.geoJSON(D.camadas.distritos, { pane: 'linhas', interactive: false,
+  style: () => ({ color: css('--texto2'), weight: 1.5, dashArray: '6 4', fill: false }),
   onEachFeature: (f, l) => l.bindTooltip(f.properties.NM_DIST, { permanent: true, direction: 'center', className: 'lbl dist' }) });
-C.setores = L.geoJSON(D.camadas.setores, { pane: 'poligonos',
-  style: f => ({ color: css('--muted'), weight: 0.6, fillColor: f.properties.SITUACAO === 'Urbana' ? css('--s1') : css('--s6'), fillOpacity: 0.07 }),
-  onEachFeature: (f, l) => l.bindTooltip(`Setor ${f.properties.CD_SETOR} · ${f.properties.SITUACAO}`, { sticky: true }) });
-C.localidades = L.geoJSON(D.camadas.localidades, { pane: 'topo',
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 6, color: css('--surface'), weight: 2, fillColor: css('--ink'), fillOpacity: 1 }),
-  onEachFeature: (f, l) => l.bindTooltip(`${f.properties.NM_LOCALIDADE} <span style="color:var(--muted)">· ${f.properties.CT_LOCALIDADE} (IBGE)</span>`) });
-C.gabarito = L.geoJSON(D.camadas.gabarito, { pane: 'poligonos',
-  style: () => ({ color: css('--s7'), weight: 1.5, dashArray: '4 3', fillColor: css('--s7'), fillOpacity: 0.05 }),
-  onEachFeature: (f, l) => l.bindTooltip(`<b>${esc(f.properties.NOME)}</b><br>Comunidade real (IBGE/CNEFE) · ${fmt(f.properties.N_UC)} endereços`, { sticky: true }) });
+C.setores = L.geoJSON(D.camadas.setores, { pane: 'poligonos', interactive: false,
+  style: f => ({ color: css('--apagado'), weight: 0.6, fillColor: f.properties.SITUACAO === 'Urbana' ? css('--s1') : css('--s6'), fillOpacity: 0.07 }) });
+C.localidades = L.geoJSON(D.camadas.localidades, {
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 }),
+  onEachFeature: (f, l) => l.bindTooltip(`${esc(f.properties.NM_LOCALIDADE)} <span class="de">· ${esc(f.properties.CT_LOCALIDADE)} (IBGE)</span>`) });
+C.gabarito = L.geoJSON(D.camadas.gabarito, { pane: 'poligonos', interactive: false,
+  style: () => ({ color: css('--s7'), weight: 1.5, dashArray: '4 3', fillColor: css('--s7'), fillOpacity: 0.05 }) });
 C.vias = L.geoJSON(D.camadas.vias, { pane: 'linhas', interactive: false,
   style: f => ({ color: css('--via'), weight: f.properties.MAIOR ? 2 : 1 }) });
-C.previstas = L.geoJSON(D.camadas.previstas, { pane: 'poligonos',
-  style: () => ({ color: css('--ink-2'), weight: 0.8, opacity: 0.45, fillColor: css('--ink-2'), fillOpacity: 0.06 }),
-  onEachFeature: (f, l) => {
-    l.bindTooltip(f.properties.NOME.replace(/ \(.*\)$/, ''), { permanent: true, direction: 'center', className: 'lbl com' });
-    l.bindPopup(`<div class="pop"><b>${esc(f.properties.NOME)}</b>${fmt(f.properties.N_UC)} UCs · confiança média ${Math.round(f.properties.CONFIANCA_MEDIA * 100)}%</div>`);
-  } });
-C.mt = L.geoJSON(D.camadas.mt, { pane: 'linhas',
-  style: f => ({ color: corAlim(f.properties.ALIMENTADOR), weight: 2, dashArray: tracoAlim(f.properties.ALIMENTADOR) }),
-  onEachFeature: (f, l) => l.bindTooltip(`Alimentador ${f.properties.ALIMENTADOR}`, { sticky: true }) });
-C.se = L.geoJSON(D.camadas.se, { pane: 'topo',
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 9, color: css('--surface'), weight: 3, fillColor: css('--critical'), fillOpacity: 1 }),
-  onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME) });
-// Chaves num canvas próprio, acima das casas, para ficarem sempre clicáveis
-const rendChaves = L.canvas({ pane: 'topo', padding: 0.4 });
+C.previstas = L.geoJSON(D.camadas.previstas, { pane: 'poligonos', interactive: false,
+  style: () => ({ color: css('--texto2'), weight: 0.8, opacity: 0.45, fillColor: css('--texto2'), fillOpacity: 0.05 }),
+  onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME.replace(/ \(.*\)$/, ''), { permanent: true, direction: 'center', className: 'lbl com' }) });
+C.mt = L.geoJSON(D.camadas.mt, { pane: 'linhas', interactive: false,
+  style: f => ({ color: corAlim(f.properties.ALIMENTADOR), weight: 2, dashArray: tracoAlim(f.properties.ALIMENTADOR) }) });
+C.se = L.geoJSON(D.camadas.se, {
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--info'), fillOpacity: 1 }),
+  onEachFeature: (f, l) => l.bindTooltip(esc(f.properties.NOME)) });
 // Comunidades citadas pelo nome no aviso (fragmentos viram "localidades vizinhas")
 const citadas = c => c.com.filter(x => !x[5]);
+const semSufixo = n => n.replace(/ \(.*\)$/, '');
 function popupChave(cod) {
   const c = D.cenarios[cod], el = document.createElement('div');
   el.className = 'pop';
-  if (!c) { el.innerHTML = `<b>${cod}</b>Sem clientes a jusante.`; return el; }
+  if (!c) { el.innerHTML = `<b class="mono">${esc(cod)}</b>Sem clientes a jusante.`; return el; }
   const cit = citadas(c);
-  const nomes = cit.slice(0, 4).map(x => esc(x[0].replace(/ \(.*\)$/, ''))).join(', ') + (cit.length > 4 ? ` e mais ${cit.length - 4}` : '');
-  el.innerHTML = `<b>Chave ${cod}</b>
-    <span class="k">Alimentador</span> ${c.alim}<br>
+  const nomes = cit.slice(0, 4).map(x => esc(semSufixo(x[0]))).join(', ') + (cit.length > 4 ? ` e mais ${cit.length - 4}` : '');
+  el.innerHTML = `<b class="mono">${esc(cod)}</b>
+    <span class="k">Alimentador</span> ${esc(c.alim)}<br>
     <span class="k">Abrindo esta chave, ficam sem energia:</span> <b style="display:inline">${fmt(c.n)}</b> clientes${c.rural >= 0.8 ? ' (zona rural)' : ''}
     <div class="coms">Comunidades: ${nomes}</div>
     <button class="prim acao">Simular desligamento</button>`;
-  el.querySelector('button').addEventListener('click', () => { mapa.closePopup(); document.getElementById('chave').value = cod; simular(cod); });
+  el.querySelector('button').addEventListener('click', () => { mapa.closePopup(); simular(cod); });
   return el;
 }
+const estiloChave = () => ({ radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 });
 C.chaves = L.geoJSON(D.camadas.chaves, {
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rendChaves, radius: 6, color: css('--surface'), weight: 2, fillColor: css('--ink'), fillOpacity: 1 }),
+  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, ...estiloChave() }),
   onEachFeature: (f, l) => {
     const p = f.properties;
-    l.bindTooltip(`<b>Chave ${p.COD_CHAVE}</b> · ${fmt(p.UC_JUSANTE)} clientes<br><span style="color:var(--muted)">clique para ver e simular</span>`);
-    l.bindPopup(() => popupChave(p.COD_CHAVE), { minWidth: 240 });
+    l.bindTooltip(`<b class="mono">${esc(p.COD_CHAVE)}</b> · ${fmt(p.UC_JUSANTE)} clientes<br><span class="de">clique para ver e simular</span>`);
+    l.bindPopup(() => popupChave(p.COD_CHAVE), { minWidth: 250 });
   } });
-C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { renderer: rend, pane: 'pontos', radius: 3,
-  color: css('--trafo'), weight: 1, fillColor: css('--surface'), fillOpacity: 1 })
-  .bindTooltip(`<b>${t[2]}</b> · ${t[4]}<br>${t[3]} UCs`)));
+const estiloTrafo = () => ({ radius: 3, color: css('--texto'), weight: 1, fillColor: css('--sup'), fillOpacity: 1 });
+C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { renderer: rend, ...estiloTrafo() })
+  .bindTooltip(`<b>${esc(t[2])}</b> · ${esc(t[4])}<br>${t[3]} UCs`)));
 
 // UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu.
 // LGPD: sem titular, número da UC ou endereço; só classe, comunidade e dados técnicos.
+// A comunidade real (gabarito) só aparece no modo apresentação.
 const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
 function popupUC(i) {
   const u = D.ucs[i], loc = D.locCad[u[10]];
   return `<div class="pop"><b>Unidade ${esc(D.classes[u[9]].toLowerCase())}</b>
     <span class="k">Localidade digitada no cadastro:</span> ${loc ? esc(loc) : '<i>(vazio)</i>'}<br>
-    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)<br>
-    <span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}
+    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)
+    <span class="so-ap"><br><span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}</span>
     ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
-    <span class="k">Transformador:</span> ${D.trafos[u[2]][2]} · ${D.trafos[u[2]][4]}</div>`;
+    <span class="k">Transformador:</span> ${esc(D.trafos[u[2]][2])} · ${esc(D.trafos[u[2]][4])}</div>`;
 }
 function camadaUCs(filtro, estilo) {
   const g = L.layerGroup();
+  g.estilo = estilo;
   D.ucs.forEach((u, i) => { if (!filtro(u)) return;
-    g.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, pane: 'pontos', ...estilo(u) }).on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
+    g.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, ...estilo() }).on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
   });
   return g;
 }
 const estiloUC = () => ({ radius: 2.5, stroke: false, fillColor: css('--uc'), fillOpacity: 0.75 });
 C.ucsRurais = camadaUCs(u => u[8] === 1, estiloUC);
 C.ucsUrbanas = camadaUCs(u => u[8] === 0, estiloUC);
-C.erros = camadaUCs(u => u[6] === 0, () => ({ radius: 3.5, color: css('--surface'), weight: 1, fillColor: css('--serious'), fillOpacity: 1 }));
+C.erros = camadaUCs(u => u[6] === 0, () => ({ radius: 3.5, color: css('--fundo'), weight: 1, fillColor: css('--info'), fillOpacity: 1 }));
+C.trafos.estilo = estiloTrafo;
 let bt = null;
 C.bt = L.layerGroup();
 C.bt.on('add', () => { if (bt) return;
   bt = D.ucs.filter(u => u[8] === 1).map(u => L.polyline([[D.trafos[u[2]][0], D.trafos[u[2]][1]], [u[0], u[1]]],
-    { renderer: rend, pane: 'linhas', color: css('--muted'), weight: 0.8, interactive: false }));
+    { pane: 'linhas', color: css('--apagado'), weight: 0.8, interactive: false }));
   bt.forEach(l => C.bt.addLayer(l));
 });
 C.satelite = satelite;
 
+// Painel de camadas: [id, nome, amostra, cor, ligada ao abrir, só no modo apresentação, observação]
 const GRUPOS = [
-  ['Dados reais (IBGE / OpenStreetMap)', [
-    ['municipio', 'Limite municipal', 'linha', '--limite', true],
-    ['distritos', 'Distritos (6)', 'linha', '--ink-2', true],
-    ['setores', 'Setores censitários (urbano/rural)', 'area', '--s6', false],
-    ['localidades', 'Localidades oficiais IBGE (15)', 'ponto', '--ink', true],
-    ['gabarito', 'Comunidades reais — gabarito CNEFE', 'area', '--s7', false],
-    ['vias', 'Vias (OSM)', 'linha', '--via', false],
-    ['satelite', 'Imagem de satélite', 'area', '--muted', false],
+  ['Território (IBGE)', [
+    ['municipio', 'Limite municipal', 'linha', '--texto', true],
+    ['distritos', 'Distritos (6)', 'linha', '--texto2', true],
+    ['setores', 'Setores censitários', 'area', '--s6', false],
+    ['localidades', 'Localidades oficiais (15)', 'ponto', '--texto', false],
+    ['vias', 'Vias (OpenStreetMap)', 'linha', '--via', false],
+    ['satelite', 'Imagem de satélite', 'area', '--apagado', false],
+    ['gabarito', 'Comunidades reais (gabarito)', 'area', '--s7', false, true],
   ]],
-  ['Distribuidora (fictício)', [
-    ['se', 'Subestação', 'ponto', '--critical', true],
+  ['Rede elétrica (fictícia)', [
+    ['se', 'Subestação', 'ponto', '--info', false],
     ['mt', 'Rede de média tensão', 'linha', '--s1', true],
-    ['chaves', 'Chaves (abrir = desligar ramal)', 'ponto', '--ink', true],
-    ['trafos', 'Transformadores', 'ponto', '--trafo', false],
-    ['bt', 'Ramais de baixa tensão (rurais)', 'linha', '--muted', false],
-    ['ucsRurais', 'UCs rurais', 'ponto', '--uc', true],
+    ['chaves', 'Chaves', 'ponto', '--texto', true, false, `aparecem a partir do zoom ${ZOOM_CHAVES}`],
+    ['trafos', 'Transformadores', 'ponto', '--texto', false],
+    ['bt', 'Ramais de baixa tensão (rurais)', 'linha', '--apagado', false],
+    ['ucsRurais', 'UCs rurais', 'ponto', '--uc', false],
     ['ucsUrbanas', 'UCs urbanas', 'ponto', '--uc', false],
   ]],
-  ['Resultado do algoritmo', [
-    ['previstas', 'Comunidades identificadas', 'area', '--ink-2', true],
-    ['erros', 'UCs com comunidade errada (validação)', 'ponto', '--serious', false],
+  ['Resultado', [
+    ['previstas', 'Comunidades identificadas', 'area', '--texto2', true],
+    ['erros', 'UCs com comunidade errada (validação)', 'ponto', '--info', false, true],
   ]],
 ];
-const elCam = document.getElementById('camadas');
+const ligada = {}, SO_APRESENTACAO = new Set();
+let apresentacao = false;
+let versaoTema = 0;
+// Pontos criados com a cor do tema da época: refaz o estilo quando o tema mudou
+function restilizar(g) {
+  if (!g.estilo || g.versaoTema === versaoTema) return;
+  const e = g.estilo(); g.eachLayer(l => l.setStyle && l.setStyle(e)); g.versaoTema = versaoTema;
+}
+function aplicarCamada(id) {
+  const g = C[id];
+  let ver = ligada[id] && (!SO_APRESENTACAO.has(id) || apresentacao);
+  if (id === 'chaves') ver = ver && mapa.getZoom() >= ZOOM_CHAVES;
+  if (ver) { restilizar(g); if (!mapa.hasLayer(g)) g.addTo(mapa); } else if (mapa.hasLayer(g)) mapa.removeLayer(g);
+}
+const elCam = $('painelCamadas');
 GRUPOS.forEach(([titulo, itens]) => {
   const g = document.createElement('div'); g.className = 'grupo';
-  g.innerHTML = `<div class="t">${titulo}</div>`;
-  itens.forEach(([id, nome, tipo, cor, on]) => {
-    const lb = document.createElement('label'); lb.className = 'camada';
-    const sw = tipo === 'area' ? `<span class="sw" style="background:color-mix(in srgb, var(${cor}) 25%, transparent);border:1.5px solid var(${cor})"></span>`
-      : tipo === 'linha' ? `<span class="sw linha" style="background:var(${cor})"></span>` : `<span class="sw ponto" style="background:var(${cor})"></span>`;
-    lb.innerHTML = `<input type="checkbox" ${on ? 'checked' : ''}> ${sw} ${nome}`;
-    const cb = lb.querySelector('input');
-    cb.addEventListener('change', () => cb.checked ? C[id].addTo(mapa) : mapa.removeLayer(C[id]));
-    if (on) C[id].addTo(mapa);
-    g.appendChild(lb);
+  g.innerHTML = `<div class="rot">${titulo}</div>`;
+  itens.forEach(([id, nome, tipo, cor, on, soAp, obs]) => {
+    ligada[id] = on;
+    if (soAp) SO_APRESENTACAO.add(id);
+    const am = tipo === 'area' ? `<span class="amostra" style="background:color-mix(in srgb, var(${cor}) 25%, transparent);border:1.5px solid var(${cor})"></span>`
+      : tipo === 'linha' ? `<span class="amostra linha" style="background:var(${cor})"></span>` : `<span class="amostra ponto" style="background:var(${cor})"></span>`;
+    const b = document.createElement('button');
+    b.className = 'sw' + (soAp ? ' so-ap' : ''); b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(on));
+    b.innerHTML = `<span class="sw-txt">${am}<span>${nome}${obs ? `<small>${obs}</small>` : ''}</span></span><span class="chave-sw" aria-hidden="true"></span>`;
+    b.addEventListener('click', () => { ligada[id] = !ligada[id]; b.setAttribute('aria-checked', String(ligada[id])); aplicarCamada(id); });
+    g.appendChild(b);
     if (id === 'mt') {
       const a = document.createElement('div'); a.className = 'alims';
-      a.innerHTML = D.alimentadores.map((al, i) => `<span><span class="sw linha" style="width:14px;background:${i >= 8 ? `repeating-linear-gradient(90deg,var(--s${i % 8 + 1}) 0 4px,transparent 4px 7px)` : `var(--s${i % 8 + 1})`}"></span>${al}</span>`).join('');
+      a.innerHTML = D.alimentadores.map((al, i) => `<span><span class="amostra linha" style="width:14px;background:${i >= 8 ? `repeating-linear-gradient(90deg,var(--s${i % 8 + 1}) 0 4px,transparent 4px 7px)` : `var(--s${i % 8 + 1})`}"></span>${esc(al)}</span>`).join('');
       g.appendChild(a);
     }
   });
   elCam.appendChild(g);
 });
+mapa.on('zoomend', () => aplicarCamada('chaves'));
+// Nomes das comunidades: só quando o território comporta o nome naquele zoom (evita sobreposição no centro urbano)
+function arrumarNomes() {
+  if (!mapa.hasLayer(C.previstas)) return;
+  C.previstas.eachLayer(l => {
+    const t = l.getTooltip(), el = t && t.getElement();
+    if (!el) return;
+    const b = l.getBounds(), a = mapa.latLngToLayerPoint(b.getSouthWest()), z = mapa.latLngToLayerPoint(b.getNorthEast());
+    el.classList.toggle('lbl-oculto', Math.abs(z.x - a.x) < String(t.getContent()).length * 6.5 + 8);
+  });
+}
+mapa.on('zoomend', arrumarNomes);
+C.previstas.on('add', () => setTimeout(arrumarNomes));
 
 function redesenharCores() {
+  versaoTema++;
   ['municipio', 'distritos', 'setores', 'gabarito', 'vias', 'previstas', 'mt'].forEach(k => C[k].resetStyle && C[k].resetStyle());
+  C.chaves.eachLayer(l => l.setStyle(estiloChave()));
+  C.se.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--info') }));
+  C.localidades.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--texto') }));
+  if (bt) bt.forEach(l => l.setStyle({ color: css('--apagado') }));
+  ['trafos', 'ucsRurais', 'ucsUrbanas', 'erros'].forEach(k => mapa.hasLayer(C[k]) && restilizar(C[k]));
 }
+function mudouTema() {
+  trocarFundo(); redesenharCores();
+  if (codAtual) desenharDestaque(avisoAtual, codAtual, false);
+}
+$('btnTema').addEventListener('click', () => {
+  tema = TEMAS[(TEMAS.indexOf(tema) + 1) % TEMAS.length];
+  gravarPref('farol-tema', tema); aplicarTema(); mudouTema();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (tema === 'auto') mudouTema(); });
 
-// ---------- Indicadores gerais ----------
+// ---------- Controles do mapa (camadas, aproximar, afastar, enquadrar) ----------
+const ICONE_CAMADAS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/></svg>';
+const ICONE_ENQUADRAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const Controles = L.Control.extend({ options: { position: 'topright' }, onAdd() {
+  const d = L.DomUtil.create('div', 'ctl-mapa');
+  d.innerHTML = `<button id="btnCamadas" aria-label="Camadas do mapa" title="Camadas do mapa" aria-expanded="false" aria-controls="painelCamadas">${ICONE_CAMADAS}</button>
+    <button id="btnMais" aria-label="Aproximar" title="Aproximar">+</button>
+    <button id="btnMenos" aria-label="Afastar" title="Afastar">−</button>
+    <button id="btnEnquadrar" aria-label="Enquadrar o ramal desligado" title="Enquadrar o ramal desligado">${ICONE_ENQUADRAR}</button>`;
+  L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+  return d;
+} });
+new Controles().addTo(mapa);
+L.DomEvent.disableClickPropagation(elCam); L.DomEvent.disableScrollPropagation(elCam);
+function abrirCamadas(abrir) { elCam.classList.toggle('oculto', !abrir); $('btnCamadas').setAttribute('aria-expanded', String(abrir)); }
+$('btnCamadas').addEventListener('click', () => abrirCamadas(elCam.classList.contains('oculto')));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { abrirCamadas(false); fecharSugestoes(); } });
+mapa.on('click', () => abrirCamadas(false));
+$('btnMais').addEventListener('click', () => mapa.zoomIn());
+$('btnMenos').addEventListener('click', () => mapa.zoomOut());
+$('btnEnquadrar').addEventListener('click', () => limitesRamal ? mapa.fitBounds(limitesRamal, { maxZoom: 15 }) : mapa.fitBounds(limMun));
+const Legenda = L.Control.extend({ options: { position: 'bottomleft' }, onAdd() {
+  const d = L.DomUtil.create('div', 'legenda');
+  d.innerHTML = '<span><i class="leg-ramal"></i>Ramal desligado</span><span><i class="leg-aviso"></i>Comunidade no aviso</span><span><i class="leg-viz"></i>Vizinha</span>';
+  return d;
+} });
+new Legenda().addTo(mapa);
+
+// ---------- Modo apresentação: mostra o que vem do gabarito do IBGE ----------
 const M = D.metricas;
-document.getElementById('tilesGerais').innerHTML = `
-  <div class="tile"><div class="v">${M.acertoRural.toLocaleString('pt-BR')}<small>%</small></div><div class="l">acerto da comunidade (UCs rurais) <span class="de">· cadastro: ${M.acertoRuralCadastro.toLocaleString('pt-BR')}%</span></div></div>
-  <div class="tile"><div class="v">${M.segDepois}<small> s</small></div><div class="l">aviso médio no rádio <span class="de">· hoje: ${M.segAntes} s</span></div></div>
-  <div class="tile"><div class="v">${M.coberturaUC.toLocaleString('pt-BR')}<small>%</small></div><div class="l">dos clientes desligados ouvem o nome da própria comunidade <span class="de">· por comunidade: ${M.cobertura.toLocaleString('pt-BR')}% · ${fmt(M.nCenarios)} cenários</span></div></div>`;
+const pct = v => v.toLocaleString('pt-BR');
+$('validGeral').innerHTML = `
+  <div class="rot">Validação com o Censo · ${fmt(M.nCenarios)} cenários</div>
+  <div class="valid-nums">
+    <div><div class="num">${pct(M.acertoRural)}<small>%</small></div><div class="leg">acerto da comunidade (UCs rurais) <span class="de">· cadastro ${pct(M.acertoRuralCadastro)}%</span></div></div>
+    <div><div class="num">${pct(M.coberturaUC)}<small>%</small></div><div class="leg">dos clientes desligados ouvem o nome da própria comunidade</div></div>
+    <div><div class="num">${M.segDepois}<small> s</small></div><div class="leg">aviso médio no Farol <span class="de">· hoje ${M.segAntes} s</span></div></div>
+  </div>`;
+$('btnApresentacao').addEventListener('click', e => {
+  apresentacao = !apresentacao;
+  e.currentTarget.setAttribute('aria-pressed', String(apresentacao));
+  document.documentElement.classList.toggle('apresentacao', apresentacao);
+  SO_APRESENTACAO.forEach(aplicarCamada);
+});
+
+// ---------- Abas da lateral ----------
+function ativarAba(nome) {
+  document.querySelectorAll('.abas button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
+  ['desligamento', 'aviso', 'comunidades'].forEach(a => $(`aba-${a}`).classList.toggle('oculto', a !== nome));
+  $('lateral').scrollTop = 0;
+}
+document.querySelectorAll('.abas button').forEach(b => b.addEventListener('click', () => ativarAba(b.dataset.aba)));
+$('btnVerAviso').addEventListener('click', () => ativarAba('aviso'));
+function estadoSimulado(sim) {
+  $('lateral').classList.toggle('simulado', sim);
+  $('vazio').classList.toggle('oculto', sim); $('cheio').classList.toggle('oculto', !sim);
+  if (!sim) ativarAba('desligamento');
+}
 
 // ---------- Simulação ----------
-const listaChaves = document.getElementById('listaChaves');
-function montarLista() {
-  const so = document.getElementById('soRural').checked;
-  listaChaves.innerHTML = Object.entries(D.cenarios)
-    .filter(([, c]) => !so || c.rural >= 0.8)
-    .map(([k, c]) => `<option value="${k}">${c.alim} · ${fmt(c.n)} UCs · ${esc(citadas(c).slice(0, 3).map(x => x[0].replace(/ \(.*\)$/, '')).join(', '))}</option>`).join('');
-}
-montarLista();
-document.getElementById('soRural').addEventListener('change', montarLista);
-
 const destaque = L.layerGroup().addTo(mapa);
-function limpar() { pararLeitura(); destaque.clearLayers(); document.getElementById('resultado').classList.add('oculto'); }
-
-function simular(cod, enquadrar = true) {
-  const c = D.cenarios[cod.trim().toUpperCase()];
-  if (!c) { alert('Chave não encontrada: ' + cod); return; }
+let limitesRamal = null;
+function desenharDestaque(c, cod, enquadrar) {
   destaque.clearLayers();
+  const coral = css('--desligado');
   // Trechos de MT desligados
   const feats = D.camadas.mt.features;
-  c.mt.forEach(i => destaque.addLayer(L.geoJSON(feats[i], { pane: 'destaque', interactive: false, style: { color: css('--critical'), weight: 5, opacity: 0.85 } })));
-  // Comunidades identificadas
+  c.mt.forEach(i => destaque.addLayer(L.geoJSON(feats[i], { pane: 'destaque', interactive: false, style: { color: coral, weight: 5, opacity: 0.9 } })));
+  // Comunidades: contorno cheio para as do aviso; fino e pontilhado para as vizinhas (não citadas)
   const nomes = new Map(c.com.map(x => [x[0], x]));
-  L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
-    { pane: 'destaque', interactive: false, style: f => {
-      const x = nomes.get(f.properties.NOME);
-      // fragmento (não citado no aviso): contorno fraco e pontilhado, só para o operador enxergar
-      return x[5] ? { color: css('--critical'), weight: 1.2, opacity: 0.5, dashArray: '2 4', fillColor: css('--critical'), fillOpacity: 0.02 }
-        : { color: css('--critical'), weight: 2.5, dashArray: x[3] ? '6 4' : null, fillColor: css('--critical'), fillOpacity: 0.08 };
-    } }).addTo(destaque);
-  // UCs desligadas
+  destaque.addLayer(L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
+    { pane: 'destaque', interactive: false, style: f => nomes.get(f.properties.NOME)[5]
+      ? { color: coral, weight: 2, opacity: 1, dashArray: '1 6', lineCap: 'round', fillColor: coral, fillOpacity: 0.03 }
+      : { color: coral, weight: 2.5, opacity: 1, fillColor: coral, fillOpacity: 0.1 } }));
+  // UCs desligadas (clicáveis, no mesmo canvas das chaves)
   const tset = new Set(c.trafos), pts = [];
   D.ucs.forEach((u, i) => { if (!tset.has(u[2])) return; pts.push([u[0], u[1]]);
-    destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, pane: 'destaque', radius: 3.5, color: css('--surface'), weight: 1, fillColor: css('--critical'), fillOpacity: 1 })
+    destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, radius: 3.5, color: css('--fundo'), weight: 1, fillColor: coral, fillOpacity: 1 })
       .on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
   });
   const ch = D.camadas.chaves.features.find(f => f.properties.COD_CHAVE === cod);
-  if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { renderer: rendChaves, radius: 9, color: css('--surface'), weight: 3, fillColor: css('--ink'), fillOpacity: 1 }).bindTooltip(`<b>${cod}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8] }));
-  if (enquadrar && pts.length) mapa.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 15 });
+  if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { pane: 'destaqueTopo', interactive: false, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--texto'), fillOpacity: 1 })
+    .bindTooltip(`<b class="mono">${esc(cod)}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8], pane: 'tooltipPane' }));
+  limitesRamal = pts.length ? L.latLngBounds(pts).pad(0.25) : null;
+  if (enquadrar && limitesRamal) mapa.fitBounds(limitesRamal, { maxZoom: 15 });
+}
 
-  // Painel
-  const nCit = citadas(c).length;
-  document.getElementById('resTitulo').textContent = `Resultado · chave ${cod} (${c.alim})`;
-  document.getElementById('tilesRes').innerHTML = `
-    <div class="tile"><div class="v">${fmt(c.n)}</div><div class="l">UCs desligadas</div></div>
-    <div class="tile"><div class="v">${nCit}</div><div class="l">${nCit === 1 ? 'comunidade' : 'comunidades'} no aviso</div></div>
-    <div class="tile" id="tileRadio"></div>`;
-  // Citadas primeiro; fragmentos por último, em cinza
-  const linhas = [...citadas(c), ...c.com.filter(x => x[5])];
-  document.getElementById('tabCom').innerHTML = linhas.map(([n, a, t, parc, conf, frag]) =>
-    `<tr${frag ? ' style="color:var(--muted)"' : ''}><td>${esc(n)}<div class="nota" style="margin:0">confiança ${Math.round(conf * 100)}%</div></td><td class="n">${fmt(a)} / ${fmt(t)}</td>
-     <td><span class="badge ${parc || frag ? '' : 'total'}">${frag ? 'Vizinha (não citada)' : parc ? 'Parte' : 'Inteira'}</span></td></tr>`).join('');
-  // Comparativo: fazenda a fazenda x por comunidade (texto montado com a data/horário dos campos)
+function simular(cod, enquadrar = true) {
+  cod = String(cod).trim().toUpperCase();
+  const c = D.cenarios[cod];
+  if (!c) { mostrarSugestoes([], `Chave não encontrada: ${cod}`); return; }
   pararLeitura();
   avisoAtual = c; codAtual = cod;
+  desenharDestaque(c, cod, enquadrar);
+  const zona = c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
+  $('cdChave').textContent = cod;
+  $('cdMeta').textContent = `Alimentador ${c.alim} · ${zona}`;
+  $('numClientes').textContent = fmt(c.n);
+  const nCit = citadas(c).length;
+  $('numComunidades').textContent = nCit;
+  $('numComunidadesLeg').textContent = nCit === 1 ? 'comunidade no aviso' : 'comunidades no aviso';
+  desenharComunidades(c);
   atualizarAviso();
-  const real = c.real.map(([n, q]) => `${esc(n)} <span class="nota">(${q})</span>`).join(', ');
-  document.getElementById('validacao').innerHTML = `
-    <p style="margin:0 0 6px"><span class="k" style="color:var(--muted)">Comunidades reais atingidas:</span> ${real}</p>
-    <p style="margin:0">Cobertura <span class="${c.cob >= 1 ? 'ok' : 'ruim'}">${Math.round(c.cob * 100)}%</span> ·
+  $('busca').value = cod; fecharSugestoes();
+  estadoSimulado(true); ativarAba('desligamento');
+}
+
+function desenharComunidades(c) {
+  const item = ([n, a, t, parc, conf, frag]) => `<li class="${frag ? 'viz' : ''}">
+    <div class="com-l1"><span class="com-nome">${esc(n)}</span>${frag ? '' : `<span class="selo-c ${parc ? 'parte' : 'inteira'}">${parc ? 'Parte' : 'Inteira'}</span>`}</div>
+    <div class="com-l2">${fmt(a)} de ${fmt(t)} UCs · confiança ${Math.round(conf * 100)}%</div>
+    <div class="prop" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, a / t * 100)).toFixed(1)}%"></i></div></li>`;
+  const viz = c.com.filter(x => x[5]);
+  $('listaCitadas').innerHTML = citadas(c).map(item).join('');
+  $('listaVizinhas').innerHTML = viz.map(item).join('');
+  $('blocoVizinhas').classList.toggle('oculto', !viz.length);
+  // Validação do cenário (só no modo apresentação; o gabarito nunca é usado pelo algoritmo)
+  const real = c.real.map(([n, q]) => `${esc(n)} <span class="de">(${q})</span>`).join(', ');
+  $('validCen').innerHTML = `
+    <div class="rot">Validação com o Censo</div>
+    <p><b>${Math.round(c.cobUC * 100)}%</b> dos clientes desligados ouvem o nome da própria comunidade.</p>
+    <p>Cobertura <span class="${c.cob >= 1 ? 'ok' : 'ruim'}">${Math.round(c.cob * 100)}%</span> ·
       Precisão <span class="${c.prec >= 1 ? 'ok' : 'ruim'}">${Math.round(c.prec * 100)}%</span></p>
-    <p class="nota">Cobertura = comunidades reais que entraram no aviso. Precisão = comunidades do aviso que de fato foram atingidas. O gabarito nunca é usado pelo algoritmo, só nesta conferência.</p>`;
-  document.getElementById('resultado').classList.remove('oculto');
-  document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    <p><span class="de">Comunidades reais atingidas:</span> ${real}</p>
+    <p class="nota" style="margin:0">Cobertura = comunidades reais citadas pelo nome. Precisão = comunidades citadas que de fato foram atingidas. O gabarito nunca é usado pelo algoritmo, só nesta conferência.</p>`;
+}
+
+function limpar() {
+  pararLeitura(); destaque.clearLayers(); limitesRamal = null;
+  avisoAtual = null; codAtual = null; $('busca').value = '';
+  estadoSimulado(false);
 }
 
 // ---------- Aviso editável ----------
 let codAtual = null, avisoAtual = null, lendo = null;
 const textos = { antigo: '', novo: '' };
-const semSufixo = n => n.replace(/ \(.*\)$/, '');
 const listaPt = it => it.length <= 1 ? it.join('') : it.slice(0, -1).join(', ') + ' e ' + it[it.length - 1];
 const unicos = l => [...new Set(l)];
 const palavras = t => t.split(/\s+/).filter(Boolean).length;
@@ -498,8 +768,7 @@ function montarAviso(c, data, horario) {
     `manutenção na rede. Programe-se!`;
 }
 
-const elData = document.getElementById('avData'), elIni = document.getElementById('avIni'),
-  elFim = document.getElementById('avFim'), elTel = document.getElementById('avTel');
+const elData = $('avData'), elIni = $('avIni'), elFim = $('avFim'), elTel = $('avTel');
 elData.value = isoData(new Date(Date.now() + (PRAZO_INTERNO_DIAS + 1) * 864e5));  // sugestão: dentro do prazo interno
 const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
 function campos() {
@@ -521,26 +790,27 @@ function antecedencia(f) {
 
 function atualizarAviso() {
   const f = campos(), ant = antecedencia(f);
-  const selo = document.getElementById('selo');
+  const selo = $('selo');
   selo.className = `selo ${ant.classe}`; selo.textContent = ant.texto;
-  document.getElementById('seloFalta').textContent = ant.falta ? `· ${ant.falta}` : '';
-  document.getElementById('avTelNota').classList.toggle('oculto', !/x/i.test(f.tel));
-  document.getElementById('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
+  $('seloFalta').textContent = ant.falta ? `· ${ant.falta}` : '';
+  $('avTelNota').classList.toggle('oculto', !/x/i.test(f.tel));
+  $('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
   const c = avisoAtual;
   if (!c) return;
   textos.novo = montarAviso(c, f.dataCurta, f.horario) + (f.tel ? ` Dúvidas: ${f.tel}.` : '');
   // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
   textos.antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
-  const sA = segundos(textos.antigo), sD = segundos(textos.novo), nCit = citadas(c).length;
+  const sA = segundos(textos.antigo), sD = segundos(textos.novo);
   const red = Math.round((1 - sD / sA) * 100);
-  document.getElementById('tileRadio').innerHTML = `<div class="v">${sD}<small> s</small></div><div class="l">no rádio <span class="de">· hoje ${sA} s${red > 0 ? ` (−${red}%)` : ''}</span></div>`;
-  document.getElementById('avisoAntigo').textContent = textos.antigo;
-  document.getElementById('avisoNovo').textContent = textos.novo;
-  document.getElementById('metAntigo').innerHTML = `<span><b>${fmt(c.nLocais)}</b> locais citados</span><span><b>${fmt(palavras(textos.antigo))}</b> palavras</span><span><b>${tempo(sA)}</b> no ar</span>`;
-  document.getElementById('metNovo').innerHTML = `<span><b>${nCit}</b> ${nCit === 1 ? 'comunidade' : 'comunidades'}</span><span><b>${fmt(palavras(textos.novo))}</b> palavras</span><span><b>${tempo(sD)}</b> no ar</span>`;
-  document.getElementById('barraAntigo').style.width = '100%';
-  document.getElementById('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
-  document.getElementById('ganho').innerHTML = red > 0
+  $('numRadio').innerHTML = `${sD}<small> s</small>`;
+  $('numRadioHoje').textContent = `· hoje ${sA} s`;
+  $('avisoNovo').textContent = textos.novo;
+  $('avisoAntigo').textContent = textos.antigo;
+  $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
+  $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
+  $('barraAntigo').style.width = '100%';
+  $('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
+  $('ganho').innerHTML = red > 0
     ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
     : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
   preencherRoteiro(c, f, ant, sD);
@@ -558,7 +828,7 @@ function copiarAlternativo(t) {
   ta.remove();
   return ok;
 }
-document.getElementById('btnCopiar').addEventListener('click', async e => {
+$('btnCopiar').addEventListener('click', async e => {
   const b = e.currentTarget;
   let ok = false;
   try { await navigator.clipboard.writeText(textos.novo); ok = true; } catch (err) { ok = copiarAlternativo(textos.novo); }
@@ -574,6 +844,7 @@ async function sha256hex(t) {
 let seqHash = 0, hashPronto = Promise.resolve();
 
 // Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
+const logoSVG = document.querySelector('.marca svg').outerHTML;
 function preencherRoteiro(c, f, ant, sD) {
   const { inteiras, parciais, vizinhas } = classificar(c);
   const agora = new Date();
@@ -582,7 +853,8 @@ function preencherRoteiro(c, f, ant, sD) {
   const ou = l => l.length ? esc(l.join(', ')) : '—';
   const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${x[1] === 1 ? 'UC' : 'UCs'})`).join('; ') : '—';
   const frases = textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
-  document.getElementById('roteiro').innerHTML = `
+  $('roteiro').innerHTML = `
+    <div class="rt-marca">${logoSVG}<div><div class="rt-nome">${APP_NOME}</div><div class="rt-slogan">${SLOGAN}</div></div></div>
     <h1>Aviso de desligamento programado</h1>
     <div class="rt-meta">${DISTRIBUIDORA} · Aviso nº <b>${numero}</b> · gerado em ${gerado.replace(' ', ' às ')}</div>
     <h2>Texto para leitura</h2>
@@ -614,11 +886,11 @@ function preencherRoteiro(c, f, ant, sD) {
   const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\nchave=${codAtual}\ngerado=${gerado}`;
   const minha = ++seqHash;
   hashPronto = sha256hex(entrada)
-    .then(h => { if (minha === seqHash) document.getElementById('rtCodigo').textContent = h; })
-    .catch(() => { document.getElementById('rtCodigo').textContent = 'indisponível neste navegador'; });
+    .then(h => { if (minha === seqHash) $('rtCodigo').textContent = h; })
+    .catch(() => { $('rtCodigo').textContent = 'indisponível neste navegador'; });
 }
 // Gerar PDF: monta o roteiro com a hora atual, espera o código de verificação e só então imprime
-document.getElementById('btnPdf').addEventListener('click', async () => {
+$('btnPdf').addEventListener('click', async () => {
   pararLeitura(); atualizarAviso();
   await hashPronto;
   window.print();
@@ -643,17 +915,91 @@ document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click
   lendo = alvo; b.textContent = '■ Parar';
   speechSynthesis.speak(fala);
 }));
-document.getElementById('btnSimular').addEventListener('click', () => simular(document.getElementById('chave').value));
-document.getElementById('chave').addEventListener('keydown', e => { if (e.key === 'Enter') simular(e.target.value); });
-document.getElementById('btnLimpar').addEventListener('click', limpar);
-document.getElementById('btnSortear').addEventListener('click', () => {
-  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && citadas(c).length >= 2);
-  const [k] = op[Math.floor(Math.random() * op.length)];
-  document.getElementById('chave').value = k; simular(k);
+
+// ---------- Busca: código da chave ou nome de comunidade ----------
+const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const indiceCom = new Map();  // comunidade (sem sufixo) -> chaves cujo aviso a cita pelo nome
+for (const [cod, c] of Object.entries(D.cenarios)) {
+  for (const x of citadas(c)) {
+    const n = semSufixo(x[0]);
+    if (!indiceCom.has(n)) indiceCom.set(n, []);
+    indiceCom.get(n).push(cod);
+  }
+}
+const resumoChave = c => `${fmt(c.n)} clientes · ${citadas(c).slice(0, 3).map(x => semSufixo(x[0])).join(', ')}${citadas(c).length > 3 ? '…' : ''}`;
+function sugestoes(q) {
+  const n = norm(q);
+  if (!n) return [];
+  const itens = [];
+  const dig = n.replace(/^cf-?/, '');
+  if (/^(cf-?)?\d+$/.test(n)) {
+    Object.keys(D.cenarios).filter(k => k.slice(3).includes(dig) || k.slice(3).replace(/^0+/, '') === dig.replace(/^0+/, ''))
+      .sort().slice(0, 8).forEach(k => itens.push({ cod: k, sub: `${D.cenarios[k].alim} · ${resumoChave(D.cenarios[k])}` }));
+    return itens;
+  }
+  const coms = [...indiceCom.keys()].filter(k => norm(k).includes(n))
+    .sort((a, b) => (norm(b).startsWith(n) - norm(a).startsWith(n)) || a.localeCompare(b, 'pt-BR')).slice(0, 3);
+  coms.forEach(nome => {
+    itens.push({ grupo: `${nome} · chaves que a atingem` });
+    indiceCom.get(nome).slice().sort((a, b) => D.cenarios[a].n - D.cenarios[b].n).slice(0, 4)
+      .forEach(k => itens.push({ cod: k, sub: resumoChave(D.cenarios[k]) }));
+  });
+  return itens;
+}
+const elBusca = $('busca'), elSug = $('sugestoes');
+let opcoes = [], ativa = -1;
+function mostrarSugestoes(itens, msg) {
+  opcoes = itens.filter(x => x.cod); ativa = -1;
+  if (!itens.length && !msg) { fecharSugestoes(); return; }
+  let k = 0;
+  elSug.innerHTML = (msg ? `<li class="vazio">${esc(msg)}</li>` : '') + itens.map(x => x.grupo
+    ? `<li class="grupo-sug" role="presentation">${esc(x.grupo)}</li>`
+    : `<li role="presentation"><button role="option" id="op-${k++}" aria-selected="false" data-cod="${esc(x.cod)}"><span class="mono">${esc(x.cod)}</span><span class="sub">${esc(x.sub)}</span></button></li>`).join('');
+  elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
+  elSug.querySelectorAll('button[data-cod]').forEach(b => b.addEventListener('click', () => simular(b.dataset.cod)));
+}
+function fecharSugestoes() { elSug.classList.add('oculto'); elBusca.setAttribute('aria-expanded', 'false'); elBusca.removeAttribute('aria-activedescendant'); opcoes = []; ativa = -1; }
+function marcar(i) {
+  const bs = elSug.querySelectorAll('button[data-cod]');
+  bs.forEach((b, j) => b.setAttribute('aria-selected', String(j === i)));
+  if (bs[i]) { bs[i].scrollIntoView({ block: 'nearest' }); elBusca.setAttribute('aria-activedescendant', bs[i].id); }
+  ativa = i;
+}
+elBusca.addEventListener('input', () => { const s = sugestoes(elBusca.value); mostrarSugestoes(s, elBusca.value.trim() && !s.length ? 'Nenhuma chave ou comunidade encontrada.' : ''); });
+elBusca.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' && opcoes.length) { e.preventDefault(); marcar((ativa + 1) % opcoes.length); }
+  else if (e.key === 'ArrowUp' && opcoes.length) { e.preventDefault(); marcar((ativa - 1 + opcoes.length) % opcoes.length); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const v = elBusca.value.trim().toUpperCase();
+    if (ativa >= 0) simular(opcoes[ativa].cod);
+    else if (D.cenarios[v]) simular(v);
+    else if (opcoes.length) simular(opcoes[0].cod);
+    else if (v) simular(v);
+  }
 });
-mapa.fitBounds(C.municipio.getBounds());
+document.addEventListener('click', e => { if (!e.target.closest('.busca')) fecharSugestoes(); });
+
+// ---------- Botões da lateral ----------
+function sortear() {
+  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && citadas(c).length >= 2);
+  simular(op[Math.floor(Math.random() * op.length)][0]);
+}
+document.querySelectorAll('[data-acao="sortear"]').forEach(b => b.addEventListener('click', sortear));
+$('btnLimpar').addEventListener('click', limpar);
+
+// ---------- Abertura: município inteiro, travado em Leopoldina ----------
+Object.keys(ligada).forEach(aplicarCamada);
+const limMun = C.municipio.getBounds();
+mapa.setMaxBounds(limMun.pad(0.15));
+function ajustarZoomMin() { mapa.setMinZoom(0); mapa.setMinZoom(mapa.getBoundsZoom(limMun, false)); }
+mapa.fitBounds(limMun);
+ajustarZoomMin();
+mapa.on('resize', ajustarZoomMin);
+document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES);
+arrumarNomes();
 // Link direto para um cenário: mapa_comunidades.html#CF-0123
-if (location.hash.length > 1) { const k = decodeURIComponent(location.hash.slice(1)); document.getElementById('chave').value = k; simular(k); }
+if (location.hash.length > 1) simular(decodeURIComponent(location.hash.slice(1)));
 </script>
 </body>
 </html>
