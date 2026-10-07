@@ -4,7 +4,7 @@ import geopandas as gpd
 import networkx as nx
 import osmnx as ox
 
-from . import config as C
+from .. import config as C
 
 # Inclui estradas de terra (track) e acessos (service): na zona rural é por elas que a rede passa
 FILTRO_VIAS = (

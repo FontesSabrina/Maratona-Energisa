@@ -19,7 +19,7 @@ from rapidfuzz import fuzz, process
 from sklearn.cluster import DBSCAN
 from sklearn.neighbors import KDTree
 
-from . import config as C
+from .. import config as C
 from .nomes import classificar, exibir, normalizar
 
 DIST_MAX_TRAFO_M = 600   # UC mais longe que isso do próprio trafo -> coordenada suspeita
@@ -156,14 +156,16 @@ def identificar(ucs: gpd.GeoDataFrame, trafos: gpd.GeoDataFrame) -> gpd.GeoDataF
     return g
 
 
-def territorios_voronoi(pontos: gpd.GeoDataFrame, coluna: str, margem_m: float = 1000) -> gpd.GeoDataFrame:
+def territorios_voronoi(pontos: gpd.GeoDataFrame, coluna: str, municipio: shapely.Geometry,
+                        margem_m: float = 1000) -> gpd.GeoDataFrame:
     """Território de cada comunidade, para desenho no mapa.
 
     Células de Voronoi por transformador (rótulo = comunidade majoritária das suas UCs),
     unidas por comunidade e recortadas ao município e a uma margem em volta das casas.
-    Usar o trafo, e não a UC, evita ilhas de uma casa só nas fronteiras."""
+    Usar o trafo, e não a UC, evita ilhas de uma casa só nas fronteiras.
+    `municipio`: contorno do município já em C.CRS_METRICO (quem chama lê o arquivo)."""
     m = pontos.to_crs(C.CRS_METRICO)
-    mun = gpd.read_file(C.INTERIM / "municipio.gpkg").to_crs(C.CRS_METRICO).union_all()
+    mun = municipio
     limite = shapely.intersection(mun, m.geometry.buffer(margem_m, quad_segs=4).union_all())
     tr = m.assign(_x=m.geometry.x, _y=m.geometry.y).groupby("COD_TRAFO").agg(
         _x=("_x", "mean"), _y=("_y", "mean"), **{coluna: (coluna, lambda s: s.mode().iat[0])})
@@ -178,27 +180,10 @@ def territorios_voronoi(pontos: gpd.GeoDataFrame, coluna: str, margem_m: float =
     return t[~t.geometry.is_empty]
 
 
-def territorios(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    t = territorios_voronoi(g, "COMUNIDADE_PREVISTA").rename(columns={"COMUNIDADE_PREVISTA": "COMUNIDADE"})
+def territorios(g: gpd.GeoDataFrame, municipio: shapely.Geometry) -> gpd.GeoDataFrame:
+    t = territorios_voronoi(g, "COMUNIDADE_PREVISTA", municipio).rename(columns={"COMUNIDADE_PREVISTA": "COMUNIDADE"})
     resumo = g.groupby("COMUNIDADE_PREVISTA").agg(
         N_UC=("UC", "count"), DISTRITO=("DISTRITO", lambda s: s.mode().iat[0]), CONFIANCA_MEDIA=("CONFIANCA", "mean"))
     t = t.join(resumo, on="COMUNIDADE")
     t["CONFIANCA_MEDIA"] = t["CONFIANCA_MEDIA"].round(3)
     return t
-
-
-def construir():
-    ucs = gpd.read_file(C.SINTETICO / "ucs.gpkg")
-    trafos = gpd.read_file(C.SINTETICO / "transformadores.gpkg")
-    g = identificar(ucs, trafos)
-    g.to_crs(C.CRS_GEO).to_file(C.SAIDA / "ucs_comunidade.gpkg")
-    t = territorios(g)
-    t.to_crs(C.CRS_GEO).to_file(C.SAIDA / "comunidades.gpkg")
-    return g, t
-
-
-if __name__ == "__main__":
-    g, t = construir()
-    print(f"Comunidades identificadas: {len(t)}")
-    print(g["ORIGEM_COORD"].value_counts())
-    print(t.sort_values("N_UC", ascending=False).drop(columns="geometry").to_string())

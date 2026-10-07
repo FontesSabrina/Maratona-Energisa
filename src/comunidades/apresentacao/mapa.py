@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 import shapely
 
-from . import config as C
-from . import osm
-from .algoritmo import territorios_voronoi
-from .avaliacao import avaliar
-from .desligamento import duracao_s, locais_antigos, simular
-from .nomes import exibir
+from .. import config as C
+from ..fontes import osm
+from ..nucleo.algoritmo import territorios_voronoi
+from ..nucleo.desligamento import duracao_s, locais_antigos, simular
+from ..nucleo.nomes import exibir
+from ..validacao.avaliacao import avaliar
 
 TEMPLATE = Path(__file__).with_name("mapa_template.html")
 ARQ_SAIDA = C.SAIDA / "mapa_comunidades.html"
@@ -36,7 +36,8 @@ def _gj(gdf: gpd.GeoDataFrame, props: list[str], simplificar_m: float = 0) -> di
 
 
 def _territorios_reais(pontos: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    t = territorios_voronoi(pontos, "COMUNIDADE").rename(columns={"COMUNIDADE": "NOME"})
+    mun = gpd.read_file(C.INTERIM / "municipio.gpkg").to_crs(C.CRS_METRICO).union_all()
+    t = territorios_voronoi(pontos, "COMUNIDADE", mun).rename(columns={"COMUNIDADE": "NOME"})
     return t.join(pontos.groupby("COMUNIDADE").size().rename("N_UC"), on="NOME")
 
 

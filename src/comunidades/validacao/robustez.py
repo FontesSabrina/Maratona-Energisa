@@ -5,15 +5,17 @@ no campo de localidade, peso do transformador na votação), uma por vez, e aval
 cada uma. No fim restaura tudo ao estado base, para que saida/ e data/sintetico/
 fiquem iguais ao pipeline oficial. O mapa não é regenerado aqui.
 
-Uso: py -m uv run python -m comunidades.robustez
+Uso: py -m uv run python -m comunidades.validacao.robustez
 """
 
 import time
 
 import pandas as pd
 
-from . import algoritmo, clientes
-from . import config as C
+from .. import config as C
+from ..nucleo import algoritmo
+from ..pipeline import rodar_algoritmo
+from ..simulacao import clientes
 from .avaliacao import avaliar
 
 PESO_BASE = algoritmo.PESO_MESMO_TRAFO
@@ -35,7 +37,7 @@ def _rodar(semente: int, fator: float, peso: float, cadastro_atual: tuple | None
     if cadastro_atual != (semente, fator):  # só regenera o cadastro quando ele muda
         clientes.construir(semente=semente, fator_ruido=fator)
     algoritmo.PESO_MESMO_TRAFO = peso
-    algoritmo.construir()
+    rodar_algoritmo()
     _, por_uc, _, cen = avaliar()
     return {
         "ACERTO_CADASTRO_RURAL": por_uc.loc["Rural", "ACERTO_CADASTRO"],
@@ -51,7 +53,7 @@ def restaurar():
     """Volta ao estado do pipeline oficial: cadastro e algoritmo com os valores originais."""
     algoritmo.PESO_MESMO_TRAFO = PESO_BASE
     clientes.construir()
-    algoritmo.construir()
+    rodar_algoritmo()
     avaliar()  # regrava saida/avaliacao_cenarios.csv
 
 

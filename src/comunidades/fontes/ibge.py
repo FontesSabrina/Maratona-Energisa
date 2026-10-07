@@ -14,7 +14,7 @@ import pandas as pd
 from sklearn.neighbors import KNeighborsClassifier
 from unidecode import unidecode
 
-from . import config as C
+from .. import config as C
 
 # Rótulos que não são nome de comunidade
 GENERICOS = {"ESTRADA", "FAZENDA", "CENTRO", "ESTRADA PARA ABAIBA", "SITIO", "ZONA RURAL"}

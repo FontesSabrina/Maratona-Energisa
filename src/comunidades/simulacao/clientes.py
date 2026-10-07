@@ -16,7 +16,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 
-from . import config as C
+from .. import config as C
 
 # Multiplica as probabilidades de ruído no campo de localidade (vazio, imovel,
 # vizinha, abreviado, digitacao). 1.0 = cadastro oficial; usado no teste de robustez.

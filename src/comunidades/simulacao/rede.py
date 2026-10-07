@@ -19,8 +19,8 @@ from shapely.geometry import LineString, Point
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.exceptions import ConvergenceWarning
 
-from . import config as C
-from . import osm
+from .. import config as C
+from ..fontes import osm
 
 # Transformadores
 RAIO_TRAFO_RURAL_M = 450   # diâmetro máximo de um grupo de UCs rurais num mesmo trafo

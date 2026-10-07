@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from rapidfuzz import fuzz, process
 
-from . import config as C
-from .desligamento import _sem_sufixo, duracao_s, simular
-from .nomes import normalizar
+from .. import config as C
+from ..nucleo.desligamento import _sem_sufixo, duracao_s, simular
+from ..nucleo.nomes import normalizar
 
 
 def _chave_nome(s: pd.Series) -> pd.Series:

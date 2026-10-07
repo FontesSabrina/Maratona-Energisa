@@ -5,7 +5,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from . import config as C
+from .. import config as C
 
 ARQUIVOS = {
     "3138401_LEOPOLDINA.zip": (

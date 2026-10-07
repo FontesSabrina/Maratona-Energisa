@@ -29,7 +29,7 @@ Nenhum dado de cliente real da distribuidora foi usado.
 - só carrega imagens dos servidores de fundo de mapa da Esri (`server.arcgisonline.com`), além de imagens embutidas no próprio arquivo;
 - bloqueia qualquer outra conexão: envio de dados, fontes externas, formulários e outras páginas dentro da página.
 
-**Biblioteca embutida e conferida.** A biblioteca de mapas (Leaflet 1.9.4) vem embutida no HTML, e não de uma CDN. Ela foi copiada do pacote oficial, e o código de integridade do pacote foi conferido com o publicado pelo registro npm (ver `src/comunidades/vendor/leaflet/ORIGEM.md`). Sem internet, o mapa funciona normalmente, só sem a imagem de fundo.
+**Biblioteca embutida e conferida.** A biblioteca de mapas (Leaflet 1.9.4) vem embutida no HTML, e não de uma CDN. Ela foi copiada do pacote oficial, e o código de integridade do pacote foi conferido com o publicado pelo registro npm (ver `src/comunidades/apresentacao/vendor/leaflet/ORIGEM.md`). O git guarda esses arquivos sem converter o fim de linha (`.gitattributes`), para o SHA-256 de cada um continuar igual ao do pacote. Sem internet, o mapa funciona normalmente, só sem a imagem de fundo.
 
 **Código de verificação no PDF.** O rodapé do roteiro traz um código SHA-256 calculado no navegador. Qualquer alteração no texto gera um código diferente.
 

@@ -51,14 +51,19 @@ Ao final, o terminal mostra as métricas, e o mapa é regravado em `saida/mapa_c
 
 ## Onde mexer para propor melhorias
 
+Todos os caminhos são relativos a `src/comunidades/`.
+
 | Quero mudar... | Arquivo |
 |---|---|
-| Como o algoritmo decide a comunidade (vizinhos, raio, pesos) | `algoritmo.py`, constantes no topo |
-| O texto do aviso de rádio e a regra "inteira/parte" | `desligamento.py` |
-| Abreviações e prefixos reconhecidos no cadastro | `nomes.py` |
-| Tipos e proporções de erro no cadastro fictício | `clientes.py` |
-| Tamanho dos transformadores, alimentadores e chaves | `rede.py` |
-| Visual e comportamento do mapa | `mapa_template.html` |
+| Como o algoritmo decide a comunidade (vizinhos, raio, pesos) | `nucleo/algoritmo.py`, constantes no topo |
+| O texto do aviso de rádio, a regra "inteira/parte" e os fragmentos ("localidades vizinhas") | `nucleo/desligamento.py` (e `montarAviso` em `apresentacao/mapa_template.html`, que tem de gerar o mesmo texto) |
+| Abreviações e prefixos reconhecidos no cadastro | `nucleo/nomes.py` |
+| Tipos e proporções de erro no cadastro fictício | `simulacao/clientes.py` |
+| Tamanho dos transformadores, alimentadores e chaves | `simulacao/rede.py` |
+| Quais arquivos são lidos e gravados, e a ordem das etapas | `pipeline.py` |
+| Métricas de avaliação e teste de robustez | `validacao/avaliacao.py`, `validacao/robustez.py` |
+| Visual e comportamento do mapa, aviso editável e roteiro em PDF | `apresentacao/mapa_template.html` |
+| Dados embutidos no mapa e política de segurança (CSP) | `apresentacao/mapa.py` |
 
 ## Camadas
 
@@ -89,16 +94,28 @@ Usa **apenas** o que uma distribuidora tem: o cadastro de UCs e a posição dos 
 
 ```
 src/comunidades/
-  ibge.py          camadas reais + gabarito
-  osm.py           malha viária
-  rede.py          rede elétrica fictícia
-  clientes.py      cadastro fictício de UCs com ruído
-  nomes.py         normalização e grafia dos nomes
-  algoritmo.py     identificação das comunidades
-  desligamento.py  simulação e texto do aviso
-  avaliacao.py     comparação com o gabarito
-  mapa.py          gera o HTML interativo (+ mapa_template.html)
-saida/             mapa, comunidades.gpkg, ucs_comunidade.gpkg, avaliacao_cenarios.csv
+  __init__.py            comando `comunidades` (chama o pipeline)
+  config.py              caminhos e parâmetros globais
+  pipeline.py            orquestração: lê e grava arquivos e chama cada camada
+  fontes/                dados REAIS
+    dados.py             download dos arquivos do IBGE
+    ibge.py              camadas reais + gabarito
+    osm.py               malha viária (OpenStreetMap)
+  simulacao/             dados FICTÍCIOS
+    rede.py              rede elétrica fictícia
+    clientes.py          cadastro fictício de UCs com ruído
+  nucleo/                regras do produto (não lê arquivos nem conhece o IBGE)
+    nomes.py             normalização e grafia dos nomes
+    algoritmo.py         identificação das comunidades e territórios
+    desligamento.py      UCs afetadas por chave e texto do aviso
+  validacao/             métricas (único lugar que lê o gabarito)
+    avaliacao.py         comparação com o gabarito
+    robustez.py          teste de robustez
+  apresentacao/          o que o usuário vê
+    mapa.py              gera o HTML interativo
+    mapa_template.html   mapa, aviso editável e roteiro em PDF
+    vendor/leaflet/      Leaflet 1.9.4 embutido (licença e origem)
+saida/                   mapa, comunidades.gpkg, ucs_comunidade.gpkg, avaliacao_cenarios.csv
 ```
 
 ## Limitações conhecidas
