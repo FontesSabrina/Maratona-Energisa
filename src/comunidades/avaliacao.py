@@ -42,13 +42,18 @@ def avaliar():
         d = simular(df, cod)
         if d.ucs.empty:
             continue
-        r = set(_chave_nome(d.ucs["COMUNIDADE"]))
-        p = set(d.ucs["PREVISTO_NORM"])
+        real_uc = _chave_nome(d.ucs["COMUNIDADE"])
+        r = set(real_uc)
+        # Só conta o que o aviso cita pelo nome (fragmentos viram "localidades vizinhas")
+        citadas = d.comunidades.loc[~d.comunidades["FRAGMENTO"], "COMUNIDADE_PREVISTA"]
+        p = set(d.ucs.loc[d.ucs["COMUNIDADE_PREVISTA"].isin(citadas), "PREVISTO_NORM"])
         inter = len(r & p)
         linhas.append({
             "CHAVE": cod, "UCS": len(d.ucs), "RURAL": (d.ucs["ZONA"] == "Rural").mean(),
             "N_REAL": len(r), "N_PREV": len(p),
             "PRECISAO": inter / len(p), "COBERTURA": inter / len(r), "EXATO": r == p,
+            # parcela das UCs desligadas cuja comunidade real é citada pelo nome no aviso
+            "COBERTURA_UC": real_uc.isin(p).mean(),
             "SEG_ANTES": duracao_s(d.aviso_antigo), "SEG_DEPOIS": duracao_s(d.aviso_novo),
         })
     cen = pd.DataFrame(linhas)
@@ -64,7 +69,7 @@ if __name__ == "__main__":
     print(por_ruido)
     for nome, c in {"todos": cen, "rurais (>=80% rural)": cen[cen.RURAL >= 0.8]}.items():
         print(f"\n== Cenários de desligamento: {nome} ({len(c)}) ==")
-        print(c[["UCS", "N_REAL", "N_PREV", "PRECISAO", "COBERTURA", "EXATO", "SEG_ANTES", "SEG_DEPOIS"]]
+        print(c[["UCS", "N_REAL", "N_PREV", "PRECISAO", "COBERTURA", "COBERTURA_UC", "EXATO", "SEG_ANTES", "SEG_DEPOIS"]]
               .describe().loc[["mean", "50%", "max"]].round(2).to_string())
     erros = df[(df.ZONA == "Rural") & ~df.ACERTO]
     print("\n== Confusões rurais mais comuns (real -> previsto) ==")

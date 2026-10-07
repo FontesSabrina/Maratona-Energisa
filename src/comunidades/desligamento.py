@@ -8,6 +8,11 @@ import pandas as pd
 LIMIAR_TOTAL = 0.9       # >= 90% das UCs da comunidade afetadas -> comunidade inteira
 PALAVRAS_POR_SEGUNDO = 2.5  # locução de rádio ~150 palavras/min
 
+# Comunidade com até 2 UCs afetadas é quase sempre ruído da votação na fronteira.
+# Ela não é citada pelo nome: o aviso diz "e de localidades vizinhas", para que
+# essas poucas UCs não fiquem sem aviso.
+LIMITE_FRAGMENTO = 2
+
 
 @dataclass
 class Desligamento:
@@ -40,7 +45,11 @@ def resumir(afetadas: pd.DataFrame, todas: pd.DataFrame) -> pd.DataFrame:
     )
     c["UC_TOTAL"] = total.reindex(c.index).to_numpy()
     c["PARCIAL"] = c["UC_AFETADAS"] / c["UC_TOTAL"] < LIMIAR_TOTAL
-    return c.sort_values("UC_AFETADAS", ascending=False).reset_index()
+    c = c.sort_values("UC_AFETADAS", ascending=False).reset_index()
+    c["FRAGMENTO"] = c["UC_AFETADAS"] <= LIMITE_FRAGMENTO
+    if len(c) and c["FRAGMENTO"].all():  # ramal minúsculo: cita ao menos a comunidade maior
+        c.loc[0, "FRAGMENTO"] = False
+    return c
 
 
 def locais_antigos(afetadas: pd.DataFrame) -> list[str]:
@@ -56,13 +65,16 @@ def aviso_antigo(afetadas: pd.DataFrame, data: str, horario: str) -> str:
 
 
 def aviso_novo(resumo: pd.DataFrame, data: str, horario: str) -> str:
-    nomes = resumo["COMUNIDADE_PREVISTA"].map(_sem_sufixo)
-    inteiras = list(dict.fromkeys(nomes[~resumo["PARCIAL"]]))
-    parciais = [n for n in dict.fromkeys(nomes[resumo["PARCIAL"]]) if n not in inteiras]
+    citadas = resumo[~resumo["FRAGMENTO"]]
+    nomes = citadas["COMUNIDADE_PREVISTA"].map(_sem_sufixo)
+    inteiras = list(dict.fromkeys(nomes[~citadas["PARCIAL"]]))
+    parciais = [n for n in dict.fromkeys(nomes[citadas["PARCIAL"]]) if n not in inteiras]
     quem = _lista(inteiras)
     if parciais:
         quem = f"{quem}, e de parte de {_lista(parciais)}" if quem else f"parte de {_lista(parciais)}"
-    distritos = sorted({"Sede" if d == "Leopoldina" else d for d in resumo["DISTRITO"]})
+    if resumo["FRAGMENTO"].any():
+        quem = f"{quem}, e de localidades vizinhas"
+    distritos = sorted({"Sede" if d == "Leopoldina" else d for d in citadas["DISTRITO"]})
     onde = f"distrito{'s' if len(distritos) > 1 else ''} {_lista(distritos)}"
     return (f"Atenção, moradores de {quem}, em Leopoldina ({onde}): "
             f"no dia {data}, das {horario}, haverá desligamento programado de energia para "
