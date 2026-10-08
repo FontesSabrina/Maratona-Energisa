@@ -29,9 +29,11 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez
 - Janela de menor dano (ramais rurais, perfis hipotéticos): py -m uv run python -m comunidades.validacao.janela
 
-## Referências para comparação (desde o passo 10b)
-- Métricas: saida/metricas_passo10b.txt (Leopoldina) e saida/muriae/metricas_passo10b.txt (Muriaé). Substituem as métricas do passo 2 como referência de "antes e depois".
-- Avisos e janelas para os testes JS × Python: saida/referencias_passo10b/ e saida/muriae/referencias_passo10b/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
+## Referências para comparação (desde o passo 12)
+- Métricas: saida/metricas_passo12.txt (Leopoldina) e saida/muriae/metricas_passo12.txt (Muriaé), iguais às do passo 10b. São a referência de "antes e depois".
+- Avisos e janelas para os testes JS × Python: saida/referencias_passo12/ e saida/muriae/referencias_passo12/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações; areas.json: 200 áreas sorteadas com o resultado esperado). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
+- Regenerar: py -m uv run python -m comunidades.validacao.referencias e py -m uv run python -m comunidades.validacao.area (com $env:FAROL_DISTRIBUIDORA para Muriaé).
+- No passo 12, resumir() passou a ordenar de forma estável (empate no número de UCs afetadas: ordem alfabética). Só mudou a ordem de comunidades empatadas em 30 avisos de Leopoldina e 21 de Muriaé; as referências do passo 10b (saida/referencias_passo10b/, saida/metricas_passo10b.txt) ficam guardadas para consulta.
 - Esses arquivos ficam fora do git (saida/ é ignorada): se faltarem, regenere rodando o pipeline e grave de novo.
 
 ## Regras de trabalho

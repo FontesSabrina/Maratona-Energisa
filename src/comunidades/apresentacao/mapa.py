@@ -20,6 +20,7 @@ from ..nucleo.desligamento import duracao_s, locais_antigos, simular
 from .. import distribuidora as dist_
 from ..nucleo import idiomas
 from ..nucleo.abrangencia import MARGEM_DIVISA_M, fatores_metros
+from ..nucleo.area import CASAS, MAX_VERTICES
 from ..nucleo.impacto import perfis_para_mapa
 from ..nucleo.nomes import exibir
 from ..validacao.avaliacao import avaliar
@@ -84,9 +85,14 @@ def construir(dist=None):
     classes = sorted(df["CLASSE"].unique())
     loc_cad = sorted(df["BAIRRO_LOCALIDADE"].fillna("").astype(str).unique())  # texto digitado no campo localidade
     ic, il = {c: i for i, c in enumerate(classes)}, {c: i for i, c in enumerate(loc_cad)}
+    # desligamento por área: distrito (para o aviso) e atividade (para a janela e as cargas sensíveis),
+    # só como códigos; atividade fora dos perfis da distribuidora = -1 (não entra na contagem)
+    distritos_uc = sorted(df["DISTRITO"].unique())
+    idist, iativ = {d: i for i, d in enumerate(distritos_uc)}, {a: i for i, a in enumerate(atividades)}
     ucs = [[round(r.LAT_REAL, 5), round(r.LON_REAL, 5), trafo_idx[r.COD_TRAFO], ip[r.COMUNIDADE_PREVISTA],
             ir[r.COMUNIDADE], int(r.CONFIANCA * 100), int(r.ACERTO), origem[r.ORIGEM_COORD],
-            1 if r.CLASSE == "Rural" else 0, ic[r.CLASSE], il[str(r.BAIRRO_LOCALIDADE or "")]]
+            1 if r.CLASSE == "Rural" else 0, ic[r.CLASSE], il[str(r.BAIRRO_LOCALIDADE or "")],
+            idist[r.DISTRITO], iativ.get(r.ATIVIDADE, -1)]
            for r in df.itertuples()]
 
     # Cenários pré-calculados (mesma lógica do módulo desligamento)
@@ -160,7 +166,12 @@ def construir(dist=None):
              # ponto da obra: fatores graus -> metros (centro do município) e clientes por alimentador (só contagens)
              "rede": dict(zip(("kx", "ky"), fatores_metros(gpd.read_file(C.INTERIM / "municipio.gpkg").to_crs(C.CRS_GEO).union_all().centroid.y)),
                           margemDivisaM=MARGEM_DIVISA_M, clientesPorAlimentador={a: int(n) for a, n in df["ALIMENTADOR"].value_counts().sort_index().items()}),
-             "alimentadores": sorted(mt["ALIMENTADOR"].unique())}
+             "alimentadores": sorted(mt["ALIMENTADOR"].unique()),
+             # desligamento por área: as mesmas regras de desligamento.resumir e os limites do contorno
+             "distritosUC": distritos_uc,
+             "regrasAviso": {"limiarTotal": dist.regras.limiar_total, "limiteFragmento": dist.regras.limite_fragmento,
+                             "limiteParticipacao": dist.regras.limite_participacao},
+             "area": {"maxVertices": MAX_VERTICES, "casas": CASAS, "maxBytes": 5 * 1024 * 1024}}
     favicon = base64.b64encode((MARCA / "farol-pequeno.svg").read_bytes()).decode()
     html = (TEMPLATE.read_text(encoding="utf-8")
             .replace("<!--__LOGO__-->", (MARCA / "farol.svg").read_text(encoding="utf-8").strip())

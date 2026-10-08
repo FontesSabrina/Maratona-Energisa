@@ -52,7 +52,8 @@ def resumir(afetadas: pd.DataFrame, todas: pd.DataFrame, regras: RegrasAviso) ->
     )
     c["UC_TOTAL"] = total.reindex(c.index).to_numpy()
     c["PARCIAL"] = c["UC_AFETADAS"] / c["UC_TOTAL"] < regras.limiar_total
-    c = c.sort_values("UC_AFETADAS", ascending=False).reset_index()
+    # estável: no empate, fica a ordem alfabética do groupby (o navegador repete a mesma ordem)
+    c = c.sort_values("UC_AFETADAS", ascending=False, kind="stable").reset_index()
     c["FRAGMENTO"] = (c["PARCIAL"] & (c["UC_AFETADAS"] <= regras.limite_fragmento)
                       & (c["UC_AFETADAS"] / c["UC_AFETADAS"].sum() < regras.limite_participacao))
     if len(c) and c["FRAGMENTO"].all():  # ramal minúsculo: cita ao menos a comunidade maior

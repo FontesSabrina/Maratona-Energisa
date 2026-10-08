@@ -172,6 +172,21 @@ aside:not(.simulado) .abas { display: none; }
 .obra-op button { flex: none; font-size: 13.5px; padding: 0 12px; background: var(--sup); }
 .obra-op.melhor button { background: var(--ambar); color: var(--noite); font-weight: 600; }
 
+/* Como definir o desligamento: por chave, por ponto da obra ou por área */
+.modos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--sup2); }
+.modos button { background: transparent; font-size: 13.5px; padding: 0 6px; }
+.modos button[aria-checked="true"] { background: var(--sup); box-shadow: var(--sombra); font-weight: 600; }
+.area-bloco { display: grid; gap: 12px; }
+.area-alerta { margin: 0; font-size: 14px; padding: 10px 12px; border-radius: 10px; border-left: 4px solid var(--ambar);
+  background: color-mix(in srgb, var(--ambar) 14%, var(--sup)); }
+.area-passo { margin: 0 0 8px; font-size: 14px; }
+.area-erro { margin: 0; font-size: 14px; padding: 10px 12px; border-radius: 10px; border-left: 4px solid var(--desligado);
+  background: color-mix(in srgb, var(--desligado) 12%, var(--sup)); }
+.area-info { display: grid; gap: 8px; }
+.area-desc { font-size: 14px; color: var(--texto2); overflow-wrap: anywhere; }
+.desenhando, .desenhando .leaflet-interactive { cursor: crosshair !important; }
+.desenhando .leaflet-topo-pane { pointer-events: none; }  /* cliques no desenho viram vértices, sem abrir chaves ou UCs */
+
 /* Aviso */
 .aviso-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .idioma { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--apagado); }
@@ -234,6 +249,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 .leg-ramal { width: 22px; height: 4px; border-radius: 2px; background: var(--desligado); }
 .leg-aviso { width: 18px; height: 12px; border: 2px solid var(--desligado); background: color-mix(in srgb, var(--desligado) 12%, transparent); border-radius: 2px; }
 .leg-viz { width: 18px; height: 12px; border: 2px dotted var(--desligado); border-radius: 2px; }
+.leg-area { width: 18px; height: 12px; border: 2px dashed var(--ambar); border-radius: 2px; }
 .leaflet-control-attribution { background: color-mix(in srgb, var(--sup) 88%, transparent) !important; color: var(--texto2) !important; font-size: 11.5px; }
 .leaflet-control-attribution a { color: var(--info) !important; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip { background: var(--sup); color: var(--texto); border-color: var(--linha); box-shadow: var(--sombra); }
@@ -320,6 +336,27 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 
     <!-- Aba Desligamento -->
     <section class="aba" id="aba-desligamento" role="tabpanel" aria-labelledby="tab-desligamento">
+      <div class="modos" role="radiogroup" aria-label="Como definir o desligamento">
+        <button role="radio" aria-checked="true" data-modo="chave">Por chave</button>
+        <button role="radio" aria-checked="false" data-modo="obra">Por ponto da obra</button>
+        <button role="radio" aria-checked="false" data-modo="area">Por área</button>
+      </div>
+      <p id="instrObra" class="nota oculto" style="margin:0">Clique com o botão direito no mapa, no lugar da obra, ou digite a coordenada na busca (ex.: -21.5392, -42.6411). O Farol mostra as chaves que desligam o trecho, da que deixa menos clientes sem luz para a que deixa mais.</p>
+      <div id="blocoArea" class="area-bloco oculto">
+        <p class="area-alerta">A área não segue a rede elétrica. Confira com a equipe se ela corresponde ao trecho que será desligado.</p>
+        <div class="linha-botoes" id="areaBotoes"><button id="btnDesenhar">Desenhar área</button><button id="btnImportar">Importar contorno</button></div>
+        <input type="file" id="arqArea" class="oculto" accept=".kml,.geojson,.json" tabindex="-1" aria-hidden="true">
+        <p class="nota" id="areaDica" style="margin:0">Desenhe clicando no mapa, um clique em cada canto da área, ou importe um arquivo .kml, .geojson ou .json (até 5 MB). O arquivo é lido só neste computador, sem ir para nenhum servidor.</p>
+        <div id="areaDesenho" class="oculto">
+          <p class="area-passo" id="areaPassos" aria-live="polite"></p>
+          <div class="linha-botoes"><button id="btnDesfazer">Desfazer ponto</button><button id="btnConcluir" class="prim">Concluir</button><button id="btnCancelar">Cancelar</button></div>
+        </div>
+        <p class="area-erro oculto" id="areaErro" role="alert"></p>
+        <div id="areaInfo" class="area-info oculto">
+          <div class="area-desc" id="areaDesc"></div>
+          <button id="btnBaixarArea">Baixar área (GeoJSON)</button>
+        </div>
+      </div>
       <div id="blocoObra" class="obra oculto">
         <div class="obra-cab"><div class="rot" style="margin:0">Ponto da obra</div><button id="btnLimparObra">Limpar ponto</button></div>
         <div class="obra-local" id="obraLocal"></div>
@@ -332,7 +369,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
       </div>
       <div id="cheio" class="aba oculto">
         <div>
-          <div class="rot">Chave aberta</div>
+          <div class="rot" id="cdRot">Chave aberta</div>
           <div class="chave-cab"><span class="mono" id="cdChave"></span><span class="meta" id="cdMeta"></span></div>
         </div>
         <div class="numeros">
@@ -374,7 +411,8 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
           <label class="idioma">Idioma <select id="avIdioma" aria-label="Idioma do aviso"></select></label></div>
         <p class="aviso-txt" id="avisoNovo"></p>
       </div>
-      <div class="cmp">
+      <p class="nota oculto" id="notaSemComparacao" style="margin:0">A comparação com o aviso de hoje fica disponível no modo por chave.</p>
+      <div class="cmp" id="blocoComparacao">
         <div class="cmp-l"><span>Hoje (fazenda a fazenda)</span><b id="tAntigo"></b></div>
         <div class="trilho"><i id="barraAntigo"></i></div>
         <div class="cmp-l"><span>Farol (por comunidade)</span><b id="tNovo"></b></div>
@@ -387,7 +425,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
       </div>
       <div class="linha-botoes"><button class="ouvir" data-alvo="novo">▶ Ouvir</button><button id="btnCopiar">Copiar texto</button></div>
       <button class="prim largo" id="btnPdf">Gerar PDF para a rádio</button>
-      <details class="antigo">
+      <details class="antigo" id="blocoAntigo">
         <summary id="resumoAntigo">Ver o aviso de hoje</summary>
         <button class="ouvir" data-alvo="antigo">▶ Ouvir</button>
         <p class="antigo-txt" id="avisoAntigo"></p>
@@ -659,7 +697,8 @@ function redesenharCores() {
 }
 function mudouTema() {
   trocarFundo(); redesenharCores();
-  if (codAtual) desenharDestaque(avisoAtual, codAtual, false);
+  if (avisoAtual) desenharDestaque(avisoAtual, codAtual, false);
+  desenharContornoArea();
 }
 $('btnTema').addEventListener('click', () => {
   tema = TEMAS[(TEMAS.indexOf(tema) + 1) % TEMAS.length];
@@ -690,7 +729,7 @@ $('btnMenos').addEventListener('click', () => mapa.zoomOut());
 $('btnEnquadrar').addEventListener('click', () => limitesRamal ? mapa.fitBounds(limitesRamal, { maxZoom: 15 }) : mapa.fitBounds(limMun));
 const Legenda = L.Control.extend({ options: { position: 'bottomleft' }, onAdd() {
   const d = L.DomUtil.create('div', 'legenda');
-  d.innerHTML = '<span><i class="leg-ramal"></i>Ramal desligado</span><span><i class="leg-aviso"></i>Comunidade no aviso</span><span><i class="leg-viz"></i>Vizinha</span>';
+  d.innerHTML = '<span id="legRamal"><i class="leg-ramal"></i>Ramal desligado</span><span><i class="leg-aviso"></i>Comunidade no aviso</span><span><i class="leg-viz"></i>Vizinha</span><span id="legArea" class="oculto"><i class="leg-area"></i>Área informada</span>';
   return d;
 } });
 new Legenda().addTo(mapa);
@@ -722,11 +761,12 @@ document.querySelectorAll('.abas button').forEach(b => b.addEventListener('click
 $('btnVerAviso').addEventListener('click', () => ativarAba('aviso'));
 function estadoSimulado(sim) {
   $('lateral').classList.toggle('simulado', sim);
-  $('vazio').classList.toggle('oculto', sim); $('cheio').classList.toggle('oculto', !sim);
+  $('vazio').classList.toggle('oculto', sim || modo !== 'chave'); $('cheio').classList.toggle('oculto', !sim);
   if (!sim) ativarAba('desligamento');
 }
 
 // ---------- Simulação ----------
+let modo = 'chave';  // como o desligamento é definido: 'chave', 'obra' (ponto da obra) ou 'area'
 const destaque = L.layerGroup().addTo(mapa);
 let limitesRamal = null;
 function desenharDestaque(c, cod, enquadrar) {
@@ -741,16 +781,16 @@ function desenharDestaque(c, cod, enquadrar) {
     { pane: 'destaque', interactive: false, style: f => nomes.get(f.properties.NOME)[5]
       ? { color: coral, weight: 2, opacity: 1, dashArray: '1 6', lineCap: 'round', fillColor: coral, fillOpacity: 0.03 }
       : { color: coral, weight: 2.5, opacity: 1, fillColor: coral, fillOpacity: 0.1 } }));
-  // UCs desligadas (clicáveis, no mesmo canvas das chaves)
-  const tset = new Set(c.trafos), pts = [];
-  D.ucs.forEach((u, i) => { if (!tset.has(u[2])) return; pts.push([u[0], u[1]]);
+  // UCs desligadas (clicáveis, no mesmo canvas das chaves): a jusante da chave ou dentro da área
+  const tset = new Set(c.trafos), uset = c.area ? new Set(c.ucsIdx) : null, pts = [];
+  D.ucs.forEach((u, i) => { if (uset ? !uset.has(i) : !tset.has(u[2])) return; pts.push([u[0], u[1]]);
     destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, radius: 3.5, color: css('--fundo'), weight: 1, fillColor: coral, fillOpacity: 1 })
       .on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
   });
   const ch = D.camadas.chaves.features.find(f => f.properties.COD_CHAVE === cod);
   if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { pane: 'destaqueTopo', interactive: false, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--texto'), fillOpacity: 1 })
     .bindTooltip(`<b class="mono">${esc(cod)}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8], pane: 'tooltipPane' }));
-  limitesRamal = pts.length ? L.latLngBounds(pts).pad(0.25) : null;
+  limitesRamal = c.area ? areaCamada.getBounds().pad(0.15) : pts.length ? L.latLngBounds(pts).pad(0.25) : null;
   if (enquadrar && limitesRamal) mapa.fitBounds(limitesRamal, { maxZoom: 15 });
 }
 
@@ -758,8 +798,10 @@ function simular(cod, enquadrar = true) {
   cod = String(cod).trim().toUpperCase();
   const c = D.cenarios[cod];
   if (!c) { mostrarSugestoes([], `Chave não encontrada: ${cod}`); return; }
+  if (modo === 'area') escolherModo('chave');
   pararLeitura();
   avisoAtual = c; codAtual = cod;
+  $('cdRot').textContent = 'Chave aberta';
   desenharDestaque(c, cod, enquadrar);
   const zona = c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
   $('cdChave').textContent = cod;
@@ -783,7 +825,10 @@ function desenharComunidades(c) {
   $('listaCitadas').innerHTML = citadas(c).map(item).join('');
   $('listaVizinhas').innerHTML = viz.map(item).join('');
   $('blocoVizinhas').classList.toggle('oculto', !viz.length);
-  // Validação do cenário (só no modo apresentação; o gabarito nunca é usado pelo algoritmo)
+  // Validação do cenário (só no modo apresentação; o gabarito nunca é usado pelo algoritmo).
+  // No modo área não aparece: calcular a cobertura no navegador seria usar o gabarito fora da avaliação.
+  $('validCen').className = c.area ? 'oculto' : 'valid-cen so-ap bloco';
+  if (c.area) { $('validCen').innerHTML = ''; return; }
   const real = c.real.map(([n, q]) => `${esc(n)} <span class="de">(${q})</span>`).join(', ');
   $('validCen').innerHTML = `
     <div class="rot">Validação com o Censo</div>
@@ -797,6 +842,7 @@ function desenharComunidades(c) {
 function limpar() {
   pararLeitura(); destaque.clearLayers(); limitesRamal = null;
   avisoAtual = null; codAtual = null; $('busca').value = '';
+  if (modo === 'area') limparArea();
   estadoSimulado(false);
 }
 
@@ -985,13 +1031,22 @@ function atualizarAviso() {
   const L = idiomaAtual;
   const dataTxt = f.d ? formatarData(+f.d, +f.m, L) : '__/__';
   textos.novo = comTelefone(montarAviso(c, dataTxt, formatarHorario(minutos(f.ini), minutos(f.fim), L), L), f.tel, L);
+  const sD = segundos(textos.novo);
+  $('numRadio').innerHTML = `${sD}<small> s</small>`;
+  $('avisoNovo').textContent = textos.novo;
+  // No modo área não há aviso de hoje: ele lista o imóvel ou a rua de cada UC, que o HTML não leva
+  ['blocoComparacao', 'blocoAntigo'].forEach(id => $(id).classList.toggle('oculto', !!c.area));
+  $('notaSemComparacao').classList.toggle('oculto', !c.area);
+  if (c.area) {
+    textos.antigo = ''; $('numRadioHoje').textContent = '';
+    atualizarJanela(c, f); preencherRoteiro(c, f, ant, sD);
+    return;
+  }
   // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
   textos.antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
-  const sA = segundos(textos.antigo), sD = segundos(textos.novo);
+  const sA = segundos(textos.antigo);
   const red = Math.round((1 - sD / sA) * 100);
-  $('numRadio').innerHTML = `${sD}<small> s</small>`;
   $('numRadioHoje').textContent = `· hoje ${sA} s`;
-  $('avisoNovo').textContent = textos.novo;
   $('avisoAntigo').textContent = textos.antigo;
   $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
   $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
@@ -1044,6 +1099,9 @@ const RT = {
     vizinhas: 'Localidades vizinhas', vizSim: n => `Sim: ${n} ${n === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome`, nao: 'Não',
     telefone: 'Telefone de atendimento', exemplo: ' (exemplo, a confirmar)',
     registro: 'Registro', chave: 'Chave aberta', alim: 'Alimentador', ucs: 'UCs afetadas',
+    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área desenhada', areaImportada: a => `Área importada (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${fmt(v)} ${v === 1 ? 'vértice' : 'vértices'}`,
+    areaNota: 'A área não segue a rede elétrica; a equipe confere se ela corresponde ao trecho desligado.',
     citadas: 'Comunidades citadas', vizNao: 'Vizinhas não citadas', uc: n => n === 1 ? 'UC' : 'UCs', antecedencia: 'Antecedência',
     ant: { ok: 'Antecedência OK', legal: h => `Abaixo do prazo legal de ${h} horas`, interno: d => `Abaixo do prazo interno de ${d} dias`,
       semData: 'Informe a data do desligamento', passou: 'a data já passou', faltamH: h => `faltam ${h} h`, faltamD: d => `faltam ${d} dias` },
@@ -1061,6 +1119,9 @@ const RT = {
     vizinhas: 'Nearby areas', vizSim: n => `Yes: ${n} ${n === 1 ? 'locality' : 'localities'} not named`, nao: 'No',
     telefone: 'Customer service phone', exemplo: ' (example, to be confirmed)',
     registro: 'Record', chave: 'Open switch', alim: 'Feeder', ucs: 'Affected consumer units',
+    area: 'Area', alims: 'Feeders', areaDesenhada: 'Drawn area', areaImportada: a => `Imported area (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polygons, ` : '') + `${v} ${v === 1 ? 'vertex' : 'vertices'}`,
+    areaNota: 'The area does not follow the power grid; the field team checks that it matches the section switched off.',
     citadas: 'Named communities', vizNao: 'Nearby areas not named', uc: n => n === 1 ? 'unit' : 'units', antecedencia: 'Advance notice',
     ant: { ok: 'Advance notice OK', legal: h => `Below the legal minimum of ${h} hours`, interno: d => `Below the internal target of ${d} days`,
       semData: 'Enter the outage date', passou: 'the date has passed', faltamH: h => `${h} h left`, faltamD: d => `${d} days left` },
@@ -1078,6 +1139,9 @@ const RT = {
     vizinhas: 'Localidades vecinas', vizSim: n => `Sí: ${n} ${n === 1 ? 'localidad no mencionada' : 'localidades no mencionadas'} por su nombre`, nao: 'No',
     telefone: 'Teléfono de atención', exemplo: ' (ejemplo, a confirmar)',
     registro: 'Registro', chave: 'Seccionador abierto', alim: 'Alimentador', ucs: 'Unidades consumidoras afectadas',
+    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área dibujada', areaImportada: a => `Área importada (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${v} ${v === 1 ? 'vértice' : 'vértices'}`,
+    areaNota: 'El área no sigue la red eléctrica; el equipo verifica que corresponda al tramo desconectado.',
     citadas: 'Comunidades mencionadas', vizNao: 'Vecinas no mencionadas', uc: n => n === 1 ? 'unidad' : 'unidades', antecedencia: 'Antelación',
     ant: { ok: 'Antelación suficiente', legal: h => `Por debajo del plazo legal de ${h} horas`, interno: d => `Por debajo del plazo interno de ${d} días`,
       semData: 'Indique la fecha del corte', passou: 'la fecha ya pasó', faltamH: h => `faltan ${h} h`, faltamD: d => `faltan ${d} días` },
@@ -1091,7 +1155,8 @@ function preencherRoteiro(c, f, ant, sD) {
   const { inteiras, parciais, vizinhas } = classificar(c);
   const agora = new Date();
   const gerado = `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-  const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${codAtual}`;
+  const A = c.area ? areaAtual : null;
+  const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${A ? `AREA-${(A.resumo.sha256 || 'SEMCODIGO').slice(0, 8).toUpperCase()}` : codAtual}`;
   const L = idiomaAtual, T = RT[L];
   const ou = l => l.length ? esc(l.join(', ')) : '—';
   const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${T.uc(x[1])})`).join('; ') : '—';
@@ -1118,8 +1183,9 @@ function preencherRoteiro(c, f, ant, sD) {
     </table>
     <h2>${T.registro}</h2>
     <table>
-      <tr><th>${T.chave}</th><td>${esc(codAtual)}</td></tr>
-      <tr><th>${T.alim}</th><td>${esc(c.alim)}</td></tr>
+      ${A ? `<tr><th>${T.area}</th><td>${A.origem === 'importada' ? T.areaImportada(esc(A.arquivo)) : T.areaDesenhada} · ${T.vertices(A.resumo.poligonos, A.resumo.vertices)}. ${T.areaNota}</td></tr>`
+        : `<tr><th>${T.chave}</th><td>${esc(codAtual)}</td></tr>`}
+      <tr><th>${A && c.alims.length > 1 ? T.alims : T.alim}</th><td>${esc(c.alim)}</td></tr>
       <tr><th>${T.ucs}</th><td>${fmt(c.n)}</td></tr>
       <tr><th>${T.citadas}</th><td>${comUCs(citadas(c))}</td></tr>
       <tr><th>${T.vizNao}</th><td>${comUCs(vizinhas)}</td></tr>
@@ -1131,7 +1197,9 @@ function preencherRoteiro(c, f, ant, sD) {
       ${T.verif}</p>`;
   // Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular).
   // Data, horário e "gerado" ficam sempre no formato canônico (dd/mm/aaaa, 8h às 14h), em qualquer idioma.
-  const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\nchave=${codAtual}\ngerado=${gerado}`;
+  // No modo área, a linha "chave" dá lugar a "area": origem, polígonos, vértices e o SHA-256 da forma canônica do contorno
+  const origemReg = A ? `area=${A.origem};poligonos=${A.resumo.poligonos};vertices=${A.resumo.vertices};sha256=${A.resumo.sha256 || 'indisponivel'}` : `chave=${codAtual}`;
+  const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\n${origemReg}\ngerado=${gerado}`;
   const minha = ++seqHash;
   hashPronto = sha256hex(entrada)
     .then(h => { if (minha === seqHash) $('rtCodigo').textContent = h; })
@@ -1310,6 +1378,7 @@ const ondeFica = (lat, lon, camada, prop) => (camada.features.find(f => noPoligo
 const obraCamada = L.layerGroup().addTo(mapa);
 let obraAtual = null;
 function marcarObra(lat, lon) {
+  escolherModo('obra');
   fecharSugestoes(); mapa.closePopup(); obraCamada.clearLayers();
   const r = analisarPonto(lat, lon), fora = r.situacao === 'fora';
   obraAtual = { lat, lon, ...r };
@@ -1347,11 +1416,293 @@ function limparObra() { obraCamada.clearLayers(); obraAtual = null; $('blocoObra
 $('btnLimparObra').addEventListener('click', limparObra);
 // Botão direito no mapa: marcar o ponto da obra ali
 mapa.on('contextmenu', e => {
+  if (desenho) return;  // desenhando a área: o botão direito não marca ponto da obra
   const el = document.createElement('div'); el.className = 'pop';
   el.innerHTML = '<button class="prim acao">Marcar ponto da obra aqui</button>';
   el.querySelector('button').addEventListener('click', () => marcarObra(+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)));
   L.popup().setLatLng(e.latlng).setContent(el).openOn(mapa);
 });
+
+// ---------- Desligamento por área (desenhada ou importada) ----------
+// Mesmo cálculo de nucleo/area.py: UCs dentro do contorno e, daí em diante, as regras de
+// desligamento.resumir (inteira, em parte, vizinha). A área NÃO segue a rede elétrica.
+// Segurança: o arquivo importado é só dado. Dele saem apenas números (as coordenadas);
+// nenhum texto do arquivo vai para a página, e o nome do arquivo só entra como texto.
+const CFG_AREA = D.area, REGRAS = D.regrasAviso;
+const arred = v => +v.toFixed(CFG_AREA.casas);
+const mesmoPonto = (a, b) => a[0] === b[0] && a[1] === b[1];
+const nVertices = polis => polis.reduce((s, p) => s + p.reduce((t, a) => t + a.length - (a.length > 1 && mesmoPonto(a[0], a[a.length - 1]) ? 1 : 0), 0), 0);
+function caixaPoligono(p) {
+  const xs = p[0].map(v => v[0]), ys = p[0].map(v => v[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+const noPoligonoArea = (lat, lon, aneis) => noAnel(lon, lat, aneis[0]) && !aneis.slice(1).some(b => noAnel(lon, lat, b));
+function ucsNaArea(polis) {
+  const caixas = polis.map(caixaPoligono), dentro = [];
+  D.ucs.forEach((u, i) => {
+    const lat = u[0], lon = u[1];
+    for (let k = 0; k < polis.length; k++) {
+      const [x0, y0, x1, y1] = caixas[k];
+      if (x0 <= lon && lon <= x1 && y0 <= lat && lat <= y1 && noPoligonoArea(lat, lon, polis[k])) { dentro.push(i); break; }
+    }
+  });
+  return dentro;
+}
+// Algum vértice da área no município (com a margem da divisa) ou algum vértice do município na área
+const tocaOMunicipio = polis => polis.some(p => p.some(a => a.some(([x, y]) => dentroDaArea(y, x))))
+  || AREA.some(m => m.some(a => a.some(([x, y]) => polis.some(p => noPoligonoArea(y, x, p)))));
+function analisarArea(polis) {
+  if (nVertices(polis) > CFG_AREA.maxVertices) return { situacao: 'vertices', ucs: [] };
+  if (!tocaOMunicipio(polis)) return { situacao: 'fora', ucs: [] };
+  const ucs = ucsNaArea(polis);
+  return { situacao: ucs.length ? 'ok' : 'sem_clientes', ucs };
+}
+// Forma canônica (entra no código de verificação): "lon,lat" com 6 casas; ";" entre vértices, "|" entre anéis, "/" entre polígonos
+const formaCanonica = polis => polis.map(p => p.map(a => a.map(([x, y]) => `${x.toFixed(CFG_AREA.casas)},${y.toFixed(CFG_AREA.casas)}`).join(';')).join('|')).join('/');
+
+// Mesmas regras de desligamento.resumir: agrupa por comunidade (na ordem alfabética do Python),
+// distrito mais frequente (empate: o primeiro em ordem alfabética), ordem estável por UCs afetadas
+const TOTAL_COM = D.comPrev.map(() => 0);
+D.ucs.forEach(u => { TOTAL_COM[u[3]]++; });
+function resumirArea(idx) {
+  const g = new Map();
+  for (const i of idx) {
+    const u = D.ucs[i];
+    let x = g.get(u[3]);
+    if (!x) g.set(u[3], x = { n: 0, conf: 0, dist: new Map() });
+    x.n++; x.conf += u[5]; x.dist.set(u[11], (x.dist.get(u[11]) || 0) + 1);
+  }
+  const linhas = [...g.entries()].sort((a, b) => a[0] - b[0]).map(([ic, x]) => {
+    let melhor = -1, nMelhor = 0;
+    for (const [d, n] of x.dist) if (n > nMelhor || (n === nMelhor && d < melhor)) { melhor = d; nMelhor = n; }
+    return [D.comPrev[ic], x.n, TOTAL_COM[ic], x.n / TOTAL_COM[ic] < REGRAS.limiarTotal, x.conf / x.n / 100, false, D.distritosUC[melhor]];
+  });
+  linhas.sort((a, b) => b[1] - a[1]);  // estável (ES2019)
+  const soma = idx.length;
+  linhas.forEach(l => { l[5] = l[3] && l[1] <= REGRAS.limiteFragmento && l[1] / soma < REGRAS.limiteParticipacao; });
+  if (linhas.length && linhas.every(l => l[5])) linhas[0][5] = false;  // área minúscula: cita ao menos a maior
+  return linhas;
+}
+// Cenário no mesmo formato de D.cenarios[cod], para o aviso, a janela e o PDF seguirem o mesmo caminho
+function cenarioDaArea(idx) {
+  const ativ = PF.atividades.map(() => 0), alims = new Set();
+  let rural = 0;
+  for (const i of idx) { const u = D.ucs[i]; if (u[12] >= 0) ativ[u[12]]++; alims.add(D.trafos[u[2]][4]); rural += u[8]; }
+  const lista = [...alims].sort();
+  return { area: true, ucsIdx: idx, n: idx.length, com: resumirArea(idx), ativ, alims: lista, alim: lista.join(', '),
+    rural: rural / idx.length, trafos: [], mt: [], antigo: '', nLocais: 0 };
+}
+
+// ----- Leitura do arquivo (GeoJSON ou KML): só as coordenadas -----
+class ErroArea extends Error {}
+function anelValido(coords) {  // [[lon, lat], ...] -> anel fechado com 6 casas, ou null
+  if (!Array.isArray(coords)) return null;
+  const a = [];
+  for (const v of coords) {
+    if (!Array.isArray(v) || v.length < 2 || typeof v[0] !== 'number' || typeof v[1] !== 'number' || !isFinite(v[0]) || !isFinite(v[1])) return null;
+    if (Math.abs(v[0]) > 180 || Math.abs(v[1]) > 90) throw new ErroArea('As coordenadas do arquivo não estão em graus de latitude e longitude (WGS 84). Exporte o contorno nesse sistema e importe de novo.');
+    a.push([arred(v[0]), arred(v[1])]);
+  }
+  if (a.length && !mesmoPonto(a[0], a[a.length - 1])) a.push(a[0].slice());
+  return a.length >= 4 ? a : null;
+}
+function poligonoValido(aneis) {
+  if (!Array.isArray(aneis) || !aneis.length) return null;
+  const ext = anelValido(aneis[0]);
+  return ext ? [ext, ...aneis.slice(1).map(anelValido).filter(Boolean)] : null;
+}
+function poligonosDoGeoJSON(obj) {
+  const polis = [];
+  const visitar = (g, prof) => {
+    if (!g || typeof g !== 'object' || prof > 20) return;
+    if (g.type === 'FeatureCollection' && Array.isArray(g.features)) g.features.forEach(f => visitar(f, prof + 1));
+    else if (g.type === 'Feature') visitar(g.geometry, prof + 1);
+    else if (g.type === 'GeometryCollection' && Array.isArray(g.geometries)) g.geometries.forEach(x => visitar(x, prof + 1));
+    else if (g.type === 'Polygon') polis.push(poligonoValido(g.coordinates));
+    else if (g.type === 'MultiPolygon' && Array.isArray(g.coordinates)) g.coordinates.forEach(p => polis.push(poligonoValido(p)));
+  };
+  visitar(obj, 0);
+  return polis.filter(Boolean);
+}
+function poligonosDoKML(texto) {
+  // XML puro: o DOMParser não executa nada; só o texto de <coordinates> é aproveitado
+  const doc = new DOMParser().parseFromString(texto, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new ErroArea('O arquivo KML está malformado e não pôde ser lido.');
+  const filhos = (el, nome) => [...el.children].filter(c => c.localName === nome);
+  const coordsDe = el => {  // <outerBoundaryIs>/<innerBoundaryIs> -> <LinearRing> -> <coordinates>
+    const anel = filhos(el, 'LinearRing')[0], c = anel && filhos(anel, 'coordinates')[0];
+    if (!c) return null;
+    return c.textContent.trim().split(/\s+/).filter(Boolean).map(t => t.split(',').slice(0, 2).map(Number));
+  };
+  return [...doc.getElementsByTagNameNS('*', 'Polygon')].map(p => poligonoValido([
+    ...filhos(p, 'outerBoundaryIs').map(coordsDe), ...filhos(p, 'innerBoundaryIs').map(coordsDe)].filter(Boolean)))
+    .filter(Boolean);
+}
+function lerContorno(nome, texto) {
+  const ext = (nome.toLowerCase().match(/\.(kml|geojson|json)$/) || [])[1];
+  if (!ext) throw new ErroArea('Formato não reconhecido. Use um arquivo .kml, .geojson ou .json.');
+  if (!texto.trim()) throw new ErroArea('O arquivo está vazio.');
+  let polis;
+  if (ext === 'kml') polis = poligonosDoKML(texto);
+  else {
+    let obj;
+    try { obj = JSON.parse(texto); } catch (e) { throw new ErroArea('O arquivo não é um GeoJSON válido (o conteúdo não é JSON).'); }
+    if (!obj || typeof obj !== 'object' || typeof obj.type !== 'string') throw new ErroArea('Formato não reconhecido: o JSON não é um GeoJSON (falta o campo "type").');
+    polis = poligonosDoGeoJSON(obj);
+  }
+  if (!polis.length) throw new ErroArea('O arquivo não tem nenhum polígono (Polygon ou MultiPolygon). Linhas e pontos não definem uma área.');
+  return polis;
+}
+
+// ----- Estado, desenho no mapa e painel -----
+const areaCamada = L.featureGroup().addTo(mapa), desenhoCamada = L.layerGroup().addTo(mapa);
+let areaAtual = null, desenho = null;  // desenho: vértices [lat, lon] enquanto o operador clica
+function desenharContornoArea() {
+  areaCamada.clearLayers();
+  if (!areaAtual) return;
+  areaCamada.addLayer(L.geoJSON(geojsonDaArea(areaAtual), { pane: 'destaqueTopo', interactive: false,
+    style: { color: css('--ambar'), weight: 3, dashArray: '8 6', fillColor: css('--ambar'), fillOpacity: 0.08 } }));
+}
+function geojsonDaArea(a) {
+  const geometry = a.poligonos.length === 1 ? { type: 'Polygon', coordinates: a.poligonos[0] } : { type: 'MultiPolygon', coordinates: a.poligonos };
+  return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry,
+    properties: { origem: a.origem, vertices: a.resumo.vertices, municipio: DIST.municipio, aviso: 'Área informada pelo operador; não segue a rede elétrica.' } }] };
+}
+function mostrarErroArea(msg) {
+  const el = $('areaErro');
+  el.textContent = msg || ''; el.classList.toggle('oculto', !msg);
+}
+function limparArea() {
+  areaAtual = null; areaCamada.clearLayers(); sairDoDesenho();
+  $('areaInfo').classList.add('oculto'); $('legArea').classList.add('oculto'); $('legRamal').classList.remove('oculto');
+}
+async function aplicarArea(polis, origem, arquivo) {
+  pararLeitura(); mostrarErroArea('');
+  if (avisoAtual) { destaque.clearLayers(); avisoAtual = null; codAtual = null; estadoSimulado(false); }
+  limparArea();
+  const r = analisarArea(polis);
+  if (r.situacao === 'vertices') { mostrarErroArea(`O contorno tem ${fmt(nVertices(polis))} vértices; o limite é ${fmt(CFG_AREA.maxVertices)}. Simplifique o contorno e importe de novo.`); return; }
+  if (r.situacao === 'fora') { mostrarErroArea(`A área fica fora de ${DIST.municipio}, o município carregado neste mapa. Para outro município, gere o Farol daquele município.`); return; }
+  let sha = null;
+  try { sha = await sha256hex(formaCanonica(polis)); } catch (e) { sha = null; }
+  areaAtual = { poligonos: polis, origem, arquivo, resumo: { poligonos: polis.length, vertices: nVertices(polis), sha256: sha } };
+  desenharContornoArea(); $('legArea').classList.remove('oculto'); $('legRamal').classList.add('oculto');  // a área não pinta ramal
+  const desc = `${origem === 'importada' ? `Área importada (${arquivo})` : 'Área desenhada'} · ${RT['pt-BR'].vertices(polis.length, areaAtual.resumo.vertices)}`;
+  $('areaDesc').textContent = desc; $('areaInfo').classList.remove('oculto');
+  if (r.situacao === 'sem_clientes') {
+    mapa.fitBounds(areaCamada.getBounds().pad(0.15), { maxZoom: 16 });
+    mostrarErroArea('Nenhum cliente dentro da área. Confira se o contorno cobre o trecho que será desligado.');
+    return;
+  }
+  const c = cenarioDaArea(r.ucs);
+  avisoAtual = c; codAtual = null;
+  desenharDestaque(c, null, true);
+  const zona = c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
+  $('cdRot').textContent = 'Área desligada';
+  $('cdChave').textContent = origem === 'importada' ? 'Área importada' : 'Área desenhada';
+  $('cdMeta').textContent = `${c.alims.length > 1 ? 'Alimentadores' : 'Alimentador'} ${c.alim} · ${zona}`;
+  $('numClientes').textContent = fmt(c.n);
+  const nCit = citadas(c).length;
+  $('numComunidades').textContent = nCit;
+  $('numComunidadesLeg').textContent = nCit === 1 ? 'comunidade no aviso' : 'comunidades no aviso';
+  desenharComunidades(c);
+  atualizarAviso();
+  estadoSimulado(true); ativarAba('desligamento');
+}
+
+// Desenho: cada clique no mapa acrescenta um vértice (chaves e UCs ficam sem clique enquanto isso)
+function atualizarDesenho() {
+  desenhoCamada.clearLayers();
+  if (!desenho) return;
+  const amb = css('--ambar'), n = desenho.length;
+  if (n > 1) desenhoCamada.addLayer(L.polyline(desenho, { pane: 'destaqueTopo', interactive: false, color: amb, weight: 3 }));
+  if (n > 2) desenhoCamada.addLayer(L.polyline([desenho[n - 1], desenho[0]], { pane: 'destaqueTopo', interactive: false, color: amb, weight: 2, dashArray: '4 6' }));
+  desenho.forEach(p => desenhoCamada.addLayer(L.circleMarker(p, { pane: 'destaqueTopo', interactive: false, radius: 5, color: css('--noite'), weight: 2, fillColor: amb, fillOpacity: 1 })));
+  $('areaPassos').textContent = n === 0 ? 'Clique no mapa para marcar o primeiro canto da área.'
+    : n < 3 ? `${n} ${n === 1 ? 'ponto marcado' : 'pontos marcados'}. Marque pelo menos 3 para concluir.`
+    : `${n} pontos marcados. Continue clicando nos cantos ou conclua a área.`;
+  $('btnDesfazer').disabled = n === 0; $('btnConcluir').disabled = n < 3;
+}
+function entrarNoDesenho() {
+  if (avisoAtual) limpar();
+  limparArea(); mostrarErroArea('');
+  desenho = [];
+  mapa.doubleClickZoom.disable(); mapa.closePopup();
+  $('mapa').classList.add('desenhando');
+  $('areaDesenho').classList.remove('oculto'); $('areaBotoes').classList.add('oculto'); $('areaDica').classList.add('oculto');
+  atualizarDesenho();
+}
+function sairDoDesenho() {
+  if (!desenho) return;
+  desenho = null; desenhoCamada.clearLayers();
+  mapa.doubleClickZoom.enable();
+  $('mapa').classList.remove('desenhando');
+  $('areaDesenho').classList.add('oculto'); $('areaBotoes').classList.remove('oculto'); $('areaDica').classList.remove('oculto');
+}
+mapa.on('click', e => {
+  if (!desenho) return;
+  desenho.push([arred(e.latlng.lat), arred(e.latlng.lng)]);
+  atualizarDesenho();
+});
+$('btnDesenhar').addEventListener('click', entrarNoDesenho);
+$('btnDesfazer').addEventListener('click', () => { if (desenho && desenho.length) { desenho.pop(); atualizarDesenho(); } });
+$('btnCancelar').addEventListener('click', sairDoDesenho);
+$('btnConcluir').addEventListener('click', () => {
+  if (!desenho || desenho.length < 3) return;
+  const anel = desenho.map(([lat, lon]) => [lon, lat]);
+  anel.push(anel[0].slice());
+  sairDoDesenho();
+  aplicarArea([[anel]], 'desenhada', null);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && desenho) sairDoDesenho(); });
+
+// Importar: o arquivo é lido só no navegador (FileReader), sem ir para servidor nenhum
+$('btnImportar').addEventListener('click', () => { $('arqArea').value = ''; $('arqArea').click(); });
+$('arqArea').addEventListener('change', e => {
+  const arq = e.target.files && e.target.files[0];
+  if (!arq) return;
+  const nome = arq.name.length > 80 ? arq.name.slice(0, 77) + '…' : arq.name;
+  if (avisoAtual) limpar();
+  limparArea(); mostrarErroArea('');
+  if (arq.size === 0) { mostrarErroArea('O arquivo está vazio.'); return; }
+  if (arq.size > CFG_AREA.maxBytes) { mostrarErroArea(`O arquivo tem ${(arq.size / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB; o limite é ${CFG_AREA.maxBytes / 1048576} MB.`); return; }
+  const leitor = new FileReader();
+  leitor.onerror = () => mostrarErroArea('Não foi possível ler o arquivo.');
+  leitor.onload = () => {
+    let polis;
+    try { polis = lerContorno(arq.name, String(leitor.result)); }
+    catch (err) { mostrarErroArea(err instanceof ErroArea ? err.message : 'Formato não reconhecido: não foi possível ler o contorno do arquivo.'); return; }
+    aplicarArea(polis, 'importada', nome);
+  };
+  leitor.readAsText(arq);
+});
+
+// Baixar a área (GeoJSON), para guardar ou compartilhar o contorno
+$('btnBaixarArea').addEventListener('click', () => {
+  if (!areaAtual) return;
+  const agora = new Date();
+  const carimbo = `${isoData(agora).replace(/-/g, '')}-${pad2(agora.getHours())}${pad2(agora.getMinutes())}`;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(geojsonDaArea(areaAtual), null, 1)], { type: 'application/geo+json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = `area_${norm(DIST.municipio).replace(/[^a-z0-9]+/g, '-')}_${carimbo}.geojson`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// ----- Como definir o desligamento: por chave, por ponto da obra ou por área -----
+function escolherModo(m) {
+  if (m === modo) return;
+  const antes = modo;
+  modo = m;
+  document.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.modo === m)));
+  // trocar entre chave/ponto e área desfaz o desligamento do outro modo
+  if (antes === 'area') { limparArea(); mostrarErroArea(''); if (avisoAtual && avisoAtual.area) limpar(); }
+  if (m === 'area') { limparObra(); if (avisoAtual) limpar(); }
+  $('instrObra').classList.toggle('oculto', m !== 'obra');
+  $('blocoArea').classList.toggle('oculto', m !== 'area');
+  estadoSimulado(!!avisoAtual);
+}
+document.querySelectorAll('.modos button').forEach(b => b.addEventListener('click', () => escolherModo(b.dataset.modo)));
 
 // ---------- Botões da lateral ----------
 function sortear() {

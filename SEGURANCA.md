@@ -31,6 +31,8 @@ Nenhum dado de cliente real da distribuidora foi usado.
 
 **Biblioteca e fontes embutidas e conferidas.** A biblioteca de mapas (Leaflet 1.9.4) e as fontes IBM Plex Sans e IBM Plex Mono (licença SIL OFL 1.1) vêm embutidas no HTML, e não de uma CDN ou de um servidor de fontes. Foram copiadas dos pacotes oficiais, e o código de integridade de cada pacote foi conferido com o publicado pelo registro npm (ver `ORIGEM.md` em `src/comunidades/apresentacao/vendor/leaflet/` e em `vendor/ibm-plex/`). O git guarda esses arquivos sem converter o fim de linha (`.gitattributes`), para o SHA-256 de cada um continuar igual ao do pacote. Sem internet, o mapa funciona normalmente, só sem a imagem de fundo.
 
+**Contorno importado tratado como dado.** No desligamento por área, o arquivo (.kml, .geojson ou .json, até 5 MB e 20.000 vértices) é lido só no navegador, sem ir para nenhum servidor. Dele saem apenas as coordenadas dos polígonos: nomes, descrições e propriedades são descartados, e nenhum texto do arquivo entra na página como HTML (um KML pode trazer HTML e scripts nas descrições). O nome do arquivo aparece só como texto. A CSP continua a mesma, e o botão "Baixar área (GeoJSON)" funciona sem nenhuma exceção nova. Para a área, o HTML leva por UC só dois códigos a mais (distrito e atividade), nunca nome, número de UC ou endereço.
+
 **Código de verificação no PDF.** O rodapé do roteiro traz um código SHA-256 calculado no navegador. Qualquer alteração no texto gera um código diferente.
 
 - O código é calculado sobre este texto, em UTF-8, com as linhas separadas por quebra de linha simples:
@@ -42,6 +44,11 @@ Nenhum dado de cliente real da distribuidora foi usado.
   gerado=<dd/mm/aaaa hh:mm>
   ```
 - Com o aviso em inglês ou espanhol, o `texto` entra no idioma escolhido, mas `data`, `horario` e `gerado` continuam nos formatos acima (dd/mm/aaaa, "8h às 14h" e dd/mm/aaaa hh:mm).
+- No desligamento por área, a linha `chave=` dá lugar a:
+  ```
+  area=<desenhada ou importada>;poligonos=<n>;vertices=<n>;sha256=<SHA-256 da forma canônica do contorno>
+  ```
+  A forma canônica é o texto `lon,lat` de cada vértice com 6 casas decimais, com `;` entre vértices, `|` entre anéis e `/` entre polígonos (cada anel fechado, como no GeoJSON). Quem tem o GeoJSON baixado pelo botão "Baixar área (GeoJSON)" recalcula esse código (ver `forma_canonica` em `src/comunidades/nucleo/area.py`). O número do aviso passa a ser `AV-<aaaammdd>-AREA-<8 primeiros caracteres desse código>`.
 - Para conferir, basta recalcular. Em Python: `hashlib.sha256(entrada.encode("utf-8")).hexdigest()`.
 - **Limite:** o código detecta alteração no texto em relação ao que foi gerado, mas **não é assinatura digital**. Quem altera o texto pode calcular um código novo. Para servir de prova, o código precisa ficar registrado num sistema da distribuidora no momento da geração (ver abaixo).
 
