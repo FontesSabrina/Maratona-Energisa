@@ -13,3 +13,11 @@ wheels/
 data/
 saida/*
 !saida/mapa_comunidades.html
+# Página de entrada e os resumos de cada município (para refazer a entrada a partir de um clone)
+!saida/index.html
+!saida/resumo_mapa.json
+# saida/muriae/ volta a valer só para estes arquivos (o resto da pasta continua ignorado)
+!saida/muriae/
+saida/muriae/*
+!saida/muriae/mapa_comunidades.html
+!saida/muriae/resumo_mapa.json

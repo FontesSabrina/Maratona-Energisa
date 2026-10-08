@@ -14,6 +14,18 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Arquitetura: o projeto está organizado em fontes/ (dados reais), simulacao/ (dados fictícios), nucleo/ (regras do produto, sem depender de onde vêm os dados), validacao/ (métricas e testes) e apresentacao/ (mapa, PDF e tela). Código novo já deve respeitar essa separação: o nucleo não lê arquivos nem conhece o IBGE.
 - Segurança e LGPD: minimização de dados. Nada de nome de titular, número de UC ou endereço em telas, no HTML gerado ou em PDFs; só comunidades, classes e contagens. O HTML gerado não pode chamar nenhum servidor além dos de fundo de mapa. Nenhum segredo, senha ou chave no código ou no git. O texto do aviso atual (fazenda a fazenda) pode listar nomes de imóveis e ruas, porque reproduz o comunicado público que já é transmitido no rádio; ele nunca inclui nomes de pessoas, números de UC nem coordenadas.
 
+## Arquitetura e MVC
+As pastas seguem uma arquitetura em camadas, parente do MVC, que além de separar regras, tela e orquestração também separa os dados reais (fontes/) dos fictícios (simulacao/).
+
+| MVC | No projeto |
+|---|---|
+| Model | nucleo/ (regras) + fontes/ e simulacao/ (dados) e o Model do JavaScript do mapa (estado da tela e regras puras) |
+| View | apresentacao/ (mapa, página de entrada e PDF) e a View do JavaScript do mapa |
+| Controller | pipeline.py e o Controller do JavaScript do mapa |
+
+- O script do mapa (apresentacao/mapa_template.html) tem três partes, marcadas por comentário: o Model (objeto `estado` e regras puras, sem tocar no HTML), a View (desenha lateral, mapa, PDF e tela de abertura a partir do estado, sem mudar o estado) e o Controller (eventos e abertura; atualiza o estado e pede à View para redesenhar).
+- A página de entrada (saida/index.html) é gerada por apresentacao/entrada.py a partir dos resumo_mapa.json que cada mapa grava (só município, UF e contagens). Não tem script.
+
 ## Configuração da distribuidora
 - Tudo o que muda de uma distribuidora para outra (nome, telefone, município, prazos, expediente, limites do aviso e perfis de sensibilidade) fica em distribuidoras/demo-leopoldina.toml. Para outra empresa, copiar distribuidoras/MODELO.toml.
 - O pipeline lê esse arquivo (src/comunidades/distribuidora.py) e passa os valores ao nucleo; o nucleo não lê arquivos. Outra configuração: py -m uv run comunidades --distribuidora distribuidoras/arquivo.toml
@@ -28,11 +40,14 @@ Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): "Fazenda por fazenda, ou uma c
 - Avaliação detalhada: py -m uv run python -m comunidades.validacao.avaliacao
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez
 - Janela de menor dano (ramais rurais, perfis hipotéticos): py -m uv run python -m comunidades.validacao.janela
+- Página de entrada (lista os municípios já gerados): py -m uv run python -m comunidades.apresentacao.entrada (o pipeline já gera no fim)
+- Testes do navegador: ver testes/navegador/LEIAME.md
 
 ## Referências para comparação (desde o passo 12)
 - Métricas: saida/metricas_passo12.txt (Leopoldina) e saida/muriae/metricas_passo12.txt (Muriaé), iguais às do passo 10b. São a referência de "antes e depois".
-- Avisos e janelas para os testes JS × Python: saida/referencias_passo12/ e saida/muriae/referencias_passo12/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações; areas.json: 200 áreas sorteadas com o resultado esperado). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
-- Regenerar: py -m uv run python -m comunidades.validacao.referencias e py -m uv run python -m comunidades.validacao.area (com $env:FAROL_DISTRIBUIDORA para Muriaé).
+- Avisos e janelas para os testes JS × Python: saida/referencias_passo12/ e saida/muriae/referencias_passo12/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações; areas.json: 200 áreas sorteadas com o resultado esperado; obra.json: 200 pontos da obra sorteados, desde o passo 13). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
+- Regenerar: py -m uv run python -m comunidades.validacao.referencias, py -m uv run python -m comunidades.validacao.area e py -m uv run python -m comunidades.validacao.obra (com $env:FAROL_DISTRIBUIDORA para Muriaé).
+- Tela (desde o passo 13): tela.json nas mesmas pastas, gravado pelo testes/navegador/teste_tela.mjs --gravar a partir da versão do passo 12 (antes do MVC). É o retrato de tudo o que a tela mostra em cada chave, ponto da obra e área; uma reorganização do código tem de manter tudo idêntico. Só regrave quando uma mudança de tela for intencional.
 - No passo 12, resumir() passou a ordenar de forma estável (empate no número de UCs afetadas: ordem alfabética). Só mudou a ordem de comunidades empatadas em 30 avisos de Leopoldina e 21 de Muriaé; as referências do passo 10b (saida/referencias_passo10b/, saida/metricas_passo10b.txt) ficam guardadas para consulta.
 - Esses arquivos ficam fora do git (saida/ é ignorada): se faltarem, regenere rodando o pipeline e grave de novo.
 

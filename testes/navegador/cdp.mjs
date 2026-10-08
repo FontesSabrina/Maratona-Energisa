@@ -17,7 +17,8 @@ const CANDIDATOS = [
 const NAVEGADOR = CANDIDATOS.find(c => existsSync(c));
 const espera = ms => new Promise(r => setTimeout(r, ms));
 
-export async function abrir(html, { largura = 1440, altura = 900 } = {}) {
+// antesDeNavegar(pagina): para preparar a página (emulação, scripts de teste) antes de carregar o arquivo
+export async function abrir(html, { largura = 1440, altura = 900, antesDeNavegar = null } = {}) {
   if (!NAVEGADOR) throw new Error('Edge ou Chrome não encontrado. Defina FAROL_NAVEGADOR com o caminho do msedge.exe ou chrome.exe.');
   if (!existsSync(html)) throw new Error(`Mapa não encontrado: ${html}. Rode o pipeline antes (py -m uv run comunidades --so-algoritmo).`);
   const porta = 9300 + Math.floor(Math.random() * 500);
@@ -41,9 +42,16 @@ export async function abrir(html, { largura = 1440, altura = 900 } = {}) {
   // Violações de CSP também chegam como evento no documento
   await pagina.send('Page.addScriptToEvaluateOnNewDocument', { source:
     "window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));" });
+  if (antesDeNavegar) await antesDeNavegar(pagina);
   const carregou = pagina.uma('Page.loadEventFired');
   await pagina.send('Page.navigate', { url: pathToFileURL(html).href });
   await carregou;
+  // O mapa termina de montar depois do "load" (por etapas, com a tela de abertura): espera o estado "pronto".
+  // Páginas sem esse estado (a de entrada) seguem direto.
+  pagina.estadoFinal = await pagina.avaliar(`new Promise(ok => { const t0 = Date.now(), ver = () => {
+    const e = document.documentElement.dataset.farol;
+    if (!e || e === 'pronto' || e === 'erro' || Date.now() - t0 > 60000) ok(e || 'sem estado'); else setTimeout(ver, 50); }; ver(); })`);
+  if (pagina.estadoFinal !== 'pronto' && pagina.estadoFinal !== 'sem estado') throw new Error(`O mapa não ficou pronto: ${pagina.estadoFinal} ${JSON.stringify(pagina.excecoes)}`);
   await pagina.avaliar('new Promise(r => setTimeout(r, 300))');
   pagina.fechar = async () => { try { await navegador.send('Browser.close'); } catch (e) { proc.kill(); } };
   pagina.navegador = navegador;

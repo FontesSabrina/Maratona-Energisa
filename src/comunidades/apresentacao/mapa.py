@@ -4,6 +4,7 @@ com painel para simular o desligamento de qualquer chave."""
 import base64
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -27,6 +28,8 @@ from ..validacao.avaliacao import avaliar
 
 TEMPLATE = Path(__file__).with_name("mapa_template.html")
 ARQ_SAIDA = C.SAIDA / "mapa_comunidades.html"
+SAIDA_RAIZ = C.RAIZ / "saida"                              # onde fica a página de entrada (index.html)
+ARQ_RESUMO = C.SAIDA / "resumo_mapa.json"                  # só contagens, para o cartão do município na entrada
 LEAFLET = Path(__file__).with_name("vendor") / "leaflet"   # Leaflet 1.9.4 embutido (sem CDN)
 PLEX = Path(__file__).with_name("vendor") / "ibm-plex"     # fontes IBM Plex embutidas (OFL)
 MARCA = Path(__file__).with_name("marca")                  # logo do Farol
@@ -172,17 +175,39 @@ def construir(dist=None):
              "regrasAviso": {"limiarTotal": dist.regras.limiar_total, "limiteFragmento": dist.regras.limite_fragmento,
                              "limiteParticipacao": dist.regras.limite_participacao},
              "area": {"maxVertices": MAX_VERTICES, "casas": CASAS, "maxBytes": 5 * 1024 * 1024}}
-    favicon = base64.b64encode((MARCA / "farol-pequeno.svg").read_bytes()).decode()
     html = (TEMPLATE.read_text(encoding="utf-8")
             .replace("<!--__LOGO__-->", (MARCA / "farol.svg").read_text(encoding="utf-8").strip())
-            .replace("__FAVICON__", f"data:image/svg+xml;base64,{favicon}")
+            .replace("<!--__LOGO_ABERTURA__-->", logo_com_feixe())
+            .replace("__ENTRADA__", Path(os.path.relpath(SAIDA_RAIZ / "index.html", C.SAIDA)).as_posix())  # "Trocar área"
+            .replace("__FAVICON__", favicon())
             .replace("/*__FONTES__*/", _fontes_embutidas())
             .replace("/*__LEAFLET_CSS__*/", (LEAFLET / "leaflet.css").read_text(encoding="utf-8"))
             .replace("/*__LEAFLET_JS__*/", (LEAFLET / "leaflet.js").read_text(encoding="utf-8"))
             .replace("/*__DADOS__*/null", json.dumps(dados, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")))
     html = html.replace("/*__CSP__*/", politica_seguranca(html))
     ARQ_SAIDA.write_text(html, encoding="utf-8", newline="\n")
+    # Cartão do município na página de entrada: nome, UF e contagens (nada de dados de clientes)
+    ARQ_RESUMO.write_text(json.dumps({
+        "municipio": dist.municipio, "uf": dist.uf, "mapa": ARQ_SAIDA.relative_to(SAIDA_RAIZ).as_posix(),
+        "clientes": metricas["nUC"], "comunidades": metricas["nComunidades"], "chaves": metricas["nChaves"],
+    }, ensure_ascii=False, indent=1), encoding="utf-8")
     return ARQ_SAIDA
+
+
+def favicon() -> str:
+    return f"data:image/svg+xml;base64,{base64.b64encode((MARCA / 'farol-pequeno.svg').read_bytes()).decode()}"
+
+
+def logo_com_feixe() -> str:
+    """Logo do Farol com os dois feixes num grupo (class="feixe"), para a abertura girar só o feixe.
+    O desenho é o mesmo do farol.svg."""
+    svg = (MARCA / "farol.svg").read_text(encoding="utf-8").strip()
+    feixes = re.findall(r'\n\s*<path [^>]*opacity="0\.45"/>', svg)
+    if len(feixes) != 2:
+        raise ValueError("farol.svg mudou: não achei os dois feixes (opacity 0.45)")
+    for f in feixes:
+        svg = svg.replace(f, "")
+    return svg.replace('fill="none">', 'fill="none">\n  <g class="feixe">' + "".join(feixes) + "\n  </g>", 1)
 
 
 def _fontes_embutidas() -> str:
@@ -199,7 +224,7 @@ def politica_seguranca(html: str) -> str:
     """Content Security Policy do mapa: só roda os scripts embutidos (pelo hash SHA-256 de cada um)
     e só carrega imagens dos fundos de mapa da Esri. Nenhuma outra conexão externa."""
     hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode('utf-8')).digest()).decode()}'"
-                      for s in re.findall(r"<script>(.*?)</script>", html, flags=re.S))
+                      for s in re.findall(r"<script>(.*?)</script>", html, flags=re.S)) or "'none'"  # sem script: nenhum roda
     return "; ".join([
         "default-src 'none'",
         f"script-src {hashes}",

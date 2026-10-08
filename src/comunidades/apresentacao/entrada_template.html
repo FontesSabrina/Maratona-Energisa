@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<!-- Página sem script (script-src 'none'); só imagens e fontes embutidas. Calculada pelo entrada.py. -->
+<meta http-equiv="Content-Security-Policy" content="/*__CSP__*/">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farol · Escolha a área</title>
+<link rel="icon" type="image/svg+xml" href="__FAVICON__">
+<!-- IBM Plex Sans embutida (SIL OFL 1.1; ver vendor/ibm-plex/) -->
+<style>/*__FONTES__*/</style>
+<style>
+:root { color-scheme: dark; --noite: #0E1620; --sup: #15202B; --sup2: #1C2A37; --linha: #2A3A4A; --texto: #E9EEF3;
+  --texto2: #B4C0CC; --apagado: #93A1AF; --ambar: #F5B83D; --info: #6CB4FF; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--noite); color: var(--texto);
+  font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 960px; margin: 0 auto; padding: 40px 16px 32px; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+
+/* Abertura: logo, nome e slogan no topo da página */
+.topo { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.topo svg { width: 96px; height: 96px; display: block; }
+.nome { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
+.slogan { margin: 0; font-size: 16px; color: var(--texto2); }
+
+/* Escolha da área */
+.escolha { margin-top: 40px; }
+h1 { margin: 0 0 20px; font-size: 22px; font-weight: 600; text-align: center; }
+.cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cartao { display: grid; gap: 14px; padding: 20px; border-radius: 14px; background: var(--sup); border: 1px solid var(--linha); }
+.cartao-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cartao h2 { margin: 0; font-size: 22px; font-weight: 600; }
+.uf { font-size: 13px; font-weight: 600; letter-spacing: .07em; color: var(--apagado); }
+.numeros { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.numeros div { min-width: 0; }
+.numeros dt { font-size: 12.5px; color: var(--texto2); }
+.numeros dd { margin: 0; font-size: 20px; font-weight: 600; color: var(--ambar); font-variant-numeric: tabular-nums; }
+.abrir { display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 10px;
+  background: var(--ambar); color: var(--noite); font-weight: 600; text-decoration: none; }
+.abrir:hover { filter: brightness(1.06); }
+.abrir:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.vazio { text-align: center; color: var(--texto2); }
+footer { margin-top: 32px; display: grid; gap: 6px; text-align: center; font-size: 13px; color: var(--apagado); }
+footer p { margin: 0; }
+code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--texto2); white-space: nowrap; }
+
+/* Abertura curta, só com CSS (~1,2 s): o logo aparece grande no centro, o feixe gira uma vez,
+   o logo sobe para o topo e os cartões aparecem. Com movimento reduzido, a página já abre pronta. */
+.topo .feixe { transform-box: view-box; transform-origin: 32px 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  .topo { animation: subir .5s cubic-bezier(.2, .7, .2, 1) .7s both; }
+  .topo svg { animation: encolher .5s cubic-bezier(.2, .7, .2, 1) .7s both; }
+  .topo .feixe { animation: feixe-gira .7s ease-in-out both; }
+  .nome, .slogan { animation: surgir .35s ease .25s both; }
+  .escolha, footer { animation: surgir .4s ease .95s both; }
+}
+/* só o logo cresce (o cabeçalho inteiro ampliado passaria da largura da tela) */
+@keyframes subir { from { transform: translateY(calc(50vh - 150px)); } to { transform: none; } }
+@keyframes encolher { from { transform: scale(1.6); } to { transform: none; } }
+@keyframes feixe-gira { 0% { transform: scaleX(1); } 25% { transform: scaleX(.12); opacity: .5; } 50% { transform: scaleX(-1); }
+  75% { transform: scaleX(-.12); opacity: .5; } 100% { transform: scaleX(1); } }
+@keyframes surgir { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="topo">
+    <!--__LOGO__-->
+    <p class="nome">Farol</p>
+    <p class="slogan">Cada comunidade avisada pelo nome</p>
+  </header>
+  <section class="escolha" aria-labelledby="pergunta">
+    <h1 id="pergunta">Qual área você quer abrir?</h1>
+    <!--__CARTOES__-->
+  </section>
+  <footer>
+    <p>Rede elétrica e clientes fictícios. Território, endereços e vias reais (IBGE Censo 2022 e OpenStreetMap).</p>
+    <p>Para outro município, gere o Farol pelo comando com <code>--coordenada</code> ou <code>--distribuidora</code>.</p>
+  </footer>
+</main>
+</body>
+</html>

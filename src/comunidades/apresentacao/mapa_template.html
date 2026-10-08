@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-farol="carregando">
 <head>
 <meta charset="utf-8">
 <!-- Só imagens de fundo de mapa da Esri (e imagens/fontes embutidas data:); nenhuma outra conexão externa. Os hashes dos scripts são calculados pelo mapa.py. -->
@@ -7,9 +7,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Farol · Leopoldina</title>
 <link rel="icon" type="image/svg+xml" href="__FAVICON__">
-<!-- Leaflet 1.9.4 embutido (BSD 2-Clause; ver vendor/leaflet/LICENSE) -->
+<!-- Tela de abertura: o estilo vem antes de tudo, para ela aparecer antes do carregamento pesado -->
+<style>
+.abertura { position: fixed; inset: 0; z-index: 5000; display: grid; place-content: center; justify-items: center; gap: 10px;
+  padding: 24px; text-align: center; background: #0E1620; color: #E9EEF3;
+  font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity .45s ease; }
+.abertura[hidden] { display: none; }
+.abertura.saindo { opacity: 0; pointer-events: none; }
+.abertura-logo svg { width: 112px; height: 112px; display: block; }
+.abertura-nome { margin: 6px 0 0; font-size: 34px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
+.abertura-slogan { margin: 0; font-size: 16px; color: #B4C0CC; }
+.abertura-progresso { margin: 22px 0 0; min-height: 1.5em; font-size: 14px; color: #F5B83D; }
+.abertura.com-erro .abertura-progresso { color: #FF6E5A; }
+.abertura-nota { position: absolute; left: 16px; right: 16px; bottom: 16px; margin: 0; font-size: 12.5px; color: #93A1AF; }
+/* O feixe gira em torno do eixo do farol: estreita, vira e volta (discreto) */
+.abertura .feixe { transform-box: view-box; transform-origin: 32px 18px; }
+@media (prefers-reduced-motion: no-preference) { .abertura .feixe { animation: feixe-gira 3.2s ease-in-out infinite; } }
+@media (prefers-reduced-motion: reduce) { .abertura { transition: none; } }
+@keyframes feixe-gira { 0%, 100% { transform: scaleX(1); opacity: 1; } 25% { transform: scaleX(.12); opacity: .5; }
+  50% { transform: scaleX(-1); opacity: 1; } 75% { transform: scaleX(-.12); opacity: .5; } }
+@media print { .abertura { display: none !important; } }
+</style>
+<!-- Leaflet 1.9.4 embutido (BSD 2-Clause; ver vendor/leaflet/LICENSE); o script vem no fim, depois da abertura -->
 <style>/*__LEAFLET_CSS__*/</style>
-<script>/*__LEAFLET_JS__*/</script>
 <!-- IBM Plex Sans e Mono embutidas (SIL OFL 1.1; ver vendor/ibm-plex/) -->
 <style>/*__FONTES__*/</style>
 <style>
@@ -77,6 +97,11 @@ input { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px soli
 .marca svg { width: 36px; height: 36px; flex: none; }
 .marca .nome { font-size: 20px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; }
 .marca .lugar { font-size: 12px; color: var(--apagado); }
+.trocar { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; background: var(--sup2);
+  color: var(--texto); font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.trocar:hover { filter: brightness(1.06); }
+.trocar:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.trocar .curto { display: none; }
 .busca { grid-area: busca; position: relative; max-width: 560px; width: 100%; justify-self: center; }
 .busca input { background: var(--sup2); border-color: transparent; padding-left: 40px; }
 .busca .lupa { position: absolute; left: 12px; top: 12px; width: 20px; height: 20px; color: var(--apagado); pointer-events: none; }
@@ -254,7 +279,8 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 .leaflet-control-attribution a { color: var(--info) !important; }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip { background: var(--sup); color: var(--texto); border-color: var(--linha); box-shadow: var(--sombra); }
 .leaflet-popup-content { margin: 14px 16px; font-size: 14px; line-height: 1.5; }
-.leaflet-container a.leaflet-popup-close-button { width: 36px; height: 36px; font-size: 22px; line-height: 36px; color: var(--apagado); }
+.leaflet-container a.leaflet-popup-close-button { width: 44px; height: 44px; font-size: 24px; line-height: 44px; color: var(--apagado); }
+.leaflet-popup-content { margin-right: 40px; }  /* espaço para o botão de fechar */
 .pop b { display: block; font-size: 15px; margin-bottom: 4px; }
 .pop .k { color: var(--apagado); }
 .pop .coms { color: var(--texto2); font-size: 13.5px; margin-top: 4px; }
@@ -297,6 +323,8 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
   .acoes-topo { justify-self: end; gap: 6px; }
   .acoes-topo button { padding: 0 12px; font-size: 13.5px; }
   .acoes-topo .longo { display: none; } .acoes-topo .curto { display: inline; }
+  .trocar { padding: 0 10px; font-size: 13.5px; } .trocar .longo { display: none; } .trocar .curto { display: inline; }
+  .marca svg { width: 30px; height: 30px; }
   .marca .lugar { font-size: 11.5px; }
   .abas button { padding: 0 6px; }
   .busca { max-width: none; }
@@ -310,8 +338,16 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 </style>
 </head>
 <body>
+<div id="abertura" class="abertura" role="status" aria-live="polite">
+  <div class="abertura-logo" aria-hidden="true"><!--__LOGO_ABERTURA__--></div>
+  <p class="abertura-nome">Farol</p>
+  <p class="abertura-slogan">Cada comunidade avisada pelo nome</p>
+  <p class="abertura-progresso" id="aberturaProgresso">Carregando o território…</p>
+  <p class="abertura-nota">Rede elétrica e clientes fictícios · território real (IBGE Censo 2022)</p>
+</div>
 <header class="topo">
-  <div class="marca"><!--__LOGO__--><div><div class="nome" id="appNome">Farol</div><div class="lugar" id="appLugar"></div></div></div>
+  <div class="marca"><!--__LOGO__--><div><div class="nome" id="appNome">Farol</div><div class="lugar" id="appLugar"></div></div>
+    <a class="trocar" id="btnTrocarArea" href="__ENTRADA__" title="Voltar à escolha da área"><span class="longo">Trocar área</span><span class="curto">Trocar</span></a></div>
   <div class="busca">
     <svg class="lupa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
     <input type="text" id="busca" placeholder="Buscar chave ou comunidade" autocomplete="off" role="combobox"
@@ -455,8 +491,15 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 </div>
 <div id="roteiro"></div>
 
+<script>/*__LEAFLET_JS__*/</script>
 <script>
 const D = /*__DADOS__*/null;
+
+// =====================================================================================
+// MODEL: o estado da tela e as regras puras (aviso, janela, área, abrangência, verificação).
+// Não toca no HTML nem no mapa: recebe valores e devolve valores. As regras repetem as do
+// Python (nucleo/), e os testes de testes/navegador conferem que dão o mesmo resultado.
+// =====================================================================================
 const APP_NOME = 'Farol';
 const SLOGAN = 'Cada comunidade avisada pelo nome.';
 // Prazo legal de aviso para as demais unidades: 72 horas (REN ANEEL 1.000/2021, art. 436)
@@ -470,380 +513,122 @@ const PALAVRAS_POR_SEGUNDO = 2.5;
 const DISTRIBUIDORA = DIST.nome;
 const ZOOM_CHAVES = 13;     // as chaves aparecem sozinhas a partir deste zoom
 const ZOOM_NOMES = 12;      // nomes das comunidades a partir deste zoom
-const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---------- Utilitários (texto e números) ----------
 const fmt = n => n.toLocaleString('pt-BR');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const $ = id => document.getElementById(id);
-document.getElementById('appNome').textContent = APP_NOME;
+const pad2 = n => String(n).padStart(2, '0');
+const isoData = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const listaPt = it => it.length <= 1 ? it.join('') : it.slice(0, -1).join(', ') + ' e ' + it[it.length - 1];
+const unicos = l => [...new Set(l)];
+const palavras = t => t.split(/\s+/).filter(Boolean).length;
+const segundos = t => Math.round(palavras(t) / PALAVRAS_POR_SEGUNDO);
+const tempo = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+const qtd = n => n.toLocaleString('pt-BR');
+const minutos = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
+const hhmm = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
+const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 // Preferências do usuário (só conveniência; funciona mesmo sem localStorage)
 const lerPref = (k, padrao) => { try { return localStorage.getItem(k) ?? padrao; } catch (e) { return padrao; } };
 const gravarPref = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sem armazenamento: segue sem guardar */ } };
 
-// ---------- Tema: automático (segue o sistema), claro ou escuro ----------
+// ---------- Aviso por idioma: mesmas regras de nucleo/idiomas.py (modelos vêm do Python) ----------
+const IDI = D.idiomas.modelos, MESES_EN = D.idiomas.mesesEn;
 const TEMAS = ['auto', 'claro', 'escuro'];
-const ROTULO_TEMA = { auto: 'Tema: automático', claro: 'Tema: claro', escuro: 'Tema: escuro' };
-const ROTULO_CURTO = { auto: 'Auto', claro: 'Claro', escuro: 'Escuro' };
-let tema = lerPref('farol-tema', 'auto');
-if (!TEMAS.includes(tema)) tema = 'auto';
-function aplicarTema() {
-  const r = document.documentElement;
-  if (tema === 'auto') delete r.dataset.theme; else r.dataset.theme = tema === 'escuro' ? 'dark' : 'light';
-  const b = $('btnTema');
-  b.querySelector('.longo').textContent = ROTULO_TEMA[tema]; b.querySelector('.curto').textContent = ROTULO_CURTO[tema];
-  b.setAttribute('aria-label', ROTULO_TEMA[tema]);
-}
-aplicarTema();
-const escuro = () => document.documentElement.dataset.theme === 'dark' ||
-  (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
 
-// ---------- Mapa base (travado no município) ----------
-const mapa = L.map('mapa', { preferCanvas: true, zoomControl: false, attributionControl: false,
-  maxZoom: 17, zoomSnap: 1, maxBoundsViscosity: 1 });
-L.control.attribution({ prefix: 'Rede e clientes fictícios · território real (IBGE 2022) · Leaflet' }).addTo(mapa);
-const atribuicao = 'Base &copy; Esri · Vias &copy; OpenStreetMap';
-let fundo = null;
-function trocarFundo() {
-  if (fundo) mapa.removeLayer(fundo);
-  fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-    { attribution: atribuicao, maxZoom: 17, maxNativeZoom: 16, noWrap: true }).addTo(mapa);
-  fundo.bringToBack();
-}
-const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  { attribution: 'Imagens &copy; Esri', maxZoom: 17, noWrap: true });
-trocarFundo();
-mapa.on('zoomend', () => document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES));
+// ---------- Estado da tela (só o Controller muda; a View só lê) ----------
+const estado = {
+  tema: (t => TEMAS.includes(t) ? t : 'auto')(lerPref('farol-tema', 'auto')),  // automático (segue o sistema), claro ou escuro
+  apresentacao: false,      // modo apresentação: mostra o que vem do gabarito do IBGE
+  camadas: {},              // camadas ligadas no painel (id -> sim/não)
+  modo: 'chave',            // como o desligamento é definido: 'chave', 'obra' (ponto da obra) ou 'area'
+  cod: null,                // chave aberta
+  cenario: null,            // o que está desligado agora: cenário da chave ou da área
+  obra: null,               // ponto da obra marcado
+  area: null,               // área aplicada: { poligonos, origem, arquivo, resumo }
+  desenho: null,            // vértices [lat, lon] enquanto o operador desenha a área
+  data: isoData(new Date(Date.now() + (PRAZO_INTERNO_DIAS + 1) * 864e5)),  // sugestão: dentro do prazo interno
+  ini: '08:00', fim: '14:00', tel: DIST.telefone,
+  idioma: DIST.idiomaPadrao in IDI ? DIST.idiomaPadrao : D.idiomas.padrao,  // só o aviso e o roteiro
+  textos: { antigo: '', novo: '' },  // aviso de hoje e aviso do Farol, como estão na tela
+  lendo: null,              // aviso sendo lido em voz alta ('novo' ou 'antigo')
+  busca: { opcoes: [], ativa: -1, ponto: null },  // sugestões da busca e a escolhida pelo teclado
+};
 
-// Cores dos alimentadores: 8 slots categóricos em ordem fixa; o 9º repete o slot 1 tracejado
-const corAlim = a => css(`--s${((D.alimentadores.indexOf(a)) % 8) + 1}`);
-const tracoAlim = a => D.alimentadores.indexOf(a) >= 8 ? '6 5' : null;
-
-// ---------- Camadas ----------
-const C = {};
-const pane = (nome, z) => { mapa.createPane(nome).style.zIndex = z; return nome; };
-// destaque acima de tudo e sem capturar cliques; chaves e pontos clicáveis num único canvas ('topo')
-pane('poligonos', 350); pane('linhas', 400); pane('pontos', 450); pane('topo', 550); pane('destaque', 600); pane('destaqueTopo', 650);
-const rend = L.canvas({ pane: 'topo', padding: 0.4 });
-
-C.municipio = L.geoJSON(D.camadas.municipio, { pane: 'linhas', interactive: false,
-  style: () => ({ color: css('--texto'), weight: 2.5, fill: false }) });
-C.distritos = L.geoJSON(D.camadas.distritos, { pane: 'linhas', interactive: false,
-  style: () => ({ color: css('--texto2'), weight: 1.5, dashArray: '6 4', fill: false }),
-  onEachFeature: (f, l) => l.bindTooltip(f.properties.NM_DIST, { permanent: true, direction: 'center', className: 'lbl dist' }) });
-C.setores = L.geoJSON(D.camadas.setores, { pane: 'poligonos', interactive: false,
-  style: f => ({ color: css('--apagado'), weight: 0.6, fillColor: f.properties.SITUACAO === 'Urbana' ? css('--s1') : css('--s6'), fillOpacity: 0.07 }) });
-C.localidades = L.geoJSON(D.camadas.localidades, {
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 }),
-  onEachFeature: (f, l) => l.bindTooltip(`${esc(f.properties.NM_LOCALIDADE)} <span class="de">· ${esc(f.properties.CT_LOCALIDADE)} (IBGE)</span>`) });
-C.gabarito = L.geoJSON(D.camadas.gabarito, { pane: 'poligonos', interactive: false,
-  style: () => ({ color: css('--s7'), weight: 1.5, dashArray: '4 3', fillColor: css('--s7'), fillOpacity: 0.05 }) });
-C.vias = L.geoJSON(D.camadas.vias, { pane: 'linhas', interactive: false,
-  style: f => ({ color: css('--via'), weight: f.properties.MAIOR ? 2 : 1 }) });
-C.previstas = L.geoJSON(D.camadas.previstas, { pane: 'poligonos', interactive: false,
-  style: () => ({ color: css('--texto2'), weight: 0.8, opacity: 0.45, fillColor: css('--texto2'), fillOpacity: 0.05 }),
-  onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME.replace(/ \(.*\)$/, ''), { permanent: true, direction: 'center', className: 'lbl com' }) });
-C.mt = L.geoJSON(D.camadas.mt, { pane: 'linhas', interactive: false,
-  style: f => ({ color: corAlim(f.properties.ALIMENTADOR), weight: 2, dashArray: tracoAlim(f.properties.ALIMENTADOR) }) });
-C.se = L.geoJSON(D.camadas.se, {
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--info'), fillOpacity: 1 }),
-  onEachFeature: (f, l) => l.bindTooltip(esc(f.properties.NOME)) });
 // Comunidades citadas pelo nome no aviso (fragmentos viram "localidades vizinhas")
 const citadas = c => c.com.filter(x => !x[5]);
 const semSufixo = n => n.replace(/ \(.*\)$/, '');
-function popupChave(cod) {
-  const c = D.cenarios[cod], el = document.createElement('div');
-  el.className = 'pop';
-  if (!c) { el.innerHTML = `<b class="mono">${esc(cod)}</b>Sem clientes a jusante.`; return el; }
+const zonaDe = c => c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
+
+// Inteiras, parciais e vizinhas, com as mesmas regras de aviso_novo() em desligamento.py
+function classificar(c) {
   const cit = citadas(c);
-  const nomes = cit.slice(0, 4).map(x => esc(semSufixo(x[0]))).join(', ') + (cit.length > 4 ? ` e mais ${cit.length - 4}` : '');
-  el.innerHTML = `<b class="mono">${esc(cod)}</b>
-    <span class="k">Alimentador</span> ${esc(c.alim)}<br>
-    <span class="k">Abrindo esta chave, ficam sem energia:</span> <b style="display:inline">${fmt(c.n)}</b> clientes${c.rural >= 0.8 ? ' (zona rural)' : ''}
-    <div class="coms">Comunidades: ${nomes}</div>
-    <button class="prim acao">Simular desligamento</button>`;
-  el.querySelector('button').addEventListener('click', () => { mapa.closePopup(); simular(cod); });
-  return el;
-}
-const estiloChave = () => ({ radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 });
-C.chaves = L.geoJSON(D.camadas.chaves, {
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, ...estiloChave() }),
-  onEachFeature: (f, l) => {
-    const p = f.properties;
-    l.bindTooltip(`<b class="mono">${esc(p.COD_CHAVE)}</b> · ${fmt(p.UC_JUSANTE)} clientes<br><span class="de">clique para ver e simular</span>`);
-    l.bindPopup(() => popupChave(p.COD_CHAVE), { minWidth: 250 });
-  } });
-const estiloTrafo = () => ({ radius: 3, color: css('--texto'), weight: 1, fillColor: css('--sup'), fillOpacity: 1 });
-C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { renderer: rend, ...estiloTrafo() })
-  .bindTooltip(`<b>${esc(t[2])}</b> · ${esc(t[4])}<br>${t[3]} UCs`)));
-
-// UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu.
-// LGPD: sem titular, número da UC ou endereço; só classe, comunidade e dados técnicos.
-// A comunidade real (gabarito) só aparece no modo apresentação.
-const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
-function popupUC(i) {
-  const u = D.ucs[i], loc = D.locCad[u[10]];
-  return `<div class="pop"><b>Unidade ${esc(D.classes[u[9]].toLowerCase())}</b>
-    <span class="k">Localidade digitada no cadastro:</span> ${loc ? esc(loc) : '<i>(vazio)</i>'}<br>
-    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)
-    <span class="so-ap"><br><span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}</span>
-    ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
-    <span class="k">Transformador:</span> ${esc(D.trafos[u[2]][2])} · ${esc(D.trafos[u[2]][4])}</div>`;
-}
-function camadaUCs(filtro, estilo) {
-  const g = L.layerGroup();
-  g.estilo = estilo;
-  D.ucs.forEach((u, i) => { if (!filtro(u)) return;
-    g.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, ...estilo() }).on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
-  });
-  return g;
-}
-const estiloUC = () => ({ radius: 2.5, stroke: false, fillColor: css('--uc'), fillOpacity: 0.75 });
-C.ucsRurais = camadaUCs(u => u[8] === 1, estiloUC);
-C.ucsUrbanas = camadaUCs(u => u[8] === 0, estiloUC);
-C.erros = camadaUCs(u => u[6] === 0, () => ({ radius: 3.5, color: css('--fundo'), weight: 1, fillColor: css('--info'), fillOpacity: 1 }));
-C.trafos.estilo = estiloTrafo;
-let bt = null;
-C.bt = L.layerGroup();
-C.bt.on('add', () => { if (bt) return;
-  bt = D.ucs.filter(u => u[8] === 1).map(u => L.polyline([[D.trafos[u[2]][0], D.trafos[u[2]][1]], [u[0], u[1]]],
-    { pane: 'linhas', color: css('--apagado'), weight: 0.8, interactive: false }));
-  bt.forEach(l => C.bt.addLayer(l));
-});
-C.satelite = satelite;
-
-// Painel de camadas: [id, nome, amostra, cor, ligada ao abrir, só no modo apresentação, observação]
-const GRUPOS = [
-  ['Território (IBGE)', [
-    ['municipio', 'Limite municipal', 'linha', '--texto', true],
-    ['distritos', 'Distritos (6)', 'linha', '--texto2', true],
-    ['setores', 'Setores censitários', 'area', '--s6', false],
-    ['localidades', 'Localidades oficiais (15)', 'ponto', '--texto', false],
-    ['vias', 'Vias (OpenStreetMap)', 'linha', '--via', false],
-    ['satelite', 'Imagem de satélite', 'area', '--apagado', false],
-    ['gabarito', 'Comunidades reais (gabarito)', 'area', '--s7', false, true],
-  ]],
-  ['Rede elétrica (fictícia)', [
-    ['se', 'Subestação', 'ponto', '--info', false],
-    ['mt', 'Rede de média tensão', 'linha', '--s1', true],
-    ['chaves', 'Chaves', 'ponto', '--texto', true, false, `aparecem a partir do zoom ${ZOOM_CHAVES}`],
-    ['trafos', 'Transformadores', 'ponto', '--texto', false],
-    ['bt', 'Ramais de baixa tensão (rurais)', 'linha', '--apagado', false],
-    ['ucsRurais', 'UCs rurais', 'ponto', '--uc', false],
-    ['ucsUrbanas', 'UCs urbanas', 'ponto', '--uc', false],
-  ]],
-  ['Resultado', [
-    ['previstas', 'Comunidades identificadas', 'area', '--texto2', true],
-    ['erros', 'UCs com comunidade errada (validação)', 'ponto', '--info', false, true],
-  ]],
-];
-const ligada = {}, SO_APRESENTACAO = new Set();
-let apresentacao = false;
-let versaoTema = 0;
-// Pontos criados com a cor do tema da época: refaz o estilo quando o tema mudou
-function restilizar(g) {
-  if (!g.estilo || g.versaoTema === versaoTema) return;
-  const e = g.estilo(); g.eachLayer(l => l.setStyle && l.setStyle(e)); g.versaoTema = versaoTema;
-}
-function aplicarCamada(id) {
-  const g = C[id];
-  let ver = ligada[id] && (!SO_APRESENTACAO.has(id) || apresentacao);
-  if (id === 'chaves') ver = ver && mapa.getZoom() >= ZOOM_CHAVES;
-  if (ver) { restilizar(g); if (!mapa.hasLayer(g)) g.addTo(mapa); } else if (mapa.hasLayer(g)) mapa.removeLayer(g);
-}
-const elCam = $('painelCamadas');
-GRUPOS.forEach(([titulo, itens]) => {
-  const g = document.createElement('div'); g.className = 'grupo';
-  g.innerHTML = `<div class="rot">${titulo}</div>`;
-  itens.forEach(([id, nome, tipo, cor, on, soAp, obs]) => {
-    ligada[id] = on;
-    if (soAp) SO_APRESENTACAO.add(id);
-    const am = tipo === 'area' ? `<span class="amostra" style="background:color-mix(in srgb, var(${cor}) 25%, transparent);border:1.5px solid var(${cor})"></span>`
-      : tipo === 'linha' ? `<span class="amostra linha" style="background:var(${cor})"></span>` : `<span class="amostra ponto" style="background:var(${cor})"></span>`;
-    const b = document.createElement('button');
-    b.className = 'sw' + (soAp ? ' so-ap' : ''); b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(on));
-    b.innerHTML = `<span class="sw-txt">${am}<span>${nome}${obs ? `<small>${obs}</small>` : ''}</span></span><span class="chave-sw" aria-hidden="true"></span>`;
-    b.addEventListener('click', () => { ligada[id] = !ligada[id]; b.setAttribute('aria-checked', String(ligada[id])); aplicarCamada(id); });
-    g.appendChild(b);
-    if (id === 'mt') {
-      const a = document.createElement('div'); a.className = 'alims';
-      a.innerHTML = D.alimentadores.map((al, i) => `<span><span class="amostra linha" style="width:14px;background:${i >= 8 ? `repeating-linear-gradient(90deg,var(--s${i % 8 + 1}) 0 4px,transparent 4px 7px)` : `var(--s${i % 8 + 1})`}"></span>${esc(al)}</span>`).join('');
-      g.appendChild(a);
-    }
-  });
-  elCam.appendChild(g);
-});
-mapa.on('zoomend', () => aplicarCamada('chaves'));
-// Nomes das comunidades: só quando o território comporta o nome naquele zoom (evita sobreposição no centro urbano)
-function arrumarNomes() {
-  if (!mapa.hasLayer(C.previstas)) return;
-  C.previstas.eachLayer(l => {
-    const t = l.getTooltip(), el = t && t.getElement();
-    if (!el) return;
-    const b = l.getBounds(), a = mapa.latLngToLayerPoint(b.getSouthWest()), z = mapa.latLngToLayerPoint(b.getNorthEast());
-    el.classList.toggle('lbl-oculto', Math.abs(z.x - a.x) < String(t.getContent()).length * 6.5 + 8);
-  });
-}
-mapa.on('zoomend', arrumarNomes);
-C.previstas.on('add', () => setTimeout(arrumarNomes));
-
-function redesenharCores() {
-  versaoTema++;
-  ['municipio', 'distritos', 'setores', 'gabarito', 'vias', 'previstas', 'mt'].forEach(k => C[k].resetStyle && C[k].resetStyle());
-  C.chaves.eachLayer(l => l.setStyle(estiloChave()));
-  C.se.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--info') }));
-  C.localidades.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--texto') }));
-  if (bt) bt.forEach(l => l.setStyle({ color: css('--apagado') }));
-  ['trafos', 'ucsRurais', 'ucsUrbanas', 'erros'].forEach(k => mapa.hasLayer(C[k]) && restilizar(C[k]));
-}
-function mudouTema() {
-  trocarFundo(); redesenharCores();
-  if (avisoAtual) desenharDestaque(avisoAtual, codAtual, false);
-  desenharContornoArea();
-}
-$('btnTema').addEventListener('click', () => {
-  tema = TEMAS[(TEMAS.indexOf(tema) + 1) % TEMAS.length];
-  gravarPref('farol-tema', tema); aplicarTema(); mudouTema();
-});
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (tema === 'auto') mudouTema(); });
-
-// ---------- Controles do mapa (camadas, aproximar, afastar, enquadrar) ----------
-const ICONE_CAMADAS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/></svg>';
-const ICONE_ENQUADRAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
-const Controles = L.Control.extend({ options: { position: 'topright' }, onAdd() {
-  const d = L.DomUtil.create('div', 'ctl-mapa');
-  d.innerHTML = `<button id="btnCamadas" aria-label="Camadas do mapa" title="Camadas do mapa" aria-expanded="false" aria-controls="painelCamadas">${ICONE_CAMADAS}</button>
-    <button id="btnMais" aria-label="Aproximar" title="Aproximar">+</button>
-    <button id="btnMenos" aria-label="Afastar" title="Afastar">−</button>
-    <button id="btnEnquadrar" aria-label="Enquadrar o ramal desligado" title="Enquadrar o ramal desligado">${ICONE_ENQUADRAR}</button>`;
-  L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
-  return d;
-} });
-new Controles().addTo(mapa);
-L.DomEvent.disableClickPropagation(elCam); L.DomEvent.disableScrollPropagation(elCam);
-function abrirCamadas(abrir) { elCam.classList.toggle('oculto', !abrir); $('btnCamadas').setAttribute('aria-expanded', String(abrir)); }
-$('btnCamadas').addEventListener('click', () => abrirCamadas(elCam.classList.contains('oculto')));
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { abrirCamadas(false); fecharSugestoes(); } });
-mapa.on('click', () => abrirCamadas(false));
-$('btnMais').addEventListener('click', () => mapa.zoomIn());
-$('btnMenos').addEventListener('click', () => mapa.zoomOut());
-$('btnEnquadrar').addEventListener('click', () => limitesRamal ? mapa.fitBounds(limitesRamal, { maxZoom: 15 }) : mapa.fitBounds(limMun));
-const Legenda = L.Control.extend({ options: { position: 'bottomleft' }, onAdd() {
-  const d = L.DomUtil.create('div', 'legenda');
-  d.innerHTML = '<span id="legRamal"><i class="leg-ramal"></i>Ramal desligado</span><span><i class="leg-aviso"></i>Comunidade no aviso</span><span><i class="leg-viz"></i>Vizinha</span><span id="legArea" class="oculto"><i class="leg-area"></i>Área informada</span>';
-  return d;
-} });
-new Legenda().addTo(mapa);
-
-// ---------- Modo apresentação: mostra o que vem do gabarito do IBGE ----------
-const M = D.metricas;
-const pct = v => v.toLocaleString('pt-BR');
-$('validGeral').innerHTML = `
-  <div class="rot">Validação com o Censo · ${fmt(M.nCenarios)} cenários</div>
-  <div class="valid-nums">
-    <div><div class="num">${pct(M.acertoRural)}<small>%</small></div><div class="leg">acerto da comunidade (UCs rurais) <span class="de">· cadastro ${pct(M.acertoRuralCadastro)}%</span></div></div>
-    <div><div class="num">${pct(M.coberturaUC)}<small>%</small></div><div class="leg">dos clientes desligados ouvem o nome da própria comunidade</div></div>
-    <div><div class="num">${M.segDepois}<small> s</small></div><div class="leg">aviso médio no Farol <span class="de">· hoje ${M.segAntes} s</span></div></div>
-  </div>`;
-$('btnApresentacao').addEventListener('click', e => {
-  apresentacao = !apresentacao;
-  e.currentTarget.setAttribute('aria-pressed', String(apresentacao));
-  document.documentElement.classList.toggle('apresentacao', apresentacao);
-  SO_APRESENTACAO.forEach(aplicarCamada);
-});
-
-// ---------- Abas da lateral ----------
-function ativarAba(nome) {
-  document.querySelectorAll('.abas button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
-  ['desligamento', 'aviso', 'comunidades'].forEach(a => $(`aba-${a}`).classList.toggle('oculto', a !== nome));
-  $('lateral').scrollTop = 0;
-}
-document.querySelectorAll('.abas button').forEach(b => b.addEventListener('click', () => ativarAba(b.dataset.aba)));
-$('btnVerAviso').addEventListener('click', () => ativarAba('aviso'));
-function estadoSimulado(sim) {
-  $('lateral').classList.toggle('simulado', sim);
-  $('vazio').classList.toggle('oculto', sim || modo !== 'chave'); $('cheio').classList.toggle('oculto', !sim);
-  if (!sim) ativarAba('desligamento');
+  const inteiras = unicos(cit.filter(x => !x[3]).map(x => semSufixo(x[0])));
+  const parciais = unicos(cit.filter(x => x[3]).map(x => semSufixo(x[0]))).filter(n => !inteiras.includes(n));
+  return { inteiras, parciais, vizinhas: c.com.filter(x => x[5]) };
 }
 
-// ---------- Simulação ----------
-let modo = 'chave';  // como o desligamento é definido: 'chave', 'obra' (ponto da obra) ou 'area'
-const destaque = L.layerGroup().addTo(mapa);
-let limitesRamal = null;
-function desenharDestaque(c, cod, enquadrar) {
-  destaque.clearLayers();
-  const coral = css('--desligado');
-  // Trechos de MT desligados
-  const feats = D.camadas.mt.features;
-  c.mt.forEach(i => destaque.addLayer(L.geoJSON(feats[i], { pane: 'destaque', interactive: false, style: { color: coral, weight: 5, opacity: 0.9 } })));
-  // Comunidades: contorno cheio para as do aviso; fino e pontilhado para as vizinhas (não citadas)
-  const nomes = new Map(c.com.map(x => [x[0], x]));
-  destaque.addLayer(L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
-    { pane: 'destaque', interactive: false, style: f => nomes.get(f.properties.NOME)[5]
-      ? { color: coral, weight: 2, opacity: 1, dashArray: '1 6', lineCap: 'round', fillColor: coral, fillOpacity: 0.03 }
-      : { color: coral, weight: 2.5, opacity: 1, fillColor: coral, fillOpacity: 0.1 } }));
-  // UCs desligadas (clicáveis, no mesmo canvas das chaves): a jusante da chave ou dentro da área
-  const tset = new Set(c.trafos), uset = c.area ? new Set(c.ucsIdx) : null, pts = [];
-  D.ucs.forEach((u, i) => { if (uset ? !uset.has(i) : !tset.has(u[2])) return; pts.push([u[0], u[1]]);
-    destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, radius: 3.5, color: css('--fundo'), weight: 1, fillColor: coral, fillOpacity: 1 })
-      .on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
-  });
-  const ch = D.camadas.chaves.features.find(f => f.properties.COD_CHAVE === cod);
-  if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { pane: 'destaqueTopo', interactive: false, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--texto'), fillOpacity: 1 })
-    .bindTooltip(`<b class="mono">${esc(cod)}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8], pane: 'tooltipPane' }));
-  limitesRamal = c.area ? areaCamada.getBounds().pad(0.15) : pts.length ? L.latLngBounds(pts).pad(0.25) : null;
-  if (enquadrar && limitesRamal) mapa.fitBounds(limitesRamal, { maxZoom: 15 });
+const preencher = (modelo, v) => modelo.replace(/\{(\w+)\}/g, (_, k) => v[k]);
+const semAcento = s => s.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();  // tira acentos (como unicodedata "Mn")
+function somDeI(palavra) {  // começa com som de "i" (i-, hi-), sem formar ditongo (hielo, hierba)
+  let s = semAcento(palavra);
+  if (s.startsWith('hi')) s = s.slice(1);
+  return s.startsWith('i') && !['a', 'e', 'o', 'u'].includes(s.slice(1, 2));
+}
+function listaIdioma(itens, idioma) {
+  const m = IDI[idioma];
+  if (itens.length <= 1) return itens.join('');
+  return itens.slice(0, -1).join(', ') + (somDeI(itens[itens.length - 1]) ? m.e_antes_de_i : m.e) + itens[itens.length - 1];
+}
+const formatarData = (dia, mes, idioma) => IDI[idioma].data === 'mes_dia' ? `${MESES_EN[mes - 1]} ${dia}` : `${pad2(dia)}/${pad2(mes)}`;
+function formatarHora(minutos, idioma) {
+  const h = Math.floor(minutos / 60), m = minutos % 60, r = IDI[idioma].relogio;
+  if (r === 'pt') return `${h}h${m ? pad2(m) : ''}`;
+  if (r === '12h') return `${h % 12 || 12}:${pad2(m)} ${h < 12 ? 'a.m.' : 'p.m.'}`;
+  return `${h}:${pad2(m)}`;
+}
+const formatarHorario = (ini, fim, idioma) => formatarHora(ini, idioma) + IDI[idioma].entre + formatarHora(fim, idioma);
+const comTelefone = (texto, tel, idioma) => tel ? texto + preencher(IDI[idioma].telefone, { telefone: tel }) : texto;
+
+// Mesmo texto de aviso_novo() em desligamento.py: com a mesma data, horário e idioma, sai idêntico
+function montarAviso(c, data, horario, idioma = D.idiomas.padrao) {
+  const { inteiras, parciais, vizinhas } = classificar(c), m = IDI[idioma];
+  let quem = listaIdioma(inteiras, idioma);
+  if (parciais.length) quem = preencher(quem ? (vizinhas.length ? m.parte_com_vizinhas : m.parte_com) : m.parte_so, { quem, parciais: listaIdioma(parciais, idioma) });
+  if (vizinhas.length) quem = preencher(m.vizinhas, { quem });
+  const distritos = unicos(c.com.map(x => x[6] === DIST.municipio ? 'Sede' : x[6])).sort();
+  const onde = preencher(distritos.length > 1 ? m.onde_n : m.onde_1, { distritos: listaIdioma(distritos, idioma) });
+  return preencher(m.frase, { quem, municipio: DIST.municipio, onde, data, horario });
 }
 
-function simular(cod, enquadrar = true) {
-  cod = String(cod).trim().toUpperCase();
-  const c = D.cenarios[cod];
-  if (!c) { mostrarSugestoes([], `Chave não encontrada: ${cod}`); return; }
-  if (modo === 'area') escolherModo('chave');
-  pararLeitura();
-  avisoAtual = c; codAtual = cod;
-  $('cdRot').textContent = 'Chave aberta';
-  desenharDestaque(c, cod, enquadrar);
-  const zona = c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
-  $('cdChave').textContent = cod;
-  $('cdMeta').textContent = `Alimentador ${c.alim} · ${zona}`;
-  $('numClientes').textContent = fmt(c.n);
-  const nCit = citadas(c).length;
-  $('numComunidades').textContent = nCit;
-  $('numComunidadesLeg').textContent = nCit === 1 ? 'comunidade no aviso' : 'comunidades no aviso';
-  desenharComunidades(c);
-  atualizarAviso();
-  $('busca').value = cod; fecharSugestoes();
-  estadoSimulado(true); ativarAba('desligamento');
+// Data, horário e telefone do estado, já nos formatos que o aviso, a janela e o roteiro usam
+function campos(e) {
+  const [a, m, d] = (e.data || '').split('-');
+  const ini = e.ini || '08:00', fim = e.fim || '14:00';
+  return { a, m, d, dataCurta: d ? `${d}/${m}` : '__/__', dataLonga: d ? `${d}/${m}/${a}` : '(sem data)',
+    horario: `${horaPt(ini)} às ${horaPt(fim)}`, ini, fim, tel: e.tel.trim() };
 }
 
-function desenharComunidades(c) {
-  const item = ([n, a, t, parc, conf, frag]) => `<li class="${frag ? 'viz' : ''}">
-    <div class="com-l1"><span class="com-nome">${esc(n)}</span>${frag ? '' : `<span class="selo-c ${parc ? 'parte' : 'inteira'}">${parc ? 'Parte' : 'Inteira'}</span>`}</div>
-    <div class="com-l2">${fmt(a)} de ${fmt(t)} UCs · confiança ${Math.round(conf * 100)}%</div>
-    <div class="prop" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, a / t * 100)).toFixed(1)}%"></i></div></li>`;
-  const viz = c.com.filter(x => x[5]);
-  $('listaCitadas').innerHTML = citadas(c).map(item).join('');
-  $('listaVizinhas').innerHTML = viz.map(item).join('');
-  $('blocoVizinhas').classList.toggle('oculto', !viz.length);
-  // Validação do cenário (só no modo apresentação; o gabarito nunca é usado pelo algoritmo).
-  // No modo área não aparece: calcular a cobertura no navegador seria usar o gabarito fora da avaliação.
-  $('validCen').className = c.area ? 'oculto' : 'valid-cen so-ap bloco';
-  if (c.area) { $('validCen').innerHTML = ''; return; }
-  const real = c.real.map(([n, q]) => `${esc(n)} <span class="de">(${q})</span>`).join(', ');
-  $('validCen').innerHTML = `
-    <div class="rot">Validação com o Censo</div>
-    <p><b>${Math.round(c.cobUC * 100)}%</b> dos clientes desligados ouvem o nome da própria comunidade.</p>
-    <p>Cobertura <span class="${c.cob >= 1 ? 'ok' : 'ruim'}">${Math.round(c.cob * 100)}%</span> ·
-      Precisão <span class="${c.prec >= 1 ? 'ok' : 'ruim'}">${Math.round(c.prec * 100)}%</span></p>
-    <p><span class="de">Comunidades reais atingidas:</span> ${real}</p>
-    <p class="nota" style="margin:0">Cobertura = comunidades reais citadas pelo nome. Precisão = comunidades citadas que de fato foram atingidas. O gabarito nunca é usado pelo algoritmo, só nesta conferência.</p>`;
+// Antecedência: do momento atual até o início do desligamento (cod e h permitem traduzir no roteiro)
+function antecedencia(f) {
+  if (!f.d) return { classe: 'neutro', cod: 'semData', texto: 'Informe a data do desligamento', falta: '' };
+  const h = (new Date(`${f.a}-${f.m}-${f.d}T${f.ini}`) - Date.now()) / 36e5;
+  const falta = h < 0 ? 'a data já passou' : h < 48 ? `faltam ${Math.floor(h)} h` : `faltam ${Math.floor(h / 24)} dias`;
+  const base = { h, falta };
+  if (h < PRAZO_LEGAL_HORAS) return { ...base, classe: 'vermelho', cod: 'legal', texto: `Abaixo do prazo legal de ${PRAZO_LEGAL_HORAS} horas` };
+  if (h < PRAZO_INTERNO_DIAS * 24) return { ...base, classe: 'amarelo', cod: 'interno', texto: `Abaixo do prazo interno de ${PRAZO_INTERNO_DIAS} dias` };
+  return { ...base, classe: 'verde', cod: 'ok', texto: 'Antecedência OK' };
 }
 
-function limpar() {
-  pararLeitura(); destaque.clearLayers(); limitesRamal = null;
-  avisoAtual = null; codAtual = null; $('busca').value = '';
-  if (modo === 'area') limparArea();
-  estadoSimulado(false);
+// Os dois avisos da tela. No modo área não há aviso de hoje: ele lista o imóvel ou a rua de cada UC, que o HTML não leva
+function montarTextos(c, f, idioma) {
+  const dataTxt = f.d ? formatarData(+f.d, +f.m, idioma) : '__/__';
+  const novo = comTelefone(montarAviso(c, dataTxt, formatarHorario(minutos(f.ini), minutos(f.fim), idioma), idioma), f.tel, idioma);
+  // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
+  const antigo = c.area ? '' : c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
+  return { novo, antigo };
 }
 
 // ---------- Janela de menor dano (mesmo cálculo de nucleo/impacto.py; perfis hipotéticos) ----------
@@ -851,9 +636,6 @@ const PF = D.perfis, EXP = PF.expediente, SLOT = PF.slot, SLOTS = 24 * 60 / PF.s
 const sobrep = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 const contagemAtiv = c => Object.fromEntries(PF.atividades.map((a, i) => [a, c.ativ[i]]));
 const tipoDia = (a, m, d) => { const w = new Date(+a, +m - 1, +d).getDay(); return w === 0 ? 'domingo' : w === 6 ? 'sabado' : 'util'; };
-const minutos = v => { const [h, m] = v.split(':').map(Number); return h * 60 + m; };
-const hhmm = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
-const qtd = n => n.toLocaleString('pt-BR');
 function notaDano(cont, tipo, inicio, duracao) {
   const fim = inicio + duracao; let total = 0;
   for (const a of PF.atividades) {
@@ -894,349 +676,24 @@ function avaliarJanelas(cont, tipo, duracao) {
 function sugerirJanelas(cont, tipo, duracao, quantas = 3) {
   return avaliarJanelas(cont, tipo, duracao).slice(0, quantas).map(j => ({ ...j, explicacao: explicar(cont, tipo, j.inicio, j.fim) }));
 }
-const ICONE = {
-  saude: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>',
-  ensino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 10 12 5l9 5-9 5-9-5Z"/><path d="M7 12.5V17c3 2 7 2 10 0v-4.5"/></svg>',
-  agropecuaria: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-14 14Z"/><path d="M5 19 13 11"/></svg>',
-};
-function usarJanela(inicio, fim) { elIni.value = hhmm(inicio); elFim.value = hhmm(fim); pararLeitura(); atualizarAviso(); }
-function atualizarJanela(c, f) {
-  const cont = contagemAtiv(c), tipo = f.d ? tipoDia(f.a, f.m, f.d) : null;
-  const ini = minutos(f.ini), dur = minutos(f.fim) - ini;
-  const horas = (a, b) => `${horaPt(hhmm(a))} às ${horaPt(hhmm(b))}`;
-  const comp = $('janelaComparacao'); comp.classList.add('oculto');
-  $('janelaOutras').innerHTML = '';
-  let msg = '';
-  if (!tipo) msg = 'Informe a data para sugerir a janela.';
-  else if (dur <= 0) msg = 'Ajuste o início e o fim da obra.';
-  const sug = msg ? [] : sugerirJanelas(cont, tipo, dur);
-  if (!msg && !sug.length) msg = `Uma obra de ${(dur / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h não cabe no expediente (${horaPt(hhmm(EXP.inicio))} às ${horaPt(hhmm(EXP.fim))}).`;
-  if (msg) { $('janelaMelhor').innerHTML = `<p class="nota" style="margin:0">${esc(msg)}</p>`; }
-  else {
-    const atual = j => j.inicio === ini && j.fim === ini + dur;
-    const botao = j => atual(j) ? '<span class="jan-atual">Janela atual</span>' : `<button data-ini="${j.inicio}" data-fim="${j.fim}">Usar esta janela</button>`;
-    const [m, ...outras] = sug;
-    $('janelaMelhor').innerHTML = `<div class="jan-princ"><div><div class="jan-hora">${horas(m.inicio, m.fim)}</div><div class="jan-exp">${esc(m.explicacao)}</div></div><div>${botao(m)}</div></div>`;
-    $('janelaOutras').innerHTML = outras.length ? `<div class="jan-outras">${outras.map(j =>
-      `<div class="jan-outra"><div><div class="jan-hora">${horas(j.inicio, j.fim)}</div><div class="jan-exp">${esc(j.explicacao)}</div></div>${botao(j)}</div>`).join('')}</div>` : '';
-    // Compara a janela escolhida com a sugerida (mesma duração)
-    const escolhida = notaDano(cont, tipo, ini, dur);
-    if (m.nota > 0 && escolhida / m.nota >= PF.razaoMuitoPior) {
-      comp.textContent = `A janela escolhida atinge ${(escolhida / m.nota).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} vezes mais carga sensível que a sugerida.`;
-      comp.classList.remove('oculto');
-    } else if (m.nota === 0 && escolhida > 0) {
-      comp.textContent = 'A janela escolhida atinge carga sensível que a sugerida evita.'; comp.classList.remove('oculto');
-    }
-    document.querySelectorAll('#blocoJanela button[data-ini]').forEach(b => b.addEventListener('click', () => usarJanela(+b.dataset.ini, +b.dataset.fim)));
-  }
-  // Cargas sensíveis na área (só contagens)
-  $('cargas').innerHTML = PF.sensiveis.map(a => { const n = cont[a] || 0;
-    return `<div class="carga${n ? '' : ' zero'}"><div class="carga-n">${ICONE[a]}<b>${qtd(n)}</b></div><span>${esc(PF.rotulos[a][n === 1 ? 0 : 1])}</span></div>`; }).join('');
-  $('alertaSaude').classList.toggle('oculto', !(cont.saude > 0));
-}
 
-// ---------- Aviso editável ----------
-let codAtual = null, avisoAtual = null, lendo = null;
-const textos = { antigo: '', novo: '' };
-const listaPt = it => it.length <= 1 ? it.join('') : it.slice(0, -1).join(', ') + ' e ' + it[it.length - 1];
-const unicos = l => [...new Set(l)];
-const palavras = t => t.split(/\s+/).filter(Boolean).length;
-const segundos = t => Math.round(palavras(t) / PALAVRAS_POR_SEGUNDO);
-const tempo = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
-const pad2 = n => String(n).padStart(2, '0');
-const isoData = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-// Inteiras, parciais e vizinhas, com as mesmas regras de aviso_novo() em desligamento.py
-function classificar(c) {
-  const cit = citadas(c);
-  const inteiras = unicos(cit.filter(x => !x[3]).map(x => semSufixo(x[0])));
-  const parciais = unicos(cit.filter(x => x[3]).map(x => semSufixo(x[0]))).filter(n => !inteiras.includes(n));
-  return { inteiras, parciais, vizinhas: c.com.filter(x => x[5]) };
-}
-
-// ---------- Aviso por idioma: mesmas regras de nucleo/idiomas.py (modelos vêm do Python) ----------
-const IDI = D.idiomas.modelos, MESES_EN = D.idiomas.mesesEn;
-const preencher = (modelo, v) => modelo.replace(/\{(\w+)\}/g, (_, k) => v[k]);
-const semAcento = s => s.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();  // tira acentos (como unicodedata "Mn")
-function somDeI(palavra) {  // começa com som de "i" (i-, hi-), sem formar ditongo (hielo, hierba)
-  let s = semAcento(palavra);
-  if (s.startsWith('hi')) s = s.slice(1);
-  return s.startsWith('i') && !['a', 'e', 'o', 'u'].includes(s.slice(1, 2));
-}
-function listaIdioma(itens, idioma) {
-  const m = IDI[idioma];
-  if (itens.length <= 1) return itens.join('');
-  return itens.slice(0, -1).join(', ') + (somDeI(itens[itens.length - 1]) ? m.e_antes_de_i : m.e) + itens[itens.length - 1];
-}
-const formatarData = (dia, mes, idioma) => IDI[idioma].data === 'mes_dia' ? `${MESES_EN[mes - 1]} ${dia}` : `${pad2(dia)}/${pad2(mes)}`;
-function formatarHora(minutos, idioma) {
-  const h = Math.floor(minutos / 60), m = minutos % 60, r = IDI[idioma].relogio;
-  if (r === 'pt') return `${h}h${m ? pad2(m) : ''}`;
-  if (r === '12h') return `${h % 12 || 12}:${pad2(m)} ${h < 12 ? 'a.m.' : 'p.m.'}`;
-  return `${h}:${pad2(m)}`;
-}
-const formatarHorario = (ini, fim, idioma) => formatarHora(ini, idioma) + IDI[idioma].entre + formatarHora(fim, idioma);
-const comTelefone = (texto, tel, idioma) => tel ? texto + preencher(IDI[idioma].telefone, { telefone: tel }) : texto;
-
-// Mesmo texto de aviso_novo() em desligamento.py: com a mesma data, horário e idioma, sai idêntico
-function montarAviso(c, data, horario, idioma = D.idiomas.padrao) {
-  const { inteiras, parciais, vizinhas } = classificar(c), m = IDI[idioma];
-  let quem = listaIdioma(inteiras, idioma);
-  if (parciais.length) quem = preencher(quem ? (vizinhas.length ? m.parte_com_vizinhas : m.parte_com) : m.parte_so, { quem, parciais: listaIdioma(parciais, idioma) });
-  if (vizinhas.length) quem = preencher(m.vizinhas, { quem });
-  const distritos = unicos(c.com.map(x => x[6] === DIST.municipio ? 'Sede' : x[6])).sort();
-  const onde = preencher(distritos.length > 1 ? m.onde_n : m.onde_1, { distritos: listaIdioma(distritos, idioma) });
-  return preencher(m.frase, { quem, municipio: DIST.municipio, onde, data, horario });
-}
-
-const elData = $('avData'), elIni = $('avIni'), elFim = $('avFim'), elTel = $('avTel'), elIdioma = $('avIdioma');
-elData.value = isoData(new Date(Date.now() + (PRAZO_INTERNO_DIAS + 1) * 864e5));  // sugestão: dentro do prazo interno
-elTel.value = DIST.telefone;
-// Textos da tela que vêm da configuração da distribuidora
-$('appLugar').textContent = `${DIST.municipio}/${DIST.uf} · demonstração`;
-$('notaPrazos').textContent = `Unidades com equipamento vital exigem ${PRAZO_VITAL_DIAS_UTEIS} dias úteis (não há cadastro desses clientes nesta demonstração). Prazos: ${DIST.norma}.`;
-// Idioma do aviso (só o aviso e o roteiro; o resto da tela continua em português)
-let idiomaAtual = DIST.idiomaPadrao in IDI ? DIST.idiomaPadrao : D.idiomas.padrao;
-elIdioma.innerHTML = Object.entries(IDI).map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('');
-elIdioma.value = idiomaAtual;
-elIdioma.addEventListener('change', () => { idiomaAtual = elIdioma.value; pararLeitura(); atualizarAviso(); });
-const horaPt = v => { const [h, m] = v.split(':').map(Number); return `${h}h${m ? pad2(m) : ''}`; };  // 08:30 -> 8h30
-function campos() {
-  const [a, m, d] = (elData.value || '').split('-');
-  const ini = elIni.value || '08:00', fim = elFim.value || '14:00';
-  return { a, m, d, dataCurta: d ? `${d}/${m}` : '__/__', dataLonga: d ? `${d}/${m}/${a}` : '(sem data)',
-    horario: `${horaPt(ini)} às ${horaPt(fim)}`, ini, fim, tel: elTel.value.trim() };
-}
-
-// Antecedência: do momento atual até o início do desligamento (cod e h permitem traduzir no roteiro)
-function antecedencia(f) {
-  if (!f.d) return { classe: 'neutro', cod: 'semData', texto: 'Informe a data do desligamento', falta: '' };
-  const h = (new Date(`${f.a}-${f.m}-${f.d}T${f.ini}`) - Date.now()) / 36e5;
-  const falta = h < 0 ? 'a data já passou' : h < 48 ? `faltam ${Math.floor(h)} h` : `faltam ${Math.floor(h / 24)} dias`;
-  const base = { h, falta };
-  if (h < PRAZO_LEGAL_HORAS) return { ...base, classe: 'vermelho', cod: 'legal', texto: `Abaixo do prazo legal de ${PRAZO_LEGAL_HORAS} horas` };
-  if (h < PRAZO_INTERNO_DIAS * 24) return { ...base, classe: 'amarelo', cod: 'interno', texto: `Abaixo do prazo interno de ${PRAZO_INTERNO_DIAS} dias` };
-  return { ...base, classe: 'verde', cod: 'ok', texto: 'Antecedência OK' };
-}
-
-function atualizarAviso() {
-  const f = campos(), ant = antecedencia(f);
-  const selo = $('selo');
-  selo.className = `selo ${ant.classe}`; selo.textContent = ant.texto;
-  $('seloFalta').textContent = ant.falta ? `· ${ant.falta}` : '';
-  $('avTelNota').classList.toggle('oculto', !/x/i.test(f.tel));
-  $('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
-  const c = avisoAtual;
-  if (!c) return;
-  const L = idiomaAtual;
-  const dataTxt = f.d ? formatarData(+f.d, +f.m, L) : '__/__';
-  textos.novo = comTelefone(montarAviso(c, dataTxt, formatarHorario(minutos(f.ini), minutos(f.fim), L), L), f.tel, L);
-  const sD = segundos(textos.novo);
-  $('numRadio').innerHTML = `${sD}<small> s</small>`;
-  $('avisoNovo').textContent = textos.novo;
-  // No modo área não há aviso de hoje: ele lista o imóvel ou a rua de cada UC, que o HTML não leva
-  ['blocoComparacao', 'blocoAntigo'].forEach(id => $(id).classList.toggle('oculto', !!c.area));
-  $('notaSemComparacao').classList.toggle('oculto', !c.area);
-  if (c.area) {
-    textos.antigo = ''; $('numRadioHoje').textContent = '';
-    atualizarJanela(c, f); preencherRoteiro(c, f, ant, sD);
-    return;
-  }
-  // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
-  textos.antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
-  const sA = segundos(textos.antigo);
-  const red = Math.round((1 - sD / sA) * 100);
-  $('numRadioHoje').textContent = `· hoje ${sA} s`;
-  $('avisoAntigo').textContent = textos.antigo;
-  $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
-  $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
-  $('barraAntigo').style.width = '100%';
-  $('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
-  $('ganho').innerHTML = red > 0
-    ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
-    : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
-  atualizarJanela(c, f);
-  preencherRoteiro(c, f, ant, sD);
-}
-[elData, elIni, elFim, elTel].forEach(el => el.addEventListener('input', () => { pararLeitura(); atualizarAviso(); }));
-atualizarAviso();
-
-// Copiar texto: navigator.clipboard e, se falhar (ex.: arquivo local), textarea + execCommand
-function copiarAlternativo(t) {
-  const ta = document.createElement('textarea');
-  ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
-  document.body.appendChild(ta); ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-  ta.remove();
-  return ok;
-}
-$('btnCopiar').addEventListener('click', async e => {
-  const b = e.currentTarget;
-  let ok = false;
-  try { await navigator.clipboard.writeText(textos.novo); ok = true; } catch (err) { ok = copiarAlternativo(textos.novo); }
-  b.textContent = ok ? 'Copiado!' : 'Não foi possível copiar';
-  setTimeout(() => { b.textContent = 'Copiar texto'; }, 2000);
-});
-
-// Código de verificação: SHA-256 (API de criptografia do próprio navegador, sem biblioteca)
+// ---------- Código de verificação: SHA-256 (API de criptografia do próprio navegador, sem biblioteca) ----------
 async function sha256hex(t) {
   const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
   return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
-let seqHash = 0, hashPronto = Promise.resolve();
-
-// Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
-const logoSVG = document.querySelector('.marca svg').outerHTML;
-// Textos do roteiro por idioma (o pt-BR é o mesmo de antes, palavra por palavra)
-const RT = {
-  'pt-BR': {
-    slogan: SLOGAN, titulo: 'Aviso de desligamento programado', avisoN: 'Aviso nº',
-    gerado: (a, m, d, h) => `gerado em ${d}/${m}/${a} às ${h}`,
-    leitura: 'Texto para leitura', duracao: s => `Duração estimada: cerca de ${s} segundos (locução de ~150 palavras por minuto).`,
-    resumo: 'Resumo', data: 'Data', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sem data)',
-    horario: 'Horário', horarioV: h => `das ${h}`, inteiras: 'Comunidades inteiras', parte: 'Comunidades em parte',
-    vizinhas: 'Localidades vizinhas', vizSim: n => `Sim: ${n} ${n === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome`, nao: 'Não',
-    telefone: 'Telefone de atendimento', exemplo: ' (exemplo, a confirmar)',
-    registro: 'Registro', chave: 'Chave aberta', alim: 'Alimentador', ucs: 'UCs afetadas',
-    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área desenhada', areaImportada: a => `Área importada (${a})`,
-    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${fmt(v)} ${v === 1 ? 'vértice' : 'vértices'}`,
-    areaNota: 'A área não segue a rede elétrica; a equipe confere se ela corresponde ao trecho desligado.',
-    citadas: 'Comunidades citadas', vizNao: 'Vizinhas não citadas', uc: n => n === 1 ? 'UC' : 'UCs', antecedencia: 'Antecedência',
-    ant: { ok: 'Antecedência OK', legal: h => `Abaixo do prazo legal de ${h} horas`, interno: d => `Abaixo do prazo interno de ${d} dias`,
-      semData: 'Informe a data do desligamento', passou: 'a data já passou', faltamH: h => `faltam ${h} h`, faltamD: d => `faltam ${d} dias` },
-    prazos: (l, i, v) => `Prazo legal: ${l} horas; prazo interno: ${i} dias (a confirmar). Unidades com equipamento vital: ${v} dias úteis.`,
-    rodape1: 'Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).',
-    rodape2: 'Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.',
-    verif: 'Código de verificação: qualquer alteração no texto gera um código diferente.',
-  },
-  en: {
-    slogan: 'Every community warned by name.', titulo: 'Scheduled power outage notice', avisoN: 'Notice no.',
-    gerado: (a, m, d, h) => `generated on ${MESES_EN[+m - 1]} ${+d}, ${a} at ${h}`,
-    leitura: 'Script to read on air', duracao: s => `Estimated duration: about ${s} seconds (read at ~150 words per minute).`,
-    resumo: 'Summary', data: 'Date', dataLonga: (a, m, d) => `${MESES_EN[+m - 1]} ${+d}, ${a}`, semData: '(no date)',
-    horario: 'Time', horarioV: h => `from ${h}`, inteiras: 'Whole communities', parte: 'Partially affected communities',
-    vizinhas: 'Nearby areas', vizSim: n => `Yes: ${n} ${n === 1 ? 'locality' : 'localities'} not named`, nao: 'No',
-    telefone: 'Customer service phone', exemplo: ' (example, to be confirmed)',
-    registro: 'Record', chave: 'Open switch', alim: 'Feeder', ucs: 'Affected consumer units',
-    area: 'Area', alims: 'Feeders', areaDesenhada: 'Drawn area', areaImportada: a => `Imported area (${a})`,
-    vertices: (p, v) => (p > 1 ? `${p} polygons, ` : '') + `${v} ${v === 1 ? 'vertex' : 'vertices'}`,
-    areaNota: 'The area does not follow the power grid; the field team checks that it matches the section switched off.',
-    citadas: 'Named communities', vizNao: 'Nearby areas not named', uc: n => n === 1 ? 'unit' : 'units', antecedencia: 'Advance notice',
-    ant: { ok: 'Advance notice OK', legal: h => `Below the legal minimum of ${h} hours`, interno: d => `Below the internal target of ${d} days`,
-      semData: 'Enter the outage date', passou: 'the date has passed', faltamH: h => `${h} h left`, faltamD: d => `${d} days left` },
-    prazos: (l, i, v) => `Legal minimum: ${l} hours; internal target: ${i} days (to be confirmed). Units with life-support equipment: ${v} business days.`,
-    rodape1: 'Fictitious power grid and customers. Real territorial data (IBGE 2022 Census).',
-    rodape2: 'No personal data: contains only community names and counts of consumer units.',
-    verif: 'Verification code: any change to the text produces a different code.',
-  },
-  es: {
-    slogan: 'Cada comunidad avisada por su nombre.', titulo: 'Aviso de corte programado', avisoN: 'Aviso n.º',
-    gerado: (a, m, d, h) => `generado el ${d}/${m}/${a} a las ${h}`,
-    leitura: 'Texto para leer al aire', duracao: s => `Duración estimada: unos ${s} segundos (locución de ~150 palabras por minuto).`,
-    resumo: 'Resumen', data: 'Fecha', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sin fecha)',
-    horario: 'Horario', horarioV: h => `de ${h}`, inteiras: 'Comunidades enteras', parte: 'Comunidades en parte',
-    vizinhas: 'Localidades vecinas', vizSim: n => `Sí: ${n} ${n === 1 ? 'localidad no mencionada' : 'localidades no mencionadas'} por su nombre`, nao: 'No',
-    telefone: 'Teléfono de atención', exemplo: ' (ejemplo, a confirmar)',
-    registro: 'Registro', chave: 'Seccionador abierto', alim: 'Alimentador', ucs: 'Unidades consumidoras afectadas',
-    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área dibujada', areaImportada: a => `Área importada (${a})`,
-    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${v} ${v === 1 ? 'vértice' : 'vértices'}`,
-    areaNota: 'El área no sigue la red eléctrica; el equipo verifica que corresponda al tramo desconectado.',
-    citadas: 'Comunidades mencionadas', vizNao: 'Vecinas no mencionadas', uc: n => n === 1 ? 'unidad' : 'unidades', antecedencia: 'Antelación',
-    ant: { ok: 'Antelación suficiente', legal: h => `Por debajo del plazo legal de ${h} horas`, interno: d => `Por debajo del plazo interno de ${d} días`,
-      semData: 'Indique la fecha del corte', passou: 'la fecha ya pasó', faltamH: h => `faltan ${h} h`, faltamD: d => `faltan ${d} días` },
-    prazos: (l, i, v) => `Plazo legal: ${l} horas; plazo interno: ${i} días (a confirmar). Unidades con equipos de soporte vital: ${v} días hábiles.`,
-    rodape1: 'Red eléctrica y clientes ficticios. Datos territoriales reales (Censo IBGE 2022).',
-    rodape2: 'Documento sin datos personales: solo contiene nombres de comunidades y conteos de unidades consumidoras.',
-    verif: 'Código de verificación: cualquier cambio en el texto genera un código distinto.',
-  },
-};
-function preencherRoteiro(c, f, ant, sD) {
-  const { inteiras, parciais, vizinhas } = classificar(c);
-  const agora = new Date();
-  const gerado = `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-  const A = c.area ? areaAtual : null;
-  const numero = `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${A ? `AREA-${(A.resumo.sha256 || 'SEMCODIGO').slice(0, 8).toUpperCase()}` : codAtual}`;
-  const L = idiomaAtual, T = RT[L];
-  const ou = l => l.length ? esc(l.join(', ')) : '—';
-  const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${T.uc(x[1])})`).join('; ') : '—';
-  const frases = textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
-  const [dg, hg] = gerado.split(' '), [gd, gm, ga] = dg.split('/');
-  const antTxt = ant.cod === 'semData' ? T.ant.semData : ant.cod === 'legal' ? T.ant.legal(PRAZO_LEGAL_HORAS)
-    : ant.cod === 'interno' ? T.ant.interno(PRAZO_INTERNO_DIAS) : T.ant.ok;
-  const faltaTxt = ant.cod === 'semData' ? '' : ant.h < 0 ? T.ant.passou : ant.h < 48 ? T.ant.faltamH(Math.floor(ant.h)) : T.ant.faltamD(Math.floor(ant.h / 24));
-  $('roteiro').innerHTML = `
-    <div class="rt-marca">${logoSVG}<div><div class="rt-nome">${APP_NOME}</div><div class="rt-slogan">${T.slogan}</div></div></div>
-    <h1>${T.titulo}</h1>
-    <div class="rt-meta">${esc(DISTRIBUIDORA)} · ${T.avisoN} <b>${numero}</b> · ${T.gerado(ga, gm, gd, hg)}</div>
-    <h2>${T.leitura}</h2>
-    <div class="rt-leitura">${frases}</div>
-    <div class="rt-dur">${T.duracao(sD)}</div>
-    <h2>${T.resumo}</h2>
-    <table>
-      <tr><th>${T.data}</th><td>${f.d ? T.dataLonga(f.a, f.m, f.d) : T.semData}</td></tr>
-      <tr><th>${T.horario}</th><td>${T.horarioV(formatarHorario(minutos(f.ini), minutos(f.fim), L))}</td></tr>
-      <tr><th>${T.inteiras}</th><td>${ou(inteiras)}</td></tr>
-      <tr><th>${T.parte}</th><td>${ou(parciais)}</td></tr>
-      <tr><th>${T.vizinhas}</th><td>${vizinhas.length ? T.vizSim(vizinhas.length) : T.nao}</td></tr>
-      <tr><th>${T.telefone}</th><td>${f.tel ? esc(f.tel) : '—'}${/x/i.test(f.tel) ? T.exemplo : ''}</td></tr>
-    </table>
-    <h2>${T.registro}</h2>
-    <table>
-      ${A ? `<tr><th>${T.area}</th><td>${A.origem === 'importada' ? T.areaImportada(esc(A.arquivo)) : T.areaDesenhada} · ${T.vertices(A.resumo.poligonos, A.resumo.vertices)}. ${T.areaNota}</td></tr>`
-        : `<tr><th>${T.chave}</th><td>${esc(codAtual)}</td></tr>`}
-      <tr><th>${A && c.alims.length > 1 ? T.alims : T.alim}</th><td>${esc(c.alim)}</td></tr>
-      <tr><th>${T.ucs}</th><td>${fmt(c.n)}</td></tr>
-      <tr><th>${T.citadas}</th><td>${comUCs(citadas(c))}</td></tr>
-      <tr><th>${T.vizNao}</th><td>${comUCs(vizinhas)}</td></tr>
-      <tr><th>${T.antecedencia}</th><td>${antTxt}${faltaTxt ? ` (${faltaTxt})` : ''}. ${T.prazos(PRAZO_LEGAL_HORAS, PRAZO_INTERNO_DIAS, PRAZO_VITAL_DIAS_UTEIS)}</td></tr>
-    </table>
-    <p class="rt-rodape">${T.rodape1}<br>
-      ${T.rodape2}</p>
-    <p class="rt-verif">SHA-256: <code id="rtCodigo">calculando…</code><br>
-      ${T.verif}</p>`;
-  // Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular).
-  // Data, horário e "gerado" ficam sempre no formato canônico (dd/mm/aaaa, 8h às 14h), em qualquer idioma.
-  // No modo área, a linha "chave" dá lugar a "area": origem, polígonos, vértices e o SHA-256 da forma canônica do contorno
-  const origemReg = A ? `area=${A.origem};poligonos=${A.resumo.poligonos};vertices=${A.resumo.vertices};sha256=${A.resumo.sha256 || 'indisponivel'}` : `chave=${codAtual}`;
-  const entrada = `texto=${textos.novo}\ndata=${f.dataLonga}\nhorario=${f.horario}\n${origemReg}\ngerado=${gerado}`;
-  const minha = ++seqHash;
-  hashPronto = sha256hex(entrada)
-    .then(h => { if (minha === seqHash) $('rtCodigo').textContent = h; })
-    .catch(() => { $('rtCodigo').textContent = 'indisponível neste navegador'; });
+// "gerado": data e hora da geração no formato canônico (dd/mm/aaaa hh:mm)
+const carimbo = agora => `${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+const numeroAviso = (f, area, cod) => `AV-${f.d ? f.a + f.m + f.d : 'SEMDATA'}-${area ? `AREA-${(area.resumo.sha256 || 'SEMCODIGO').slice(0, 8).toUpperCase()}` : cod}`;
+// Entrada do código, em formato fixo (descrito no SEGURANCA.md para quem quiser recalcular).
+// Data, horário e "gerado" ficam sempre no formato canônico (dd/mm/aaaa, 8h às 14h), em qualquer idioma.
+// No modo área, a linha "chave" dá lugar a "area": origem, polígonos, vértices e o SHA-256 da forma canônica do contorno
+function entradaVerificacao(texto, f, area, cod, gerado) {
+  const origemReg = area ? `area=${area.origem};poligonos=${area.resumo.poligonos};vertices=${area.resumo.vertices};sha256=${area.resumo.sha256 || 'indisponivel'}` : `chave=${cod}`;
+  return `texto=${texto}\ndata=${f.dataLonga}\nhorario=${f.horario}\n${origemReg}\ngerado=${gerado}`;
 }
-// Gerar PDF: monta o roteiro com a hora atual, espera o código de verificação e só então imprime
-$('btnPdf').addEventListener('click', async () => {
-  pararLeitura(); atualizarAviso();
-  await hashPronto;
-  window.print();
-});
-
-// Leitura em voz alta (voz do próprio navegador), para sentir a diferença no rádio
-function pararLeitura() {
-  if ('speechSynthesis' in window) speechSynthesis.cancel();
-  lendo = null;
-  document.querySelectorAll('button.ouvir').forEach(b => b.textContent = '▶ Ouvir');
-}
-document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click', () => {
-  if (!('speechSynthesis' in window)) { alert('Este navegador não tem leitura em voz alta.'); return; }
-  const alvo = b.dataset.alvo, estava = lendo === alvo;
-  pararLeitura();
-  if (estava || !avisoAtual) return;
-  const fala = new SpeechSynthesisUtterance(textos[alvo]);
-  // o aviso novo usa a voz do idioma escolhido; o de hoje é sempre em português
-  const lang = alvo === 'novo' ? IDI[idiomaAtual].voz : 'pt-BR';
-  fala.lang = lang;
-  const vozes = speechSynthesis.getVoices().map(v => [v, v.lang.replace('_', '-')]);
-  const voz = (vozes.find(([, l]) => l === lang) || vozes.find(([, l]) => l.startsWith(lang.slice(0, 2))) || [])[0];
-  if (voz) fala.voice = voz;
-  fala.onend = pararLeitura;
-  lendo = alvo; b.textContent = '■ Parar';
-  speechSynthesis.speak(fala);
-}));
 
 // ---------- Busca: código da chave ou nome de comunidade ----------
-const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const indiceCom = new Map();  // comunidade (sem sufixo) -> chaves cujo aviso a cita pelo nome
 for (const [cod, c] of Object.entries(D.cenarios)) {
   for (const x of citadas(c)) {
@@ -1265,51 +722,11 @@ function sugestoes(q) {
   });
   return itens;
 }
-const elBusca = $('busca'), elSug = $('sugestoes');
-let opcoes = [], ativa = -1;
-function mostrarSugestoes(itens, msg) {
-  opcoes = itens.filter(x => x.cod); ativa = -1;
-  if (!itens.length && !msg) { fecharSugestoes(); return; }
-  let k = 0;
-  elSug.innerHTML = (msg ? `<li class="vazio">${esc(msg)}</li>` : '') + itens.map(x => x.grupo
-    ? `<li class="grupo-sug" role="presentation">${esc(x.grupo)}</li>`
-    : `<li role="presentation"><button role="option" id="op-${k++}" aria-selected="false" data-cod="${esc(x.cod)}"><span class="mono">${esc(x.cod)}</span><span class="sub">${esc(x.sub)}</span></button></li>`).join('');
-  elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
-  elSug.querySelectorAll('button[data-cod]').forEach(b => b.addEventListener('click', () => simular(b.dataset.cod)));
+// Ramal rural sorteado (com pelo menos 2 comunidades no aviso)
+function sortearChave() {
+  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && citadas(c).length >= 2);
+  return op[Math.floor(Math.random() * op.length)][0];
 }
-function fecharSugestoes() { elSug.classList.add('oculto'); elBusca.setAttribute('aria-expanded', 'false'); elBusca.removeAttribute('aria-activedescendant'); opcoes = []; ativa = -1; }
-function marcar(i) {
-  const bs = elSug.querySelectorAll('button[data-cod]');
-  bs.forEach((b, j) => b.setAttribute('aria-selected', String(j === i)));
-  if (bs[i]) { bs[i].scrollIntoView({ block: 'nearest' }); elBusca.setAttribute('aria-activedescendant', bs[i].id); }
-  ativa = i;
-}
-elBusca.addEventListener('input', () => {
-  const pt = lerCoordenada(elBusca.value);
-  if (pt) {  // coordenada: oferece marcar o ponto da obra
-    opcoes = []; ativa = -1;
-    elSug.innerHTML = `<li role="presentation"><button role="option" aria-selected="false" data-ponto="1"><span>Marcar ponto da obra</span><span class="sub mono">${pt[0]}, ${pt[1]}</span></button></li>`;
-    elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
-    elSug.querySelector('button[data-ponto]').addEventListener('click', () => marcarObra(pt[0], pt[1]));
-    return;
-  }
-  const s = sugestoes(elBusca.value); mostrarSugestoes(s, elBusca.value.trim() && !s.length ? 'Nenhuma chave ou comunidade encontrada.' : '');
-});
-elBusca.addEventListener('keydown', e => {
-  if (e.key === 'ArrowDown' && opcoes.length) { e.preventDefault(); marcar((ativa + 1) % opcoes.length); }
-  else if (e.key === 'ArrowUp' && opcoes.length) { e.preventDefault(); marcar((ativa - 1 + opcoes.length) % opcoes.length); }
-  else if (e.key === 'Enter') {
-    e.preventDefault();
-    const pt = lerCoordenada(elBusca.value);
-    if (pt) { marcarObra(pt[0], pt[1]); return; }
-    const v = elBusca.value.trim().toUpperCase();
-    if (ativa >= 0) simular(opcoes[ativa].cod);
-    else if (D.cenarios[v]) simular(v);
-    else if (opcoes.length) simular(opcoes[0].cod);
-    else if (v) simular(v);
-  }
-});
-document.addEventListener('click', e => { if (!e.target.closest('.busca')) fecharSugestoes(); });
 
 // ---------- Ponto da obra: trecho mais próximo e chave de menor abrangência ----------
 // Mesmo cálculo de nucleo/abrangencia.py (só soma, multiplicação, divisão e raiz).
@@ -1374,54 +791,14 @@ function noPoligono(lat, lon, geom) {
   return polis.some(p => noAnel(lon, lat, p[0]) && !p.slice(1).some(b => noAnel(lon, lat, b)));
 }
 const ondeFica = (lat, lon, camada, prop) => (camada.features.find(f => noPoligono(lat, lon, f.geometry)) || { properties: {} }).properties[prop];
-
-const obraCamada = L.layerGroup().addTo(mapa);
-let obraAtual = null;
-function marcarObra(lat, lon) {
-  escolherModo('obra');
-  fecharSugestoes(); mapa.closePopup(); obraCamada.clearLayers();
+// O ponto da obra completo: análise, comunidade, distrito e alimentador do trecho mais próximo
+function pontoDaObra(lat, lon) {
   const r = analisarPonto(lat, lon), fora = r.situacao === 'fora';
-  obraAtual = { lat, lon, ...r };
-  const comunidade = fora ? null : ondeFica(lat, lon, D.camadas.previstas, 'NOME');
-  const distrito = fora ? null : ondeFica(lat, lon, D.camadas.distritos, 'NM_DIST');
-  const alim = r.trecho >= 0 ? D.camadas.mt.features[r.trecho].properties.ALIMENTADOR : null;
-  if (r.trecho >= 0 && r.situacao !== 'longe') obraCamada.addLayer(L.geoJSON(D.camadas.mt.features[r.trecho],
-    { pane: 'destaqueTopo', interactive: false, style: { color: css('--ambar'), weight: 7, opacity: 0.95 } }));
-  obraCamada.addLayer(L.circleMarker([lat, lon], { pane: 'destaqueTopo', interactive: false, radius: 9,
-    color: css('--noite'), weight: 3, fillColor: css('--ambar'), fillOpacity: 1 }));
-  // Texto do lugar e do resultado (o mesmo no popup e no bloco da lateral)
-  const coord = `<span class="mono">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`;
-  const local = fora ? coord
-    : `${coord}<br>Comunidade: <b>${esc(comunidade || 'fora das comunidades identificadas')}</b> · distrito <b>${esc(distrito || '—')}</b>`
-      + (r.situacao !== 'longe' ? `<br>Média tensão mais próxima: alimentador <b class="inteiro">${esc(alim)}</b>, a <b class="inteiro">${fmt(Math.round(r.distancia_m))} m</b>` : '');
-  let msg;
-  if (fora) msg = 'Este ponto fica fora da área carregada. Gere o Farol para esse município.';
-  else if (r.situacao === 'longe') msg = `Não há rede de média tensão a menos de ${fmt(RAIO_REDE_M)} m deste ponto.`;
-  else if (r.situacao === 'tronco') msg = `Nenhuma chave de ramal isola este trecho: ele fica no tronco do alimentador ${alim}, perto da subestação. `
-    + `Desligar o alimentador inteiro deixaria ${fmt(REDE.clientesPorAlimentador[alim] || 0)} clientes sem luz. Avalie trabalho com a rede energizada (linha viva) ou gerador.`;
-  const frase = o => `Abrir a <span class="mono">${esc(o.chave)}</span> deixa <b>${fmt(o.clientes)}</b> ${o.clientes === 1 ? 'cliente' : 'clientes'} sem luz (${o.comunidades} ${o.comunidades === 1 ? 'comunidade' : 'comunidades'})`;
-  $('obraLocal').innerHTML = local;
-  $('obraResultado').innerHTML = msg ? `<p class="obra-msg">${esc(msg)}</p>` : `
-    <p class="obra-princ">${frase(r.chaves[0])}</p>
-    <div class="obra-ops">${r.chaves.map((o, i) => `<div class="obra-op${i === 0 ? ' melhor' : ''}"><div><span class="mono">${esc(o.chave)}</span>
-      <small>${fmt(o.clientes)} ${o.clientes === 1 ? 'cliente' : 'clientes'} · ${o.comunidades} ${o.comunidades === 1 ? 'comunidade' : 'comunidades'}</small></div>
-      <button data-chave="${esc(o.chave)}">Simular esta chave</button></div>`).join('')}</div>`;
-  $('obraResultado').querySelectorAll('button[data-chave]').forEach(b => b.addEventListener('click', () => simular(b.dataset.chave)));
-  $('blocoObra').classList.remove('oculto');
-  ativarAba('desligamento');
-  mapa.setView([lat, lon], Math.max(mapa.getZoom(), 15), { animate: false });
-  L.popup({ maxWidth: 300 }).setLatLng([lat, lon]).setContent(`<div class="pop"><b>Ponto da obra</b><div class="obra-pop">${local}<div class="coms">${msg ? esc(msg) : frase(r.chaves[0])}</div></div></div>`).openOn(mapa);
+  return { lat, lon, ...r, fora,
+    comunidade: fora ? null : ondeFica(lat, lon, D.camadas.previstas, 'NOME'),
+    distrito: fora ? null : ondeFica(lat, lon, D.camadas.distritos, 'NM_DIST'),
+    alim: r.trecho >= 0 ? D.camadas.mt.features[r.trecho].properties.ALIMENTADOR : null };
 }
-function limparObra() { obraCamada.clearLayers(); obraAtual = null; $('blocoObra').classList.add('oculto'); mapa.closePopup(); }
-$('btnLimparObra').addEventListener('click', limparObra);
-// Botão direito no mapa: marcar o ponto da obra ali
-mapa.on('contextmenu', e => {
-  if (desenho) return;  // desenhando a área: o botão direito não marca ponto da obra
-  const el = document.createElement('div'); el.className = 'pop';
-  el.innerHTML = '<button class="prim acao">Marcar ponto da obra aqui</button>';
-  el.querySelector('button').addEventListener('click', () => marcarObra(+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)));
-  L.popup().setLatLng(e.latlng).setContent(el).openOn(mapa);
-});
 
 // ---------- Desligamento por área (desenhada ou importada) ----------
 // Mesmo cálculo de nucleo/area.py: UCs dentro do contorno e, daí em diante, as regras de
@@ -1525,7 +902,8 @@ function poligonosDoGeoJSON(obj) {
   return polis.filter(Boolean);
 }
 function poligonosDoKML(texto) {
-  // XML puro: o DOMParser não executa nada; só o texto de <coordinates> é aproveitado
+  // XML puro, num documento à parte: o DOMParser não executa nada e nada vai para a página;
+  // só o texto de <coordinates> é aproveitado
   const doc = new DOMParser().parseFromString(texto, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new ErroArea('O arquivo KML está malformado e não pôde ser lido.');
   const filhos = (el, nome) => [...el.children].filter(c => c.localName === nome);
@@ -1553,66 +931,710 @@ function lerContorno(nome, texto) {
   if (!polis.length) throw new ErroArea('O arquivo não tem nenhum polígono (Polygon ou MultiPolygon). Linhas e pontos não definem uma área.');
   return polis;
 }
-
-// ----- Estado, desenho no mapa e painel -----
-const areaCamada = L.featureGroup().addTo(mapa), desenhoCamada = L.layerGroup().addTo(mapa);
-let areaAtual = null, desenho = null;  // desenho: vértices [lat, lon] enquanto o operador clica
-function desenharContornoArea() {
-  areaCamada.clearLayers();
-  if (!areaAtual) return;
-  areaCamada.addLayer(L.geoJSON(geojsonDaArea(areaAtual), { pane: 'destaqueTopo', interactive: false,
-    style: { color: css('--ambar'), weight: 3, dashArray: '8 6', fillColor: css('--ambar'), fillOpacity: 0.08 } }));
+// Problemas do arquivo antes de ler o conteúdo (tamanho)
+function problemaDoArquivo(tamanho) {
+  if (tamanho === 0) return 'O arquivo está vazio.';
+  if (tamanho > CFG_AREA.maxBytes) return `O arquivo tem ${(tamanho / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB; o limite é ${CFG_AREA.maxBytes / 1048576} MB.`;
+  return '';
+}
+// Mensagem de quando a área não serve (null: serve)
+function problemaDaArea(r, polis) {
+  if (r.situacao === 'vertices') return `O contorno tem ${fmt(nVertices(polis))} vértices; o limite é ${fmt(CFG_AREA.maxVertices)}. Simplifique o contorno e importe de novo.`;
+  if (r.situacao === 'fora') return `A área fica fora de ${DIST.municipio}, o município carregado neste mapa. Para outro município, gere o Farol daquele município.`;
+  if (r.situacao === 'sem_clientes') return 'Nenhum cliente dentro da área. Confira se o contorno cobre o trecho que será desligado.';
+  return null;
 }
 function geojsonDaArea(a) {
   const geometry = a.poligonos.length === 1 ? { type: 'Polygon', coordinates: a.poligonos[0] } : { type: 'MultiPolygon', coordinates: a.poligonos };
   return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry,
     properties: { origem: a.origem, vertices: a.resumo.vertices, municipio: DIST.municipio, aviso: 'Área informada pelo operador; não segue a rede elétrica.' } }] };
 }
-function mostrarErroArea(msg) {
-  const el = $('areaErro');
-  el.textContent = msg || ''; el.classList.toggle('oculto', !msg);
+function nomeArquivoArea(agora) {
+  const carimboArq = `${isoData(agora).replace(/-/g, '')}-${pad2(agora.getHours())}${pad2(agora.getMinutes())}`;
+  return `area_${norm(DIST.municipio).replace(/[^a-z0-9]+/g, '-')}_${carimboArq}.geojson`;
 }
-function limparArea() {
-  areaAtual = null; areaCamada.clearLayers(); sairDoDesenho();
-  $('areaInfo').classList.add('oculto'); $('legArea').classList.add('oculto'); $('legRamal').classList.remove('oculto');
+// Área fechada a partir dos vértices desenhados ([lat, lon] -> anel [lon, lat] fechado)
+function areaDoDesenho(pontos) {
+  const anel = pontos.map(([lat, lon]) => [lon, lat]);
+  anel.push(anel[0].slice());
+  return [[anel]];
 }
-async function aplicarArea(polis, origem, arquivo) {
-  pararLeitura(); mostrarErroArea('');
-  if (avisoAtual) { destaque.clearLayers(); avisoAtual = null; codAtual = null; estadoSimulado(false); }
-  limparArea();
-  const r = analisarArea(polis);
-  if (r.situacao === 'vertices') { mostrarErroArea(`O contorno tem ${fmt(nVertices(polis))} vértices; o limite é ${fmt(CFG_AREA.maxVertices)}. Simplifique o contorno e importe de novo.`); return; }
-  if (r.situacao === 'fora') { mostrarErroArea(`A área fica fora de ${DIST.municipio}, o município carregado neste mapa. Para outro município, gere o Farol daquele município.`); return; }
-  let sha = null;
-  try { sha = await sha256hex(formaCanonica(polis)); } catch (e) { sha = null; }
-  areaAtual = { poligonos: polis, origem, arquivo, resumo: { poligonos: polis.length, vertices: nVertices(polis), sha256: sha } };
-  desenharContornoArea(); $('legArea').classList.remove('oculto'); $('legRamal').classList.add('oculto');  // a área não pinta ramal
-  const desc = `${origem === 'importada' ? `Área importada (${arquivo})` : 'Área desenhada'} · ${RT['pt-BR'].vertices(polis.length, areaAtual.resumo.vertices)}`;
-  $('areaDesc').textContent = desc; $('areaInfo').classList.remove('oculto');
-  if (r.situacao === 'sem_clientes') {
-    mapa.fitBounds(areaCamada.getBounds().pad(0.15), { maxZoom: 16 });
-    mostrarErroArea('Nenhum cliente dentro da área. Confira se o contorno cobre o trecho que será desligado.');
-    return;
-  }
-  const c = cenarioDaArea(r.ucs);
-  avisoAtual = c; codAtual = null;
-  desenharDestaque(c, null, true);
-  const zona = c.rural >= 0.8 ? 'zona rural' : c.rural <= 0.2 ? 'zona urbana' : 'zona rural e urbana';
-  $('cdRot').textContent = 'Área desligada';
-  $('cdChave').textContent = origem === 'importada' ? 'Área importada' : 'Área desenhada';
-  $('cdMeta').textContent = `${c.alims.length > 1 ? 'Alimentadores' : 'Alimentador'} ${c.alim} · ${zona}`;
+
+// =====================================================================================
+// VIEW: desenha a lateral, o mapa, o PDF e a tela de abertura a partir do estado.
+// Não muda o estado: só lê o que o Controller decidiu e mostra. Guarda apenas o que é do
+// próprio desenho (as camadas do Leaflet e o enquadramento do último ramal desenhado).
+// =====================================================================================
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+
+// ---------- Tela de abertura: some quando o mapa termina de montar (sem tempo fixo) ----------
+const semMovimento = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mostrarProgresso(texto) { $('aberturaProgresso').textContent = texto; }
+function fecharAbertura() {
+  const el = $('abertura');
+  document.documentElement.dataset.farol = 'pronto';
+  const remover = () => { el.hidden = true; };
+  if (semMovimento()) { remover(); return; }
+  el.addEventListener('transitionend', remover, { once: true });
+  el.addEventListener('transitioncancel', remover, { once: true });
+  el.classList.add('saindo');
+}
+function mostrarErroAbertura(msg) {
+  document.documentElement.dataset.farol = 'erro';
+  $('aberturaProgresso').textContent = `Não foi possível montar o mapa: ${msg}`;
+  $('abertura').classList.add('com-erro');
+}
+
+// ---------- Tema ----------
+const ROTULO_TEMA = { auto: 'Tema: automático', claro: 'Tema: claro', escuro: 'Tema: escuro' };
+const ROTULO_CURTO = { auto: 'Auto', claro: 'Claro', escuro: 'Escuro' };
+function aplicarTema() {
+  const r = document.documentElement, tema = estado.tema;
+  if (tema === 'auto') delete r.dataset.theme; else r.dataset.theme = tema === 'escuro' ? 'dark' : 'light';
+  const b = $('btnTema');
+  b.querySelector('.longo').textContent = ROTULO_TEMA[tema]; b.querySelector('.curto').textContent = ROTULO_CURTO[tema];
+  b.setAttribute('aria-label', ROTULO_TEMA[tema]);
+}
+const escuro = () => document.documentElement.dataset.theme === 'dark' ||
+  (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+
+// ---------- Mapa e camadas (montados pelo Controller na abertura) ----------
+let mapa, rend, fundo = null, satelite, limMun, elCam, bt = null, versaoTema = 0;
+let destaque, obraCamada, areaCamada, desenhoCamada, limitesRamal = null;
+const C = {};
+const atribuicao = 'Base &copy; Esri · Vias &copy; OpenStreetMap';
+// Cores dos alimentadores: 8 slots categóricos em ordem fixa; o 9º repete o slot 1 tracejado
+const corAlim = a => css(`--s${((D.alimentadores.indexOf(a)) % 8) + 1}`);
+const tracoAlim = a => D.alimentadores.indexOf(a) >= 8 ? '6 5' : null;
+function trocarFundo() {
+  if (fundo) mapa.removeLayer(fundo);
+  fundo = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    { attribution: atribuicao, maxZoom: 17, maxNativeZoom: 16, noWrap: true }).addTo(mapa);
+  fundo.bringToBack();
+}
+function popupChave(cod, aoSimular) {
+  const c = D.cenarios[cod], el = document.createElement('div');
+  el.className = 'pop';
+  if (!c) { el.innerHTML = `<b class="mono">${esc(cod)}</b>Sem clientes a jusante.`; return el; }
+  const cit = citadas(c);
+  const nomes = cit.slice(0, 4).map(x => esc(semSufixo(x[0]))).join(', ') + (cit.length > 4 ? ` e mais ${cit.length - 4}` : '');
+  el.innerHTML = `<b class="mono">${esc(cod)}</b>
+    <span class="k">Alimentador</span> ${esc(c.alim)}<br>
+    <span class="k">Abrindo esta chave, ficam sem energia:</span> <b style="display:inline">${fmt(c.n)}</b> clientes${c.rural >= 0.8 ? ' (zona rural)' : ''}
+    <div class="coms">Comunidades: ${nomes}</div>
+    <button class="prim acao">Simular desligamento</button>`;
+  el.querySelector('button').addEventListener('click', () => aoSimular(cod));
+  return el;
+}
+const estiloChave = () => ({ radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 });
+const estiloTrafo = () => ({ radius: 3, color: css('--texto'), weight: 1, fillColor: css('--sup'), fillOpacity: 1 });
+// UCs: posição real do endereço (CNEFE); popup mostra o que o cadastro diz e o que o algoritmo concluiu.
+// LGPD: sem titular, número da UC ou endereço; só classe, comunidade e dados técnicos.
+// A comunidade real (gabarito) só aparece no modo apresentação.
+const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
+function popupUC(i) {
+  const u = D.ucs[i], loc = D.locCad[u[10]];
+  return `<div class="pop"><b>Unidade ${esc(D.classes[u[9]].toLowerCase())}</b>
+    <span class="k">Localidade digitada no cadastro:</span> ${loc ? esc(loc) : '<i>(vazio)</i>'}<br>
+    <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)
+    <span class="so-ap"><br><span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}</span>
+    ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
+    <span class="k">Transformador:</span> ${esc(D.trafos[u[2]][2])} · ${esc(D.trafos[u[2]][4])}</div>`;
+}
+function camadaUCs(filtro, estilo) {
+  const g = L.layerGroup();
+  g.estilo = estilo;
+  D.ucs.forEach((u, i) => { if (!filtro(u)) return;
+    g.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, ...estilo() }).on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
+  });
+  return g;
+}
+const estiloUC = () => ({ radius: 2.5, stroke: false, fillColor: css('--uc'), fillOpacity: 0.75 });
+
+// Painel de camadas: [id, nome, amostra, cor, ligada ao abrir, só no modo apresentação, observação]
+const GRUPOS = [
+  ['Território (IBGE)', [
+    ['municipio', 'Limite municipal', 'linha', '--texto', true],
+    ['distritos', 'Distritos (6)', 'linha', '--texto2', true],
+    ['setores', 'Setores censitários', 'area', '--s6', false],
+    ['localidades', 'Localidades oficiais (15)', 'ponto', '--texto', false],
+    ['vias', 'Vias (OpenStreetMap)', 'linha', '--via', false],
+    ['satelite', 'Imagem de satélite', 'area', '--apagado', false],
+    ['gabarito', 'Comunidades reais (gabarito)', 'area', '--s7', false, true],
+  ]],
+  ['Rede elétrica (fictícia)', [
+    ['se', 'Subestação', 'ponto', '--info', false],
+    ['mt', 'Rede de média tensão', 'linha', '--s1', true],
+    ['chaves', 'Chaves', 'ponto', '--texto', true, false, `aparecem a partir do zoom ${ZOOM_CHAVES}`],
+    ['trafos', 'Transformadores', 'ponto', '--texto', false],
+    ['bt', 'Ramais de baixa tensão (rurais)', 'linha', '--apagado', false],
+    ['ucsRurais', 'UCs rurais', 'ponto', '--uc', false],
+    ['ucsUrbanas', 'UCs urbanas', 'ponto', '--uc', false],
+  ]],
+  ['Resultado', [
+    ['previstas', 'Comunidades identificadas', 'area', '--texto2', true],
+    ['erros', 'UCs com comunidade errada (validação)', 'ponto', '--info', false, true],
+  ]],
+];
+const CAMADAS_INICIAIS = Object.fromEntries(GRUPOS.flatMap(([, itens]) => itens.map(([id, , , , on]) => [id, on])));
+const SO_APRESENTACAO = new Set(GRUPOS.flatMap(([, itens]) => itens.filter(x => x[5]).map(x => x[0])));
+// Pontos criados com a cor do tema da época: refaz o estilo quando o tema mudou
+function restilizar(g) {
+  if (!g.estilo || g.versaoTema === versaoTema) return;
+  const e = g.estilo(); g.eachLayer(l => l.setStyle && l.setStyle(e)); g.versaoTema = versaoTema;
+}
+function aplicarCamada(id) {
+  const g = C[id];
+  let ver = estado.camadas[id] && (!SO_APRESENTACAO.has(id) || estado.apresentacao);
+  if (id === 'chaves') ver = ver && mapa.getZoom() >= ZOOM_CHAVES;
+  if (ver) { restilizar(g); if (!mapa.hasLayer(g)) g.addTo(mapa); } else if (mapa.hasLayer(g)) mapa.removeLayer(g);
+}
+// Nomes das comunidades: só quando o território comporta o nome naquele zoom (evita sobreposição no centro urbano)
+function arrumarNomes() {
+  if (!mapa.hasLayer(C.previstas)) return;
+  C.previstas.eachLayer(l => {
+    const t = l.getTooltip(), el = t && t.getElement();
+    if (!el) return;
+    const b = l.getBounds(), a = mapa.latLngToLayerPoint(b.getSouthWest()), z = mapa.latLngToLayerPoint(b.getNorthEast());
+    el.classList.toggle('lbl-oculto', Math.abs(z.x - a.x) < String(t.getContent()).length * 6.5 + 8);
+  });
+}
+const ICONE_CAMADAS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/></svg>';
+const ICONE_ENQUADRAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+
+// Mapa base (travado no município), camadas, painel de camadas, controles e legenda.
+// aoSimularChave: o que fazer quando pedem para simular uma chave pelo popup (decide o Controller)
+function montarMapa(aoSimularChave) {
+  mapa = L.map('mapa', { preferCanvas: true, zoomControl: false, attributionControl: false,
+    maxZoom: 17, zoomSnap: 1, maxBoundsViscosity: 1 });
+  L.control.attribution({ prefix: 'Rede e clientes fictícios · território real (IBGE 2022) · Leaflet' }).addTo(mapa);
+  satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Imagens &copy; Esri', maxZoom: 17, noWrap: true });
+  trocarFundo();
+  mapa.on('zoomend', () => $('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES));
+
+  const pane = (nome, z) => { mapa.createPane(nome).style.zIndex = z; return nome; };
+  // destaque acima de tudo e sem capturar cliques; chaves e pontos clicáveis num único canvas ('topo')
+  pane('poligonos', 350); pane('linhas', 400); pane('pontos', 450); pane('topo', 550); pane('destaque', 600); pane('destaqueTopo', 650);
+  rend = L.canvas({ pane: 'topo', padding: 0.4 });
+
+  C.municipio = L.geoJSON(D.camadas.municipio, { pane: 'linhas', interactive: false,
+    style: () => ({ color: css('--texto'), weight: 2.5, fill: false }) });
+  C.distritos = L.geoJSON(D.camadas.distritos, { pane: 'linhas', interactive: false,
+    style: () => ({ color: css('--texto2'), weight: 1.5, dashArray: '6 4', fill: false }),
+    onEachFeature: (f, l) => l.bindTooltip(f.properties.NM_DIST, { permanent: true, direction: 'center', className: 'lbl dist' }) });
+  C.setores = L.geoJSON(D.camadas.setores, { pane: 'poligonos', interactive: false,
+    style: f => ({ color: css('--apagado'), weight: 0.6, fillColor: f.properties.SITUACAO === 'Urbana' ? css('--s1') : css('--s6'), fillOpacity: 0.07 }) });
+  C.localidades = L.geoJSON(D.camadas.localidades, {
+    pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 6, color: css('--fundo'), weight: 2, fillColor: css('--texto'), fillOpacity: 1 }),
+    onEachFeature: (f, l) => l.bindTooltip(`${esc(f.properties.NM_LOCALIDADE)} <span class="de">· ${esc(f.properties.CT_LOCALIDADE)} (IBGE)</span>`) });
+  C.gabarito = L.geoJSON(D.camadas.gabarito, { pane: 'poligonos', interactive: false,
+    style: () => ({ color: css('--s7'), weight: 1.5, dashArray: '4 3', fillColor: css('--s7'), fillOpacity: 0.05 }) });
+  C.vias = L.geoJSON(D.camadas.vias, { pane: 'linhas', interactive: false,
+    style: f => ({ color: css('--via'), weight: f.properties.MAIOR ? 2 : 1 }) });
+  C.previstas = L.geoJSON(D.camadas.previstas, { pane: 'poligonos', interactive: false,
+    style: () => ({ color: css('--texto2'), weight: 0.8, opacity: 0.45, fillColor: css('--texto2'), fillOpacity: 0.05 }),
+    onEachFeature: (f, l) => l.bindTooltip(f.properties.NOME.replace(/ \(.*\)$/, ''), { permanent: true, direction: 'center', className: 'lbl com' }) });
+  C.mt = L.geoJSON(D.camadas.mt, { pane: 'linhas', interactive: false,
+    style: f => ({ color: corAlim(f.properties.ALIMENTADOR), weight: 2, dashArray: tracoAlim(f.properties.ALIMENTADOR) }) });
+  C.se = L.geoJSON(D.camadas.se, {
+    pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--info'), fillOpacity: 1 }),
+    onEachFeature: (f, l) => l.bindTooltip(esc(f.properties.NOME)) });
+  C.chaves = L.geoJSON(D.camadas.chaves, {
+    pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: rend, ...estiloChave() }),
+    onEachFeature: (f, l) => {
+      const p = f.properties;
+      l.bindTooltip(`<b class="mono">${esc(p.COD_CHAVE)}</b> · ${fmt(p.UC_JUSANTE)} clientes<br><span class="de">clique para ver e simular</span>`);
+      l.bindPopup(() => popupChave(p.COD_CHAVE, aoSimularChave), { minWidth: 250 });
+    } });
+  C.trafos = L.layerGroup(D.trafos.map(t => L.circleMarker([t[0], t[1]], { renderer: rend, ...estiloTrafo() })
+    .bindTooltip(`<b>${esc(t[2])}</b> · ${esc(t[4])}<br>${t[3]} UCs`)));
+  C.ucsRurais = camadaUCs(u => u[8] === 1, estiloUC);
+  C.ucsUrbanas = camadaUCs(u => u[8] === 0, estiloUC);
+  C.erros = camadaUCs(u => u[6] === 0, () => ({ radius: 3.5, color: css('--fundo'), weight: 1, fillColor: css('--info'), fillOpacity: 1 }));
+  C.trafos.estilo = estiloTrafo;
+  C.bt = L.layerGroup();
+  C.bt.on('add', () => { if (bt) return;
+    bt = D.ucs.filter(u => u[8] === 1).map(u => L.polyline([[D.trafos[u[2]][0], D.trafos[u[2]][1]], [u[0], u[1]]],
+      { pane: 'linhas', color: css('--apagado'), weight: 0.8, interactive: false }));
+    bt.forEach(l => C.bt.addLayer(l));
+  });
+  C.satelite = satelite;
+
+  // Painel de camadas (o clique em cada chave liga/desliga: Controller)
+  elCam = $('painelCamadas');
+  GRUPOS.forEach(([titulo, itens]) => {
+    const g = document.createElement('div'); g.className = 'grupo';
+    g.innerHTML = `<div class="rot">${titulo}</div>`;
+    itens.forEach(([id, nome, tipo, cor, on, soAp, obs]) => {
+      const am = tipo === 'area' ? `<span class="amostra" style="background:color-mix(in srgb, var(${cor}) 25%, transparent);border:1.5px solid var(${cor})"></span>`
+        : tipo === 'linha' ? `<span class="amostra linha" style="background:var(${cor})"></span>` : `<span class="amostra ponto" style="background:var(${cor})"></span>`;
+      const b = document.createElement('button');
+      b.className = 'sw' + (soAp ? ' so-ap' : ''); b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', String(on));
+      b.dataset.camada = id;
+      b.innerHTML = `<span class="sw-txt">${am}<span>${nome}${obs ? `<small>${obs}</small>` : ''}</span></span><span class="chave-sw" aria-hidden="true"></span>`;
+      g.appendChild(b);
+      if (id === 'mt') {
+        const a = document.createElement('div'); a.className = 'alims';
+        a.innerHTML = D.alimentadores.map((al, i) => `<span><span class="amostra linha" style="width:14px;background:${i >= 8 ? `repeating-linear-gradient(90deg,var(--s${i % 8 + 1}) 0 4px,transparent 4px 7px)` : `var(--s${i % 8 + 1})`}"></span>${esc(al)}</span>`).join('');
+        g.appendChild(a);
+      }
+    });
+    elCam.appendChild(g);
+  });
+  mapa.on('zoomend', () => aplicarCamada('chaves'));
+  mapa.on('zoomend', arrumarNomes);
+  C.previstas.on('add', () => setTimeout(arrumarNomes));
+
+  // Controles do mapa (camadas, aproximar, afastar, enquadrar) e legenda
+  const Controles = L.Control.extend({ options: { position: 'topright' }, onAdd() {
+    const d = L.DomUtil.create('div', 'ctl-mapa');
+    d.innerHTML = `<button id="btnCamadas" aria-label="Camadas do mapa" title="Camadas do mapa" aria-expanded="false" aria-controls="painelCamadas">${ICONE_CAMADAS}</button>
+      <button id="btnMais" aria-label="Aproximar" title="Aproximar">+</button>
+      <button id="btnMenos" aria-label="Afastar" title="Afastar">−</button>
+      <button id="btnEnquadrar" aria-label="Enquadrar o ramal desligado" title="Enquadrar o ramal desligado">${ICONE_ENQUADRAR}</button>`;
+    L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+    return d;
+  } });
+  new Controles().addTo(mapa);
+  L.DomEvent.disableClickPropagation(elCam); L.DomEvent.disableScrollPropagation(elCam);
+  const Legenda = L.Control.extend({ options: { position: 'bottomleft' }, onAdd() {
+    const d = L.DomUtil.create('div', 'legenda');
+    d.innerHTML = '<span id="legRamal"><i class="leg-ramal"></i>Ramal desligado</span><span><i class="leg-aviso"></i>Comunidade no aviso</span><span><i class="leg-viz"></i>Vizinha</span><span id="legArea" class="oculto"><i class="leg-area"></i>Área informada</span>';
+    return d;
+  } });
+  new Legenda().addTo(mapa);
+
+  // Camadas do que está desligado, do ponto da obra, da área e do desenho
+  destaque = L.layerGroup().addTo(mapa);
+  obraCamada = L.layerGroup().addTo(mapa);
+  areaCamada = L.featureGroup().addTo(mapa); desenhoCamada = L.layerGroup().addTo(mapa);
+}
+function marcarCamada(id) { elCam.querySelector(`button[data-camada="${id}"]`).setAttribute('aria-checked', String(estado.camadas[id])); }
+function abrirCamadas(abrir) { elCam.classList.toggle('oculto', !abrir); $('btnCamadas').setAttribute('aria-expanded', String(abrir)); }
+function redesenharCores() {
+  versaoTema++;
+  ['municipio', 'distritos', 'setores', 'gabarito', 'vias', 'previstas', 'mt'].forEach(k => C[k].resetStyle && C[k].resetStyle());
+  C.chaves.eachLayer(l => l.setStyle(estiloChave()));
+  C.se.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--info') }));
+  C.localidades.eachLayer(l => l.setStyle({ color: css('--fundo'), fillColor: css('--texto') }));
+  if (bt) bt.forEach(l => l.setStyle({ color: css('--apagado') }));
+  ['trafos', 'ucsRurais', 'ucsUrbanas', 'erros'].forEach(k => mapa.hasLayer(C[k]) && restilizar(C[k]));
+}
+function mostrarTemaNoMapa() {
+  trocarFundo(); redesenharCores();
+  if (estado.cenario) desenharDestaque(estado.cenario, estado.cod, false);
+  desenharContornoArea();
+}
+// Abertura do mapa: município inteiro, travado nele
+function enquadrarMunicipio() {
+  Object.keys(estado.camadas).forEach(aplicarCamada);
+  limMun = C.municipio.getBounds();
+  mapa.setMaxBounds(limMun.pad(0.15));
+  mapa.fitBounds(limMun);
+  ajustarZoomMin();
+  mapa.on('resize', ajustarZoomMin);
+  $('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES);
+  arrumarNomes();
+}
+function ajustarZoomMin() { mapa.setMinZoom(0); mapa.setMinZoom(mapa.getBoundsZoom(limMun, false)); }
+const enquadrarRamal = () => limitesRamal ? mapa.fitBounds(limitesRamal, { maxZoom: 15 }) : mapa.fitBounds(limMun);
+
+// ---------- Textos fixos da tela (vêm da configuração da distribuidora) ----------
+function mostrarTextosFixos() {
+  $('appNome').textContent = APP_NOME;
+  logoSVG = document.querySelector('.marca svg').outerHTML;
+  const M = D.metricas;
+  const pct = v => v.toLocaleString('pt-BR');
+  $('validGeral').innerHTML = `
+  <div class="rot">Validação com o Censo · ${fmt(M.nCenarios)} cenários</div>
+  <div class="valid-nums">
+    <div><div class="num">${pct(M.acertoRural)}<small>%</small></div><div class="leg">acerto da comunidade (UCs rurais) <span class="de">· cadastro ${pct(M.acertoRuralCadastro)}%</span></div></div>
+    <div><div class="num">${pct(M.coberturaUC)}<small>%</small></div><div class="leg">dos clientes desligados ouvem o nome da própria comunidade</div></div>
+    <div><div class="num">${M.segDepois}<small> s</small></div><div class="leg">aviso médio no Farol <span class="de">· hoje ${M.segAntes} s</span></div></div>
+  </div>`;
+  $('appLugar').textContent = `${DIST.municipio}/${DIST.uf} · demonstração`;
+  $('notaPrazos').textContent = `Unidades com equipamento vital exigem ${PRAZO_VITAL_DIAS_UTEIS} dias úteis (não há cadastro desses clientes nesta demonstração). Prazos: ${DIST.norma}.`;
+  $('avIdioma').innerHTML = Object.entries(IDI).map(([k, m]) => `<option value="${k}">${esc(m.nome)}</option>`).join('');
+  mostrarCampos();
+}
+// Campos de data, horário, telefone e idioma com os valores do estado
+function mostrarCampos() {
+  $('avData').value = estado.data; $('avIni').value = estado.ini; $('avFim').value = estado.fim;
+  $('avTel').value = estado.tel; $('avIdioma').value = estado.idioma;
+}
+function mostrarHorario() { $('avIni').value = estado.ini; $('avFim').value = estado.fim; }
+function mostrarApresentacao() {
+  $('btnApresentacao').setAttribute('aria-pressed', String(estado.apresentacao));
+  document.documentElement.classList.toggle('apresentacao', estado.apresentacao);
+  SO_APRESENTACAO.forEach(aplicarCamada);
+}
+
+// ---------- Lateral ----------
+function ativarAba(nome) {
+  document.querySelectorAll('.abas button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
+  ['desligamento', 'aviso', 'comunidades'].forEach(a => $(`aba-${a}`).classList.toggle('oculto', a !== nome));
+  $('lateral').scrollTop = 0;
+}
+function estadoSimulado(sim) {
+  $('lateral').classList.toggle('simulado', sim);
+  $('vazio').classList.toggle('oculto', sim || estado.modo !== 'chave'); $('cheio').classList.toggle('oculto', !sim);
+  if (!sim) ativarAba('desligamento');
+}
+function mostrarModo() {
+  document.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.modo === estado.modo)));
+  $('instrObra').classList.toggle('oculto', estado.modo !== 'obra');
+  $('blocoArea').classList.toggle('oculto', estado.modo !== 'area');
+}
+function desenharDestaque(c, cod, enquadrar) {
+  destaque.clearLayers();
+  const coral = css('--desligado');
+  // Trechos de MT desligados
+  const feats = D.camadas.mt.features;
+  c.mt.forEach(i => destaque.addLayer(L.geoJSON(feats[i], { pane: 'destaque', interactive: false, style: { color: coral, weight: 5, opacity: 0.9 } })));
+  // Comunidades: contorno cheio para as do aviso; fino e pontilhado para as vizinhas (não citadas)
+  const nomes = new Map(c.com.map(x => [x[0], x]));
+  destaque.addLayer(L.geoJSON({ type: 'FeatureCollection', features: D.camadas.previstas.features.filter(f => nomes.has(f.properties.NOME)) },
+    { pane: 'destaque', interactive: false, style: f => nomes.get(f.properties.NOME)[5]
+      ? { color: coral, weight: 2, opacity: 1, dashArray: '1 6', lineCap: 'round', fillColor: coral, fillOpacity: 0.03 }
+      : { color: coral, weight: 2.5, opacity: 1, fillColor: coral, fillOpacity: 0.1 } }));
+  // UCs desligadas (clicáveis, no mesmo canvas das chaves): a jusante da chave ou dentro da área
+  const tset = new Set(c.trafos), uset = c.area ? new Set(c.ucsIdx) : null, pts = [];
+  D.ucs.forEach((u, i) => { if (uset ? !uset.has(i) : !tset.has(u[2])) return; pts.push([u[0], u[1]]);
+    destaque.addLayer(L.circleMarker([u[0], u[1]], { renderer: rend, radius: 3.5, color: css('--fundo'), weight: 1, fillColor: coral, fillOpacity: 1 })
+      .on('click', e => L.popup().setLatLng(e.latlng).setContent(popupUC(i)).openOn(mapa)));
+  });
+  const ch = D.camadas.chaves.features.find(f => f.properties.COD_CHAVE === cod);
+  if (ch) destaque.addLayer(L.circleMarker([ch.geometry.coordinates[1], ch.geometry.coordinates[0]], { pane: 'destaqueTopo', interactive: false, radius: 9, color: css('--fundo'), weight: 3, fillColor: css('--texto'), fillOpacity: 1 })
+    .bindTooltip(`<b class="mono">${esc(cod)}</b> aberta`, { permanent: true, direction: 'top', offset: [0, -8], pane: 'tooltipPane' }));
+  limitesRamal = c.area ? areaCamada.getBounds().pad(0.15) : pts.length ? L.latLngBounds(pts).pad(0.25) : null;
+  if (enquadrar && limitesRamal) mapa.fitBounds(limitesRamal, { maxZoom: 15 });
+}
+const apagarDestaque = () => destaque.clearLayers();
+function limparDestaque() { destaque.clearLayers(); limitesRamal = null; }
+// Cabeçalho do que está desligado: chave ou área, alimentador, zona e os três números
+function mostrarDesligamento(c, rotulo, titulo, meta) {
+  $('cdRot').textContent = rotulo;
+  $('cdChave').textContent = titulo;
+  $('cdMeta').textContent = meta;
   $('numClientes').textContent = fmt(c.n);
   const nCit = citadas(c).length;
   $('numComunidades').textContent = nCit;
   $('numComunidadesLeg').textContent = nCit === 1 ? 'comunidade no aviso' : 'comunidades no aviso';
-  desenharComunidades(c);
-  atualizarAviso();
-  estadoSimulado(true); ativarAba('desligamento');
+}
+function desenharComunidades(c) {
+  const item = ([n, a, t, parc, conf, frag]) => `<li class="${frag ? 'viz' : ''}">
+    <div class="com-l1"><span class="com-nome">${esc(n)}</span>${frag ? '' : `<span class="selo-c ${parc ? 'parte' : 'inteira'}">${parc ? 'Parte' : 'Inteira'}</span>`}</div>
+    <div class="com-l2">${fmt(a)} de ${fmt(t)} UCs · confiança ${Math.round(conf * 100)}%</div>
+    <div class="prop" aria-hidden="true"><i style="width:${Math.max(2, Math.min(100, a / t * 100)).toFixed(1)}%"></i></div></li>`;
+  const viz = c.com.filter(x => x[5]);
+  $('listaCitadas').innerHTML = citadas(c).map(item).join('');
+  $('listaVizinhas').innerHTML = viz.map(item).join('');
+  $('blocoVizinhas').classList.toggle('oculto', !viz.length);
+  // Validação do cenário (só no modo apresentação; o gabarito nunca é usado pelo algoritmo).
+  // No modo área não aparece: calcular a cobertura no navegador seria usar o gabarito fora da avaliação.
+  $('validCen').className = c.area ? 'oculto' : 'valid-cen so-ap bloco';
+  if (c.area) { $('validCen').innerHTML = ''; return; }
+  const real = c.real.map(([n, q]) => `${esc(n)} <span class="de">(${q})</span>`).join(', ');
+  $('validCen').innerHTML = `
+    <div class="rot">Validação com o Censo</div>
+    <p><b>${Math.round(c.cobUC * 100)}%</b> dos clientes desligados ouvem o nome da própria comunidade.</p>
+    <p>Cobertura <span class="${c.cob >= 1 ? 'ok' : 'ruim'}">${Math.round(c.cob * 100)}%</span> ·
+      Precisão <span class="${c.prec >= 1 ? 'ok' : 'ruim'}">${Math.round(c.prec * 100)}%</span></p>
+    <p><span class="de">Comunidades reais atingidas:</span> ${real}</p>
+    <p class="nota" style="margin:0">Cobertura = comunidades reais citadas pelo nome. Precisão = comunidades citadas que de fato foram atingidas. O gabarito nunca é usado pelo algoritmo, só nesta conferência.</p>`;
 }
 
-// Desenho: cada clique no mapa acrescenta um vértice (chaves e UCs ficam sem clique enquanto isso)
+// ---------- Janela de menor dano e cargas sensíveis ----------
+const ICONE = {
+  saude: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>',
+  ensino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 10 12 5l9 5-9 5-9-5Z"/><path d="M7 12.5V17c3 2 7 2 10 0v-4.5"/></svg>',
+  agropecuaria: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-14 14Z"/><path d="M5 19 13 11"/></svg>',
+};
+function atualizarJanela(c, f) {
+  const cont = contagemAtiv(c), tipo = f.d ? tipoDia(f.a, f.m, f.d) : null;
+  const ini = minutos(f.ini), dur = minutos(f.fim) - ini;
+  const horas = (a, b) => `${horaPt(hhmm(a))} às ${horaPt(hhmm(b))}`;
+  const comp = $('janelaComparacao'); comp.classList.add('oculto');
+  $('janelaOutras').innerHTML = '';
+  let msg = '';
+  if (!tipo) msg = 'Informe a data para sugerir a janela.';
+  else if (dur <= 0) msg = 'Ajuste o início e o fim da obra.';
+  const sug = msg ? [] : sugerirJanelas(cont, tipo, dur);
+  if (!msg && !sug.length) msg = `Uma obra de ${(dur / 60).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h não cabe no expediente (${horaPt(hhmm(EXP.inicio))} às ${horaPt(hhmm(EXP.fim))}).`;
+  if (msg) { $('janelaMelhor').innerHTML = `<p class="nota" style="margin:0">${esc(msg)}</p>`; }
+  else {
+    const atual = j => j.inicio === ini && j.fim === ini + dur;
+    const botao = j => atual(j) ? '<span class="jan-atual">Janela atual</span>' : `<button data-ini="${j.inicio}" data-fim="${j.fim}">Usar esta janela</button>`;
+    const [m, ...outras] = sug;
+    $('janelaMelhor').innerHTML = `<div class="jan-princ"><div><div class="jan-hora">${horas(m.inicio, m.fim)}</div><div class="jan-exp">${esc(m.explicacao)}</div></div><div>${botao(m)}</div></div>`;
+    $('janelaOutras').innerHTML = outras.length ? `<div class="jan-outras">${outras.map(j =>
+      `<div class="jan-outra"><div><div class="jan-hora">${horas(j.inicio, j.fim)}</div><div class="jan-exp">${esc(j.explicacao)}</div></div>${botao(j)}</div>`).join('')}</div>` : '';
+    // Compara a janela escolhida com a sugerida (mesma duração)
+    const escolhida = notaDano(cont, tipo, ini, dur);
+    if (m.nota > 0 && escolhida / m.nota >= PF.razaoMuitoPior) {
+      comp.textContent = `A janela escolhida atinge ${(escolhida / m.nota).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} vezes mais carga sensível que a sugerida.`;
+      comp.classList.remove('oculto');
+    } else if (m.nota === 0 && escolhida > 0) {
+      comp.textContent = 'A janela escolhida atinge carga sensível que a sugerida evita.'; comp.classList.remove('oculto');
+    }
+  }
+  // Cargas sensíveis na área (só contagens)
+  $('cargas').innerHTML = PF.sensiveis.map(a => { const n = cont[a] || 0;
+    return `<div class="carga${n ? '' : ' zero'}"><div class="carga-n">${ICONE[a]}<b>${qtd(n)}</b></div><span>${esc(PF.rotulos[a][n === 1 ? 0 : 1])}</span></div>`; }).join('');
+  $('alertaSaude').classList.toggle('oculto', !(cont.saude > 0));
+}
+
+// ---------- Aviso (aba Aviso, números da lateral, janela e roteiro) ----------
+// Devolve a promessa do código de verificação do roteiro (o PDF só imprime depois dela)
+function desenharAviso() {
+  const f = campos(estado), ant = antecedencia(f);
+  const selo = $('selo');
+  selo.className = `selo ${ant.classe}`; selo.textContent = ant.texto;
+  $('seloFalta').textContent = ant.falta ? `· ${ant.falta}` : '';
+  $('avTelNota').classList.toggle('oculto', !/x/i.test(f.tel));
+  $('avHoraErro').classList.toggle('oculto', f.fim > f.ini);
+  const c = estado.cenario, textos = estado.textos;
+  if (!c) return null;
+  const sD = segundos(textos.novo);
+  $('numRadio').innerHTML = `${sD}<small> s</small>`;
+  $('avisoNovo').textContent = textos.novo;
+  ['blocoComparacao', 'blocoAntigo'].forEach(id => $(id).classList.toggle('oculto', !!c.area));
+  $('notaSemComparacao').classList.toggle('oculto', !c.area);
+  if (c.area) {
+    $('numRadioHoje').textContent = '';
+    atualizarJanela(c, f);
+    return preencherRoteiro(c, f, ant, sD);
+  }
+  const sA = segundos(textos.antigo);
+  const red = Math.round((1 - sD / sA) * 100);
+  $('numRadioHoje').textContent = `· hoje ${sA} s`;
+  $('avisoAntigo').textContent = textos.antigo;
+  $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
+  $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
+  $('barraAntigo').style.width = '100%';
+  $('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
+  $('ganho').innerHTML = red > 0
+    ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
+    : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
+  atualizarJanela(c, f);
+  return preencherRoteiro(c, f, ant, sD);
+}
+
+// Roteiro para a rádio (impressão / Salvar como PDF). LGPD: só nomes de comunidades e contagens.
+let logoSVG = '', seqRoteiro = 0;
+// Textos do roteiro por idioma (o pt-BR é o mesmo de antes, palavra por palavra)
+const RT = {
+  'pt-BR': {
+    slogan: SLOGAN, titulo: 'Aviso de desligamento programado', avisoN: 'Aviso nº',
+    gerado: (a, m, d, h) => `gerado em ${d}/${m}/${a} às ${h}`,
+    leitura: 'Texto para leitura', duracao: s => `Duração estimada: cerca de ${s} segundos (locução de ~150 palavras por minuto).`,
+    resumo: 'Resumo', data: 'Data', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sem data)',
+    horario: 'Horário', horarioV: h => `das ${h}`, inteiras: 'Comunidades inteiras', parte: 'Comunidades em parte',
+    vizinhas: 'Localidades vizinhas', vizSim: n => `Sim: ${n} ${n === 1 ? 'localidade não citada' : 'localidades não citadas'} pelo nome`, nao: 'Não',
+    telefone: 'Telefone de atendimento', exemplo: ' (exemplo, a confirmar)',
+    registro: 'Registro', chave: 'Chave aberta', alim: 'Alimentador', ucs: 'UCs afetadas',
+    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área desenhada', areaImportada: a => `Área importada (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${fmt(v)} ${v === 1 ? 'vértice' : 'vértices'}`,
+    areaNota: 'A área não segue a rede elétrica; a equipe confere se ela corresponde ao trecho desligado.',
+    citadas: 'Comunidades citadas', vizNao: 'Vizinhas não citadas', uc: n => n === 1 ? 'UC' : 'UCs', antecedencia: 'Antecedência',
+    ant: { ok: 'Antecedência OK', legal: h => `Abaixo do prazo legal de ${h} horas`, interno: d => `Abaixo do prazo interno de ${d} dias`,
+      semData: 'Informe a data do desligamento', passou: 'a data já passou', faltamH: h => `faltam ${h} h`, faltamD: d => `faltam ${d} dias` },
+    prazos: (l, i, v) => `Prazo legal: ${l} horas; prazo interno: ${i} dias (a confirmar). Unidades com equipamento vital: ${v} dias úteis.`,
+    rodape1: 'Rede elétrica e clientes fictícios. Dados territoriais reais (IBGE Censo 2022).',
+    rodape2: 'Documento sem dados pessoais: contém só nomes de comunidades e contagens de unidades consumidoras.',
+    verif: 'Código de verificação: qualquer alteração no texto gera um código diferente.',
+  },
+  en: {
+    slogan: 'Every community warned by name.', titulo: 'Scheduled power outage notice', avisoN: 'Notice no.',
+    gerado: (a, m, d, h) => `generated on ${MESES_EN[+m - 1]} ${+d}, ${a} at ${h}`,
+    leitura: 'Script to read on air', duracao: s => `Estimated duration: about ${s} seconds (read at ~150 words per minute).`,
+    resumo: 'Summary', data: 'Date', dataLonga: (a, m, d) => `${MESES_EN[+m - 1]} ${+d}, ${a}`, semData: '(no date)',
+    horario: 'Time', horarioV: h => `from ${h}`, inteiras: 'Whole communities', parte: 'Partially affected communities',
+    vizinhas: 'Nearby areas', vizSim: n => `Yes: ${n} ${n === 1 ? 'locality' : 'localities'} not named`, nao: 'No',
+    telefone: 'Customer service phone', exemplo: ' (example, to be confirmed)',
+    registro: 'Record', chave: 'Open switch', alim: 'Feeder', ucs: 'Affected consumer units',
+    area: 'Area', alims: 'Feeders', areaDesenhada: 'Drawn area', areaImportada: a => `Imported area (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polygons, ` : '') + `${v} ${v === 1 ? 'vertex' : 'vertices'}`,
+    areaNota: 'The area does not follow the power grid; the field team checks that it matches the section switched off.',
+    citadas: 'Named communities', vizNao: 'Nearby areas not named', uc: n => n === 1 ? 'unit' : 'units', antecedencia: 'Advance notice',
+    ant: { ok: 'Advance notice OK', legal: h => `Below the legal minimum of ${h} hours`, interno: d => `Below the internal target of ${d} days`,
+      semData: 'Enter the outage date', passou: 'the date has passed', faltamH: h => `${h} h left`, faltamD: d => `${d} days left` },
+    prazos: (l, i, v) => `Legal minimum: ${l} hours; internal target: ${i} days (to be confirmed). Units with life-support equipment: ${v} business days.`,
+    rodape1: 'Fictitious power grid and customers. Real territorial data (IBGE 2022 Census).',
+    rodape2: 'No personal data: contains only community names and counts of consumer units.',
+    verif: 'Verification code: any change to the text produces a different code.',
+  },
+  es: {
+    slogan: 'Cada comunidad avisada por su nombre.', titulo: 'Aviso de corte programado', avisoN: 'Aviso n.º',
+    gerado: (a, m, d, h) => `generado el ${d}/${m}/${a} a las ${h}`,
+    leitura: 'Texto para leer al aire', duracao: s => `Duración estimada: unos ${s} segundos (locución de ~150 palabras por minuto).`,
+    resumo: 'Resumen', data: 'Fecha', dataLonga: (a, m, d) => `${d}/${m}/${a}`, semData: '(sin fecha)',
+    horario: 'Horario', horarioV: h => `de ${h}`, inteiras: 'Comunidades enteras', parte: 'Comunidades en parte',
+    vizinhas: 'Localidades vecinas', vizSim: n => `Sí: ${n} ${n === 1 ? 'localidad no mencionada' : 'localidades no mencionadas'} por su nombre`, nao: 'No',
+    telefone: 'Teléfono de atención', exemplo: ' (ejemplo, a confirmar)',
+    registro: 'Registro', chave: 'Seccionador abierto', alim: 'Alimentador', ucs: 'Unidades consumidoras afectadas',
+    area: 'Área', alims: 'Alimentadores', areaDesenhada: 'Área dibujada', areaImportada: a => `Área importada (${a})`,
+    vertices: (p, v) => (p > 1 ? `${p} polígonos, ` : '') + `${v} ${v === 1 ? 'vértice' : 'vértices'}`,
+    areaNota: 'El área no sigue la red eléctrica; el equipo verifica que corresponda al tramo desconectado.',
+    citadas: 'Comunidades mencionadas', vizNao: 'Vecinas no mencionadas', uc: n => n === 1 ? 'unidad' : 'unidades', antecedencia: 'Antelación',
+    ant: { ok: 'Antelación suficiente', legal: h => `Por debajo del plazo legal de ${h} horas`, interno: d => `Por debajo del plazo interno de ${d} días`,
+      semData: 'Indique la fecha del corte', passou: 'la fecha ya pasó', faltamH: h => `faltan ${h} h`, faltamD: d => `faltan ${d} días` },
+    prazos: (l, i, v) => `Plazo legal: ${l} horas; plazo interno: ${i} días (a confirmar). Unidades con equipos de soporte vital: ${v} días hábiles.`,
+    rodape1: 'Red eléctrica y clientes ficticios. Datos territoriales reales (Censo IBGE 2022).',
+    rodape2: 'Documento sin datos personales: solo contiene nombres de comunidades y conteos de unidades consumidoras.',
+    verif: 'Código de verificación: cualquier cambio en el texto genera un código distinto.',
+  },
+};
+function preencherRoteiro(c, f, ant, sD) {
+  const { inteiras, parciais, vizinhas } = classificar(c);
+  const gerado = carimbo(new Date());
+  const A = c.area ? estado.area : null, cod = estado.cod;
+  const numero = numeroAviso(f, A, cod);
+  const L = estado.idioma, T = RT[L];
+  const ou = l => l.length ? esc(l.join(', ')) : '—';
+  const comUCs = l => l.length ? l.map(x => `${esc(x[0])} (${fmt(x[1])} ${T.uc(x[1])})`).join('; ') : '—';
+  const frases = estado.textos.novo.split(/(?<=[.!?])\s+/).map(s => `<p>${esc(s)}</p>`).join('');
+  const [dg, hg] = gerado.split(' '), [gd, gm, ga] = dg.split('/');
+  const antTxt = ant.cod === 'semData' ? T.ant.semData : ant.cod === 'legal' ? T.ant.legal(PRAZO_LEGAL_HORAS)
+    : ant.cod === 'interno' ? T.ant.interno(PRAZO_INTERNO_DIAS) : T.ant.ok;
+  const faltaTxt = ant.cod === 'semData' ? '' : ant.h < 0 ? T.ant.passou : ant.h < 48 ? T.ant.faltamH(Math.floor(ant.h)) : T.ant.faltamD(Math.floor(ant.h / 24));
+  $('roteiro').innerHTML = `
+    <div class="rt-marca">${logoSVG}<div><div class="rt-nome">${APP_NOME}</div><div class="rt-slogan">${T.slogan}</div></div></div>
+    <h1>${T.titulo}</h1>
+    <div class="rt-meta">${esc(DISTRIBUIDORA)} · ${T.avisoN} <b>${numero}</b> · ${T.gerado(ga, gm, gd, hg)}</div>
+    <h2>${T.leitura}</h2>
+    <div class="rt-leitura">${frases}</div>
+    <div class="rt-dur">${T.duracao(sD)}</div>
+    <h2>${T.resumo}</h2>
+    <table>
+      <tr><th>${T.data}</th><td>${f.d ? T.dataLonga(f.a, f.m, f.d) : T.semData}</td></tr>
+      <tr><th>${T.horario}</th><td>${T.horarioV(formatarHorario(minutos(f.ini), minutos(f.fim), L))}</td></tr>
+      <tr><th>${T.inteiras}</th><td>${ou(inteiras)}</td></tr>
+      <tr><th>${T.parte}</th><td>${ou(parciais)}</td></tr>
+      <tr><th>${T.vizinhas}</th><td>${vizinhas.length ? T.vizSim(vizinhas.length) : T.nao}</td></tr>
+      <tr><th>${T.telefone}</th><td>${f.tel ? esc(f.tel) : '—'}${/x/i.test(f.tel) ? T.exemplo : ''}</td></tr>
+    </table>
+    <h2>${T.registro}</h2>
+    <table>
+      ${A ? `<tr><th>${T.area}</th><td>${A.origem === 'importada' ? T.areaImportada(esc(A.arquivo)) : T.areaDesenhada} · ${T.vertices(A.resumo.poligonos, A.resumo.vertices)}. ${T.areaNota}</td></tr>`
+        : `<tr><th>${T.chave}</th><td>${esc(cod)}</td></tr>`}
+      <tr><th>${A && c.alims.length > 1 ? T.alims : T.alim}</th><td>${esc(c.alim)}</td></tr>
+      <tr><th>${T.ucs}</th><td>${fmt(c.n)}</td></tr>
+      <tr><th>${T.citadas}</th><td>${comUCs(citadas(c))}</td></tr>
+      <tr><th>${T.vizNao}</th><td>${comUCs(vizinhas)}</td></tr>
+      <tr><th>${T.antecedencia}</th><td>${antTxt}${faltaTxt ? ` (${faltaTxt})` : ''}. ${T.prazos(PRAZO_LEGAL_HORAS, PRAZO_INTERNO_DIAS, PRAZO_VITAL_DIAS_UTEIS)}</td></tr>
+    </table>
+    <p class="rt-rodape">${T.rodape1}<br>
+      ${T.rodape2}</p>
+    <p class="rt-verif">SHA-256: <code id="rtCodigo">calculando…</code><br>
+      ${T.verif}</p>`;
+  const minha = ++seqRoteiro;
+  return sha256hex(entradaVerificacao(estado.textos.novo, f, A, cod, gerado))
+    .then(h => { if (minha === seqRoteiro) $('rtCodigo').textContent = h; })
+    .catch(() => { $('rtCodigo').textContent = 'indisponível neste navegador'; });
+}
+function mostrarLeitura() {
+  document.querySelectorAll('button.ouvir').forEach(b => b.textContent = b.dataset.alvo === estado.lendo ? '■ Parar' : '▶ Ouvir');
+}
+function mostrarCopia(b, ok) {
+  b.textContent = ok ? 'Copiado!' : 'Não foi possível copiar';
+  setTimeout(() => { b.textContent = 'Copiar texto'; }, 2000);
+}
+// Copiar texto: navigator.clipboard e, se falhar (ex.: arquivo local), textarea + execCommand
+function copiarAlternativo(t) {
+  const ta = document.createElement('textarea');
+  ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+// ---------- Busca ----------
+const elBusca = $('busca'), elSug = $('sugestoes');
+function mostrarSugestoes(itens, msg) {
+  let k = 0;
+  elSug.innerHTML = (msg ? `<li class="vazio">${esc(msg)}</li>` : '') + itens.map(x => x.grupo
+    ? `<li class="grupo-sug" role="presentation">${esc(x.grupo)}</li>`
+    : `<li role="presentation"><button role="option" id="op-${k++}" aria-selected="false" data-cod="${esc(x.cod)}"><span class="mono">${esc(x.cod)}</span><span class="sub">${esc(x.sub)}</span></button></li>`).join('');
+  elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
+}
+function mostrarSugestaoPonto(pt) {
+  elSug.innerHTML = `<li role="presentation"><button role="option" aria-selected="false" data-ponto="1"><span>Marcar ponto da obra</span><span class="sub mono">${pt[0]}, ${pt[1]}</span></button></li>`;
+  elSug.classList.remove('oculto'); elBusca.setAttribute('aria-expanded', 'true');
+}
+function esconderSugestoes() { elSug.classList.add('oculto'); elBusca.setAttribute('aria-expanded', 'false'); elBusca.removeAttribute('aria-activedescendant'); }
+function marcarSugestao(i) {
+  const bs = elSug.querySelectorAll('button[data-cod]');
+  bs.forEach((b, j) => b.setAttribute('aria-selected', String(j === i)));
+  if (bs[i]) { bs[i].scrollIntoView({ block: 'nearest' }); elBusca.setAttribute('aria-activedescendant', bs[i].id); }
+}
+const mostrarBuscaTexto = t => { elBusca.value = t; };
+
+// ---------- Ponto da obra ----------
+function desenharObra(o) {
+  const { lat, lon, fora } = o;
+  mapa.closePopup(); obraCamada.clearLayers();
+  if (o.trecho >= 0 && o.situacao !== 'longe') obraCamada.addLayer(L.geoJSON(D.camadas.mt.features[o.trecho],
+    { pane: 'destaqueTopo', interactive: false, style: { color: css('--ambar'), weight: 7, opacity: 0.95 } }));
+  obraCamada.addLayer(L.circleMarker([lat, lon], { pane: 'destaqueTopo', interactive: false, radius: 9,
+    color: css('--noite'), weight: 3, fillColor: css('--ambar'), fillOpacity: 1 }));
+  // Texto do lugar e do resultado (o mesmo no popup e no bloco da lateral)
+  const coord = `<span class="mono">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`;
+  const local = fora ? coord
+    : `${coord}<br>Comunidade: <b>${esc(o.comunidade || 'fora das comunidades identificadas')}</b> · distrito <b>${esc(o.distrito || '—')}</b>`
+      + (o.situacao !== 'longe' ? `<br>Média tensão mais próxima: alimentador <b class="inteiro">${esc(o.alim)}</b>, a <b class="inteiro">${fmt(Math.round(o.distancia_m))} m</b>` : '');
+  let msg;
+  if (fora) msg = 'Este ponto fica fora da área carregada. Gere o Farol para esse município.';
+  else if (o.situacao === 'longe') msg = `Não há rede de média tensão a menos de ${fmt(RAIO_REDE_M)} m deste ponto.`;
+  else if (o.situacao === 'tronco') msg = `Nenhuma chave de ramal isola este trecho: ele fica no tronco do alimentador ${o.alim}, perto da subestação. `
+    + `Desligar o alimentador inteiro deixaria ${fmt(REDE.clientesPorAlimentador[o.alim] || 0)} clientes sem luz. Avalie trabalho com a rede energizada (linha viva) ou gerador.`;
+  const frase = x => `Abrir a <span class="mono">${esc(x.chave)}</span> deixa <b>${fmt(x.clientes)}</b> ${x.clientes === 1 ? 'cliente' : 'clientes'} sem luz (${x.comunidades} ${x.comunidades === 1 ? 'comunidade' : 'comunidades'})`;
+  $('obraLocal').innerHTML = local;
+  $('obraResultado').innerHTML = msg ? `<p class="obra-msg">${esc(msg)}</p>` : `
+    <p class="obra-princ">${frase(o.chaves[0])}</p>
+    <div class="obra-ops">${o.chaves.map((x, i) => `<div class="obra-op${i === 0 ? ' melhor' : ''}"><div><span class="mono">${esc(x.chave)}</span>
+      <small>${fmt(x.clientes)} ${x.clientes === 1 ? 'cliente' : 'clientes'} · ${x.comunidades} ${x.comunidades === 1 ? 'comunidade' : 'comunidades'}</small></div>
+      <button data-chave="${esc(x.chave)}">Simular esta chave</button></div>`).join('')}</div>`;
+  $('blocoObra').classList.remove('oculto');
+  ativarAba('desligamento');
+  mapa.setView([lat, lon], Math.max(mapa.getZoom(), 15), { animate: false });
+  L.popup({ maxWidth: 300 }).setLatLng([lat, lon]).setContent(`<div class="pop"><b>Ponto da obra</b><div class="obra-pop">${local}<div class="coms">${msg ? esc(msg) : frase(o.chaves[0])}</div></div></div>`).openOn(mapa);
+}
+function apagarObra() { obraCamada.clearLayers(); $('blocoObra').classList.add('oculto'); mapa.closePopup(); }
+function popupMarcarObra(latlng, aoMarcar) {
+  const el = document.createElement('div'); el.className = 'pop';
+  el.innerHTML = '<button class="prim acao">Marcar ponto da obra aqui</button>';
+  el.querySelector('button').addEventListener('click', aoMarcar);
+  L.popup().setLatLng(latlng).setContent(el).openOn(mapa);
+}
+
+// ---------- Área ----------
+function desenharContornoArea() {
+  areaCamada.clearLayers();
+  if (!estado.area) return;
+  areaCamada.addLayer(L.geoJSON(geojsonDaArea(estado.area), { pane: 'destaqueTopo', interactive: false,
+    style: { color: css('--ambar'), weight: 3, dashArray: '8 6', fillColor: css('--ambar'), fillOpacity: 0.08 } }));
+}
+function mostrarErroArea(msg) {
+  const el = $('areaErro');
+  el.textContent = msg || ''; el.classList.toggle('oculto', !msg);
+}
+function esconderInfoArea() { $('areaInfo').classList.add('oculto'); $('legArea').classList.add('oculto'); $('legRamal').classList.remove('oculto'); }
+function mostrarInfoArea() {
+  const a = estado.area;
+  $('legArea').classList.remove('oculto'); $('legRamal').classList.add('oculto');  // a área não pinta ramal
+  $('areaDesc').textContent = `${a.origem === 'importada' ? `Área importada (${a.arquivo})` : 'Área desenhada'} · ${RT['pt-BR'].vertices(a.poligonos.length, a.resumo.vertices)}`;
+  $('areaInfo').classList.remove('oculto');
+}
+const enquadrarArea = () => mapa.fitBounds(areaCamada.getBounds().pad(0.15), { maxZoom: 16 });
+// Desenho: vértices, linhas e a orientação do que falta fazer
 function atualizarDesenho() {
   desenhoCamada.clearLayers();
+  const desenho = estado.desenho;
   if (!desenho) return;
   const amb = css('--ambar'), n = desenho.length;
   if (n > 1) desenhoCamada.addLayer(L.polyline(desenho, { pane: 'destaqueTopo', interactive: false, color: amb, weight: 3 }));
@@ -1623,49 +1645,126 @@ function atualizarDesenho() {
     : `${n} pontos marcados. Continue clicando nos cantos ou conclua a área.`;
   $('btnDesfazer').disabled = n === 0; $('btnConcluir').disabled = n < 3;
 }
+function mostrarDesenhando(sim) {
+  if (sim) { mapa.doubleClickZoom.disable(); mapa.closePopup(); } else mapa.doubleClickZoom.enable();
+  $('mapa').classList.toggle('desenhando', sim);
+  $('areaDesenho').classList.toggle('oculto', !sim); $('areaBotoes').classList.toggle('oculto', sim); $('areaDica').classList.toggle('oculto', sim);
+}
+function escolherArquivo() { $('arqArea').value = ''; $('arqArea').click(); }
+function oferecerDownload(nome, texto, tipo) {
+  const url = URL.createObjectURL(new Blob([texto], { type: tipo }));
+  const a = document.createElement('a');
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// =====================================================================================
+// CONTROLLER: responde a cliques, busca, desenho, importação e troca de idioma ou tema.
+// Atualiza o estado (Model) e pede à View para redesenhar. Também monta a tela na abertura.
+// =====================================================================================
+let hashPronto = Promise.resolve();  // código de verificação do roteiro em cálculo (o PDF espera por ele)
+
+// Aviso: refaz os textos com a data, o horário, o telefone e o idioma do estado e redesenha
+function atualizarAviso() {
+  if (estado.cenario) estado.textos = montarTextos(estado.cenario, campos(estado), estado.idioma);
+  const codigo = desenharAviso();
+  if (codigo) hashPronto = codigo;
+}
+
+// ---------- Desligamento por chave ----------
+function simular(cod, enquadrar = true) {
+  cod = String(cod).trim().toUpperCase();
+  const c = D.cenarios[cod];
+  if (!c) { mostrarBusca([], `Chave não encontrada: ${cod}`); return; }
+  if (estado.modo === 'area') escolherModo('chave');
+  pararLeitura();
+  estado.cenario = c; estado.cod = cod;
+  desenharDestaque(c, cod, enquadrar);
+  mostrarDesligamento(c, 'Chave aberta', cod, `Alimentador ${c.alim} · ${zonaDe(c)}`);
+  desenharComunidades(c);
+  atualizarAviso();
+  mostrarBuscaTexto(cod); fecharSugestoes();
+  estadoSimulado(true); ativarAba('desligamento');
+}
+function limpar() {
+  pararLeitura(); limparDestaque();
+  estado.cenario = null; estado.cod = null; mostrarBuscaTexto('');
+  if (estado.modo === 'area') limparArea();
+  estadoSimulado(false);
+}
+function usarJanela(inicio, fim) { estado.ini = hhmm(inicio); estado.fim = hhmm(fim); mostrarHorario(); pararLeitura(); atualizarAviso(); }
+
+// ---------- Como definir o desligamento: por chave, por ponto da obra ou por área ----------
+function escolherModo(m) {
+  if (m === estado.modo) return;
+  const antes = estado.modo;
+  estado.modo = m;
+  mostrarModo();
+  // trocar entre chave/ponto e área desfaz o desligamento do outro modo
+  if (antes === 'area') { limparArea(); mostrarErroArea(''); if (estado.cenario && estado.cenario.area) limpar(); }
+  if (m === 'area') { limparObra(); if (estado.cenario) limpar(); }
+  estadoSimulado(!!estado.cenario);
+}
+
+// ---------- Ponto da obra ----------
+function marcarObra(lat, lon) {
+  escolherModo('obra');
+  fecharSugestoes();
+  estado.obra = pontoDaObra(lat, lon);
+  desenharObra(estado.obra);
+}
+function limparObra() { estado.obra = null; apagarObra(); }
+
+// ---------- Área (desenhada ou importada) ----------
+function limparArea() { estado.area = null; desenharContornoArea(); sairDoDesenho(); esconderInfoArea(); }
+async function aplicarArea(polis, origem, arquivo) {
+  pararLeitura(); mostrarErroArea('');
+  if (estado.cenario) { apagarDestaque(); estado.cenario = null; estado.cod = null; estadoSimulado(false); }
+  limparArea();
+  const r = analisarArea(polis);
+  if (r.situacao === 'vertices' || r.situacao === 'fora') { mostrarErroArea(problemaDaArea(r, polis)); return; }
+  let sha = null;
+  try { sha = await sha256hex(formaCanonica(polis)); } catch (e) { sha = null; }
+  estado.area = { poligonos: polis, origem, arquivo, resumo: { poligonos: polis.length, vertices: nVertices(polis), sha256: sha } };
+  desenharContornoArea(); mostrarInfoArea();
+  if (r.situacao === 'sem_clientes') { enquadrarArea(); mostrarErroArea(problemaDaArea(r, polis)); return; }
+  const c = cenarioDaArea(r.ucs);
+  estado.cenario = c; estado.cod = null;
+  desenharDestaque(c, null, true);
+  mostrarDesligamento(c, 'Área desligada', origem === 'importada' ? 'Área importada' : 'Área desenhada',
+    `${c.alims.length > 1 ? 'Alimentadores' : 'Alimentador'} ${c.alim} · ${zonaDe(c)}`);
+  desenharComunidades(c);
+  atualizarAviso();
+  estadoSimulado(true); ativarAba('desligamento');
+}
+// Desenho: cada clique no mapa acrescenta um vértice (chaves e UCs ficam sem clique enquanto isso)
 function entrarNoDesenho() {
-  if (avisoAtual) limpar();
+  if (estado.cenario) limpar();
   limparArea(); mostrarErroArea('');
-  desenho = [];
-  mapa.doubleClickZoom.disable(); mapa.closePopup();
-  $('mapa').classList.add('desenhando');
-  $('areaDesenho').classList.remove('oculto'); $('areaBotoes').classList.add('oculto'); $('areaDica').classList.add('oculto');
+  estado.desenho = [];
+  mostrarDesenhando(true);
   atualizarDesenho();
 }
 function sairDoDesenho() {
-  if (!desenho) return;
-  desenho = null; desenhoCamada.clearLayers();
-  mapa.doubleClickZoom.enable();
-  $('mapa').classList.remove('desenhando');
-  $('areaDesenho').classList.add('oculto'); $('areaBotoes').classList.remove('oculto'); $('areaDica').classList.remove('oculto');
+  if (!estado.desenho) return;
+  estado.desenho = null; atualizarDesenho();
+  mostrarDesenhando(false);
 }
-mapa.on('click', e => {
-  if (!desenho) return;
-  desenho.push([arred(e.latlng.lat), arred(e.latlng.lng)]);
-  atualizarDesenho();
-});
-$('btnDesenhar').addEventListener('click', entrarNoDesenho);
-$('btnDesfazer').addEventListener('click', () => { if (desenho && desenho.length) { desenho.pop(); atualizarDesenho(); } });
-$('btnCancelar').addEventListener('click', sairDoDesenho);
-$('btnConcluir').addEventListener('click', () => {
-  if (!desenho || desenho.length < 3) return;
-  const anel = desenho.map(([lat, lon]) => [lon, lat]);
-  anel.push(anel[0].slice());
+function concluirDesenho() {
+  if (!estado.desenho || estado.desenho.length < 3) return;
+  const polis = areaDoDesenho(estado.desenho);
   sairDoDesenho();
-  aplicarArea([[anel]], 'desenhada', null);
-});
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && desenho) sairDoDesenho(); });
-
+  aplicarArea(polis, 'desenhada', null);
+}
 // Importar: o arquivo é lido só no navegador (FileReader), sem ir para servidor nenhum
-$('btnImportar').addEventListener('click', () => { $('arqArea').value = ''; $('arqArea').click(); });
-$('arqArea').addEventListener('change', e => {
-  const arq = e.target.files && e.target.files[0];
+function importarArquivo(arq) {
   if (!arq) return;
   const nome = arq.name.length > 80 ? arq.name.slice(0, 77) + '…' : arq.name;
-  if (avisoAtual) limpar();
+  if (estado.cenario) limpar();
   limparArea(); mostrarErroArea('');
-  if (arq.size === 0) { mostrarErroArea('O arquivo está vazio.'); return; }
-  if (arq.size > CFG_AREA.maxBytes) { mostrarErroArea(`O arquivo tem ${(arq.size / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB; o limite é ${CFG_AREA.maxBytes / 1048576} MB.`); return; }
+  const problema = problemaDoArquivo(arq.size);
+  if (problema) { mostrarErroArea(problema); return; }
   const leitor = new FileReader();
   leitor.onerror = () => mostrarErroArea('Não foi possível ler o arquivo.');
   leitor.onload = () => {
@@ -1675,55 +1774,175 @@ $('arqArea').addEventListener('change', e => {
     aplicarArea(polis, 'importada', nome);
   };
   leitor.readAsText(arq);
-});
-
+}
 // Baixar a área (GeoJSON), para guardar ou compartilhar o contorno
-$('btnBaixarArea').addEventListener('click', () => {
-  if (!areaAtual) return;
-  const agora = new Date();
-  const carimbo = `${isoData(agora).replace(/-/g, '')}-${pad2(agora.getHours())}${pad2(agora.getMinutes())}`;
-  const url = URL.createObjectURL(new Blob([JSON.stringify(geojsonDaArea(areaAtual), null, 1)], { type: 'application/geo+json' }));
-  const a = document.createElement('a');
-  a.href = url; a.download = `area_${norm(DIST.municipio).replace(/[^a-z0-9]+/g, '-')}_${carimbo}.geojson`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-
-// ----- Como definir o desligamento: por chave, por ponto da obra ou por área -----
-function escolherModo(m) {
-  if (m === modo) return;
-  const antes = modo;
-  modo = m;
-  document.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.modo === m)));
-  // trocar entre chave/ponto e área desfaz o desligamento do outro modo
-  if (antes === 'area') { limparArea(); mostrarErroArea(''); if (avisoAtual && avisoAtual.area) limpar(); }
-  if (m === 'area') { limparObra(); if (avisoAtual) limpar(); }
-  $('instrObra').classList.toggle('oculto', m !== 'obra');
-  $('blocoArea').classList.toggle('oculto', m !== 'area');
-  estadoSimulado(!!avisoAtual);
+function baixarArea() {
+  if (!estado.area) return;
+  oferecerDownload(nomeArquivoArea(new Date()), JSON.stringify(geojsonDaArea(estado.area), null, 1), 'application/geo+json');
 }
-document.querySelectorAll('.modos button').forEach(b => b.addEventListener('click', () => escolherModo(b.dataset.modo)));
 
-// ---------- Botões da lateral ----------
-function sortear() {
-  const op = Object.entries(D.cenarios).filter(([, c]) => c.rural >= 0.8 && c.n >= 15 && citadas(c).length >= 2);
-  simular(op[Math.floor(Math.random() * op.length)][0]);
+// ---------- Busca ----------
+function mostrarBusca(itens, msg) {
+  estado.busca = { opcoes: itens.filter(x => x.cod), ativa: -1, ponto: null };
+  if (!itens.length && !msg) { fecharSugestoes(); return; }
+  mostrarSugestoes(itens, msg);
 }
-document.querySelectorAll('[data-acao="sortear"]').forEach(b => b.addEventListener('click', sortear));
-$('btnLimpar').addEventListener('click', limpar);
+function fecharSugestoes() { estado.busca = { opcoes: [], ativa: -1, ponto: null }; esconderSugestoes(); }
+function marcar(i) { marcarSugestao(i); estado.busca.ativa = i; }
+function buscar(texto) {
+  const pt = lerCoordenada(texto);
+  if (pt) { estado.busca = { opcoes: [], ativa: -1, ponto: pt }; mostrarSugestaoPonto(pt); return; }  // coordenada: oferece marcar o ponto da obra
+  const s = sugestoes(texto); mostrarBusca(s, texto.trim() && !s.length ? 'Nenhuma chave ou comunidade encontrada.' : '');
+}
+function teclaNaBusca(e) {
+  const { opcoes, ativa } = estado.busca;
+  if (e.key === 'ArrowDown' && opcoes.length) { e.preventDefault(); marcar((ativa + 1) % opcoes.length); }
+  else if (e.key === 'ArrowUp' && opcoes.length) { e.preventDefault(); marcar((ativa - 1 + opcoes.length) % opcoes.length); }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    const pt = lerCoordenada(elBusca.value);
+    if (pt) { marcarObra(pt[0], pt[1]); return; }
+    const v = elBusca.value.trim().toUpperCase();
+    if (ativa >= 0) simular(opcoes[ativa].cod);
+    else if (D.cenarios[v]) simular(v);
+    else if (opcoes.length) simular(opcoes[0].cod);
+    else if (v) simular(v);
+  }
+}
 
-// ---------- Abertura: município inteiro, travado nele ----------
-Object.keys(ligada).forEach(aplicarCamada);
-const limMun = C.municipio.getBounds();
-mapa.setMaxBounds(limMun.pad(0.15));
-function ajustarZoomMin() { mapa.setMinZoom(0); mapa.setMinZoom(mapa.getBoundsZoom(limMun, false)); }
-mapa.fitBounds(limMun);
-ajustarZoomMin();
-mapa.on('resize', ajustarZoomMin);
-document.getElementById('mapa').classList.toggle('zoom-baixo', mapa.getZoom() < ZOOM_NOMES);
-arrumarNomes();
-// Link direto para um cenário: mapa_comunidades.html#CF-0123
-if (location.hash.length > 1) simular(decodeURIComponent(location.hash.slice(1)));
+// ---------- Leitura em voz alta (voz do próprio navegador), para sentir a diferença no rádio ----------
+function pararLeitura() {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  estado.lendo = null; mostrarLeitura();
+}
+function ouvir(alvo) {
+  if (!('speechSynthesis' in window)) { alert('Este navegador não tem leitura em voz alta.'); return; }
+  const estava = estado.lendo === alvo;
+  pararLeitura();
+  if (estava || !estado.cenario) return;
+  const fala = new SpeechSynthesisUtterance(estado.textos[alvo]);
+  // o aviso novo usa a voz do idioma escolhido; o de hoje é sempre em português
+  const lang = alvo === 'novo' ? IDI[estado.idioma].voz : 'pt-BR';
+  fala.lang = lang;
+  const vozes = speechSynthesis.getVoices().map(v => [v, v.lang.replace('_', '-')]);
+  const voz = (vozes.find(([, l]) => l === lang) || vozes.find(([, l]) => l.startsWith(lang.slice(0, 2))) || [])[0];
+  if (voz) fala.voice = voz;
+  fala.onend = pararLeitura;
+  estado.lendo = alvo; mostrarLeitura();
+  speechSynthesis.speak(fala);
+}
+
+// ---------- Eventos da tela ----------
+function ligarEventos() {
+  // Tema e modo apresentação
+  $('btnTema').addEventListener('click', () => {
+    estado.tema = TEMAS[(TEMAS.indexOf(estado.tema) + 1) % TEMAS.length];
+    gravarPref('farol-tema', estado.tema); aplicarTema(); mostrarTemaNoMapa();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (estado.tema === 'auto') mostrarTemaNoMapa(); });
+  $('btnApresentacao').addEventListener('click', () => { estado.apresentacao = !estado.apresentacao; mostrarApresentacao(); });
+
+  // Painel de camadas e controles do mapa
+  elCam.addEventListener('click', e => {
+    const b = e.target.closest('button[data-camada]');
+    if (!b) return;
+    const id = b.dataset.camada;
+    estado.camadas[id] = !estado.camadas[id]; marcarCamada(id); aplicarCamada(id);
+  });
+  $('btnCamadas').addEventListener('click', () => abrirCamadas(elCam.classList.contains('oculto')));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { abrirCamadas(false); fecharSugestoes(); } });
+  mapa.on('click', () => abrirCamadas(false));
+  $('btnMais').addEventListener('click', () => mapa.zoomIn());
+  $('btnMenos').addEventListener('click', () => mapa.zoomOut());
+  $('btnEnquadrar').addEventListener('click', enquadrarRamal);
+
+  // Abas, modo de entrada e botões da lateral
+  document.querySelectorAll('.abas button').forEach(b => b.addEventListener('click', () => ativarAba(b.dataset.aba)));
+  $('btnVerAviso').addEventListener('click', () => ativarAba('aviso'));
+  document.querySelectorAll('.modos button').forEach(b => b.addEventListener('click', () => escolherModo(b.dataset.modo)));
+  document.querySelectorAll('[data-acao="sortear"]').forEach(b => b.addEventListener('click', () => simular(sortearChave())));
+  $('btnLimpar').addEventListener('click', limpar);
+  $('blocoJanela').addEventListener('click', e => { const b = e.target.closest('button[data-ini]'); if (b) usarJanela(+b.dataset.ini, +b.dataset.fim); });
+
+  // Aviso: idioma, data, horário e telefone, copiar, ouvir e PDF
+  $('avIdioma').addEventListener('change', () => { estado.idioma = $('avIdioma').value; pararLeitura(); atualizarAviso(); });
+  ['avData', 'avIni', 'avFim', 'avTel'].forEach(id => $(id).addEventListener('input', () => {
+    estado.data = $('avData').value; estado.ini = $('avIni').value; estado.fim = $('avFim').value; estado.tel = $('avTel').value;
+    pararLeitura(); atualizarAviso();
+  }));
+  $('btnCopiar').addEventListener('click', async e => {
+    const b = e.currentTarget;
+    let ok = false;
+    try { await navigator.clipboard.writeText(estado.textos.novo); ok = true; } catch (err) { ok = copiarAlternativo(estado.textos.novo); }
+    mostrarCopia(b, ok);
+  });
+  // Gerar PDF: monta o roteiro com a hora atual, espera o código de verificação e só então imprime
+  $('btnPdf').addEventListener('click', async () => {
+    pararLeitura(); atualizarAviso();
+    await hashPronto;
+    window.print();
+  });
+  document.querySelectorAll('button.ouvir').forEach(b => b.addEventListener('click', () => ouvir(b.dataset.alvo)));
+
+  // Busca: código da chave, nome de comunidade ou coordenada
+  elBusca.addEventListener('input', () => buscar(elBusca.value));
+  elBusca.addEventListener('keydown', teclaNaBusca);
+  elSug.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.cod) simular(b.dataset.cod);
+    else if (b.dataset.ponto && estado.busca.ponto) { const [lat, lon] = estado.busca.ponto; marcarObra(lat, lon); }
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.busca')) fecharSugestoes(); });
+
+  // Ponto da obra: botão direito no mapa e as chaves sugeridas
+  $('btnLimparObra').addEventListener('click', limparObra);
+  $('obraResultado').addEventListener('click', e => { const b = e.target.closest('button[data-chave]'); if (b) simular(b.dataset.chave); });
+  mapa.on('contextmenu', e => {
+    if (estado.desenho) return;  // desenhando a área: o botão direito não marca ponto da obra
+    popupMarcarObra(e.latlng, () => marcarObra(+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)));
+  });
+
+  // Área: desenho, importação e download
+  mapa.on('click', e => {
+    if (!estado.desenho) return;
+    estado.desenho.push([arred(e.latlng.lat), arred(e.latlng.lng)]);
+    atualizarDesenho();
+  });
+  $('btnDesenhar').addEventListener('click', entrarNoDesenho);
+  $('btnDesfazer').addEventListener('click', () => { if (estado.desenho && estado.desenho.length) { estado.desenho.pop(); atualizarDesenho(); } });
+  $('btnCancelar').addEventListener('click', sairDoDesenho);
+  $('btnConcluir').addEventListener('click', concluirDesenho);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && estado.desenho) sairDoDesenho(); });
+  $('btnImportar').addEventListener('click', escolherArquivo);
+  $('arqArea').addEventListener('change', e => importarArquivo(e.target.files && e.target.files[0]));
+  $('btnBaixarArea').addEventListener('click', baixarArea);
+}
+
+// ---------- Abertura: monta a tela por etapas, mostrando o progresso, e tira a tela de abertura ----------
+// Cede um quadro ao navegador para ele desenhar o progresso antes da etapa pesada
+const proximoQuadro = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+async function iniciar() {
+  try {
+    mostrarProgresso('Montando a rede…');
+    await proximoQuadro();
+    aplicarTema();
+    estado.camadas = { ...CAMADAS_INICIAIS };
+    montarMapa(cod => { mapa.closePopup(); simular(cod); });
+    ligarEventos();
+    mostrarTextosFixos();
+    atualizarAviso();
+    enquadrarMunicipio();
+    // Link direto para um cenário: mapa_comunidades.html#CF-0123
+    if (location.hash.length > 1) simular(decodeURIComponent(location.hash.slice(1)));
+    mostrarProgresso('Pronto');
+    fecharAbertura();
+  } catch (e) {
+    mostrarErroAbertura(e.message);
+    throw e;
+  }
+}
+iniciar();
 </script>
 </body>
 </html>

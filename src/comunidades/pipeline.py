@@ -1,7 +1,7 @@
 """Orquestração do pipeline: lê e grava os arquivos e chama cada camada do projeto.
 
 fontes (dados reais) -> simulacao (rede e clientes fictícios) -> nucleo (regras do produto)
--> validacao (métricas) -> apresentacao (mapa).
+-> validacao (métricas) -> apresentacao (mapa e página de entrada).
 
 O nucleo não lê nem grava arquivos: é aqui que os dados são carregados e os resultados salvos.
 """
@@ -10,7 +10,7 @@ import geopandas as gpd
 
 from . import config as C
 from . import distribuidora as dist_
-from .apresentacao import mapa
+from .apresentacao import entrada, mapa
 from .fontes import dados, grafia, ibge, osm
 from .nucleo import algoritmo
 from .simulacao import clientes, rede
@@ -38,8 +38,9 @@ ETAPAS = [
     ("Cadastro fictício de UCs", clientes.construir),
     ("Algoritmo de comunidades", rodar_algoritmo),
     ("Mapa interativo (inclui avaliação)", "mapa"),
+    ("Página de entrada (escolha da área)", entrada.construir),
 ]
-SO_ALGORITMO = {"Algoritmo de comunidades", "Mapa interativo (inclui avaliação)"}
+SO_ALGORITMO = {"Algoritmo de comunidades", "Mapa interativo (inclui avaliação)", "Página de entrada (escolha da área)"}
 
 
 def executar(argv: list[str]) -> None:
@@ -63,6 +64,7 @@ def executar(argv: list[str]) -> None:
     print(f"\nCenários: {len(cen)} | cobertura média {cen.COBERTURA.mean():.1%} | "
           f"precisão média {cen.PRECISAO.mean():.1%} | aviso {cen.SEG_ANTES.mean():.0f}s -> {cen.SEG_DEPOIS.mean():.0f}s")
     print(f"\nMapa: {mapa.ARQ_SAIDA}")
+    print(f"Entrada: {entrada.ARQ_ENTRADA}")
 
 
 if __name__ == "__main__":

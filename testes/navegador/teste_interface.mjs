@@ -68,14 +68,14 @@ for (const [lat, lon] of [...vertices, [cy, cx]]) {  // o último é um ponto a 
   const [x, y] = await av(`(() => { const q = mapa.latLngToContainerPoint([${lat}, ${lon}]); return [q.x, q.y]; })()`);
   await clicarEm(mapaXY[0] + x, mapaXY[1] + y);
 }
-conferir('desenho: cada clique virou um vértice', (await av('desenho.length')) === 8, `${await av('desenho.length')} pontos`);
+conferir('desenho: cada clique virou um vértice', (await av('estado.desenho.length')) === 8, `${await av('estado.desenho.length')} pontos`);
 conferir('desenho: nenhum popup de chave ou UC abriu durante o desenho', await av(`!document.querySelector('.leaflet-popup')`));
 await clicar('#btnDesfazer');
-conferir('desenho: "Desfazer ponto" tira o último vértice', (await av('desenho.length')) === 7);
+conferir('desenho: "Desfazer ponto" tira o último vértice', (await av('estado.desenho.length')) === 7);
 await clicar('#btnConcluir');
 await espera(800);
-const area1 = await av(`({ n: avisoAtual?.n, area: avisoAtual?.area, com: avisoAtual?.com.map(x => [x[0], x[1], x[3] ? 'parte' : 'inteira', x[5] ? 'vizinha' : 'citada']),
-  rotulo: $('cdChave').textContent, meta: $('cdMeta').textContent, vert: areaAtual?.resumo.vertices, aviso: textos.novo,
+const area1 = await av(`({ n: estado.cenario?.n, area: estado.cenario?.area, com: estado.cenario?.com.map(x => [x[0], x[1], x[3] ? 'parte' : 'inteira', x[5] ? 'vizinha' : 'citada']),
+  rotulo: $('cdChave').textContent, meta: $('cdMeta').textContent, vert: estado.area?.resumo.vertices, aviso: estado.textos.novo,
   cargas: [...document.querySelectorAll('.carga')].map(e => e.textContent.trim()), janela: $('janelaMelhor').textContent.trim() })`);
 conferir('área desenhada: clientes dentro destacados e aviso montado', area1.area === true && area1.n > 0, `${area1.n} clientes, ${area1.vert} vértices`);
 conferir('legenda: "Área informada" no lugar de "Ramal desligado"', await av(`$('legRamal').classList.contains('oculto') && !$('legArea').classList.contains('oculto')`));
@@ -87,7 +87,7 @@ await clicar('#tab-aviso');
 conferir('aba Aviso: sem aviso de hoje nem comparação; nota visível', await av(`$('blocoComparacao').classList.contains('oculto') && $('blocoAntigo').classList.contains('oculto') && !$('notaSemComparacao').classList.contains('oculto') && !$('ganho').closest('.oculto') === false`));
 await captura('2_aviso_da_area_desenhada.png');
 const ent1 = await conferirCodigo('área desenhada', 'area=desenhada;poligonos=1;vertices=7;sha256=');
-const canon = await av(`formaCanonica(areaAtual.poligonos)`);
+const canon = await av(`formaCanonica(estado.area.poligonos)`);
 conferir('área desenhada: SHA-256 da forma canônica confere', ent1.includes(createHash('sha256').update(canon, 'utf8').digest('hex')));
 conferir('PDF: registro mostra "Área desenhada" e os vértices', await av(`document.querySelector('#roteiro').textContent.includes('Área desenhada · 7 vértices')`));
 await pdf('roteiro_area_desenhada.pdf');
@@ -108,7 +108,7 @@ conferir('download: "Baixar área (GeoJSON)" gera o arquivo, sem mexer na CSP', 
 
 // ---------- 2. Importação do GeoJSON de exemplo ----------
 await importar(join(EX, 'area_exemplo_leopoldina.geojson').replace(/\//g, '\\'));
-const area2 = await av(`({ n: avisoAtual?.n, desc: $('areaDesc').textContent, com: avisoAtual?.com.length })`);
+const area2 = await av(`({ n: estado.cenario?.n, desc: $('areaDesc').textContent, com: estado.cenario?.com.length })`);
 conferir('importação GeoJSON: área aplicada', area2.n > 0, `${area2.n} clientes · ${area2.desc}`);
 await captura('3_importacao_geojson_exemplo.png');
 await conferirCodigo('área importada', 'area=importada;poligonos=1;');
@@ -118,7 +118,7 @@ await pdf('roteiro_area_importada.pdf');
 // ---------- 3. Segurança: KML com HTML e script na descrição ----------
 await importar(join(EX, 'area_teste_html_na_descricao.kml').replace(/\//g, '\\'));
 await espera(500);
-const kml = await av(`({ xss: window.__xss, img: !!document.querySelector('img[src="x"], img[src*="exemplo.invalid"]'), n: avisoAtual?.n,
+const kml = await av(`({ xss: window.__xss, img: !!document.querySelector('img[src="x"], img[src*="exemplo.invalid"]'), n: estado.cenario?.n,
   texto: ['negrito', 'Área com HTML', 'Teste de segurança', 'rastreio', 'exemplo.invalid'].filter(t => document.body.innerText.includes(t) || [...document.querySelectorAll('body *:not(script)')].some(e => [...e.attributes].some(x => x.value.includes(t)))),
   atributosOn: [...document.querySelectorAll('body *')].filter(e => [...e.attributes].some(x => /^on/i.test(x.name))).length,
   links: [...document.querySelectorAll('a[href^="javascript:"]')].length, csp: window.__csp })`);
@@ -165,16 +165,16 @@ for (const [nome, msg] of Object.entries(erros)) conferir(`erro: ${nome}`, !!msg
 
 // ---------- 5. Troca de modo e regressão por chave ----------
 await clicar('.modos button[data-modo="chave"]');
-conferir('trocar para "Por chave" limpa a área', await av(`!areaAtual && !avisoAtual && areaCamada.getLayers().length === 0 && !$('vazio').classList.contains('oculto')`));
+conferir('trocar para "Por chave" limpa a área', await av(`!estado.area && !estado.cenario && areaCamada.getLayers().length === 0 && !$('vazio').classList.contains('oculto')`));
 await av(`simular('CF-0066'); 0`);
-const cf66 = await av(`({ n: avisoAtual.n, cmp: !$('blocoComparacao').classList.contains('oculto'), valid: $('validCen').className, rot: $('cdRot').textContent })`);
+const cf66 = await av(`({ n: estado.cenario.n, cmp: !$('blocoComparacao').classList.contains('oculto'), valid: $('validCen').className, rot: $('cdRot').textContent })`);
 conferir('por chave: CF-0066 continua com comparação, validação e rótulo "Chave aberta"', cf66.cmp && cf66.valid === 'valid-cen so-ap bloco' && cf66.rot === 'Chave aberta', JSON.stringify(cf66));
 await conferirCodigo('por chave', 'chave=CF-0066');
 await pdf('roteiro_CF-0066_por_chave.pdf');
 await clicar('.modos button[data-modo="obra"]');
-conferir('modo ponto da obra: mostra a instrução e mantém a chave simulada', await av(`!$('instrObra').classList.contains('oculto') && avisoAtual && codAtual === 'CF-0066'`));
+conferir('modo ponto da obra: mostra a instrução e mantém a chave simulada', await av(`!$('instrObra').classList.contains('oculto') && estado.cenario && estado.cod === 'CF-0066'`));
 await clicar('.modos button[data-modo="area"]');
-conferir('trocar para "Por área" limpa a simulação por chave', await av(`!avisoAtual && !codAtual`));
+conferir('trocar para "Por área" limpa a simulação por chave', await av(`!estado.cenario && !estado.cod`));
 
 // ---------- 6. Celular: sem rolagem horizontal ----------
 await p.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

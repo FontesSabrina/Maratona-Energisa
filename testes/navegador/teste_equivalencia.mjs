@@ -1,4 +1,4 @@
-// Teste JS × Python: o navegador reproduz as referências do Python (chaves e áreas)?
+// Teste JS × Python: o navegador reproduz as referências do Python (chaves, áreas e ponto da obra)?
 // Uso (na raiz do projeto): node testes/navegador/teste_equivalencia.mjs [pasta de saída]
 //   sem argumento: saida/ (Leopoldina); para Muriaé: node testes/navegador/teste_equivalencia.mjs saida/muriae
 import { readFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const saida = resolve(RAIZ, process.argv[2] || 'saida');
 const ref = join(saida, 'referencias_passo12');
 const p = await abrir(join(saida, 'mapa_comunidades.html'));
-for (const [nome, arq] of [['avisos', 'avisos.json'], ['janelas', 'janelas.json'], ['areas', 'areas.json']])
+for (const [nome, arq] of [['avisos', 'avisos.json'], ['janelas', 'janelas.json'], ['areas', 'areas.json'], ['obra', 'obra.json']])
   await p.avaliar(`window.__${nome} = ${readFileSync(join(ref, arq), 'utf8')}; 0`);
 
 const chaves = await p.avaliar(`(() => {
@@ -60,6 +60,16 @@ const areas = await p.avaliar(`(async () => {
   return { areas: window.__areas.areas.length, situacoes: cont, comparacoes, erros: erros.length, exemplos: erros.slice(0, 8) };
 })()`);
 console.log('Por área:', JSON.stringify(areas));
+const obra = await p.avaliar(`(() => {
+  const erros = [], cont = {};
+  for (const { lat, lon, esperado } of window.__obra.pontos) {
+    const r = analisarPonto(lat, lon);
+    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    if (JSON.stringify(r) !== JSON.stringify(esperado)) erros.push([lat, lon, JSON.stringify(r).slice(0, 160), JSON.stringify(esperado).slice(0, 160)]);
+  }
+  return { pontos: window.__obra.pontos.length, situacoes: cont, erros: erros.length, exemplos: erros.slice(0, 5) };
+})()`);
+console.log('Ponto da obra:', JSON.stringify(obra));
 console.log('Exceções na página:', JSON.stringify(p.excecoes), '| CSP:', JSON.stringify(await p.avaliar('window.__csp')));
 await p.fechar();
-process.exit(chaves.erros || areas.erros || p.excecoes.length ? 1 : 0);
+process.exit(chaves.erros || areas.erros || obra.erros || p.excecoes.length ? 1 : 0);
