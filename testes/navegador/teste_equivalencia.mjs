@@ -10,7 +10,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const saida = resolve(RAIZ, process.argv[2] || 'saida');
 const ref = join(saida, 'referencias_passo12');
 const p = await abrir(join(saida, 'mapa_comunidades.html'));
-for (const [nome, arq] of [['avisos', 'avisos.json'], ['janelas', 'janelas.json'], ['areas', 'areas.json'], ['obra', 'obra.json']])
+for (const [nome, arq] of [['avisos', 'avisos.json'], ['janelas', 'janelas.json'], ['tamanhoHoje', 'tamanho_hoje.json'], ['areas', 'areas.json'], ['obra', 'obra.json']])
   await p.avaliar(`window.__${nome} = ${readFileSync(join(ref, arq), 'utf8')}; 0`);
 
 const chaves = await p.avaliar(`(() => {
@@ -30,7 +30,16 @@ const chaves = await p.avaliar(`(() => {
     const s = sugerirJanelas(cont, tipo, dur).map(j => [j.inicio, j.nota, j.explicacao]);
     if (JSON.stringify(s) !== JSON.stringify(sug) || notaDano(cont, tipo, 8 * 60, dur) !== notaPadrao) erros.push(['janela', cod, data, dur]);
   }
-  return { chaves: n, avisosIdiomas: R.avisos_idiomas.length, janelas: window.__janelas.length, erros: erros.length, exemplos: erros.slice(0, 8) };
+  // tamanho do aviso de hoje pelos códigos de local (como no modo área), nas UCs dos transformadores da chave
+  const porTrafo = new Map();
+  D.ucs.forEach((u, i) => { if (!porTrafo.has(u[2])) porTrafo.set(u[2], []); porTrafo.get(u[2]).push(i); });
+  for (const [cod, dia, mes, ini, fim, ...esperado] of window.__tamanhoHoje) {
+    const c = D.cenarios[cod], idx = c.trafos.flatMap(t => porTrafo.get(t) || []);
+    if (idx.length !== c.n) { erros.push(['UCs da chave', cod, idx.length, c.n]); continue; }
+    const t = tamanhoAvisoHoje(new Set(idx.map(i => D.ucs[i][13]).filter(l => l >= 0)), formatarData(dia, mes, 'pt-BR'), formatarHorario(ini, fim, 'pt-BR'));
+    if (JSON.stringify([t.locais, t.palavras, t.s]) !== JSON.stringify(esperado)) erros.push(['tamanho do aviso de hoje', cod, dia + '/' + mes, [t.locais, t.palavras, t.s], esperado]);
+  }
+  return { chaves: n, avisosIdiomas: R.avisos_idiomas.length, janelas: window.__janelas.length, tamanhoHoje: window.__tamanhoHoje.length, erros: erros.length, exemplos: erros.slice(0, 8) };
 })()`);
 console.log('Por chave:', JSON.stringify(chaves));
 
@@ -52,6 +61,10 @@ const areas = await p.avaliar(`(async () => {
       cmp('aviso ' + L, comTelefone(montarAviso(c, formatarData(dia, mes, L), formatarHorario(ini, fim, L), L), DIST.telefone, L), texto);
     cmp('atividades (cargas sensíveis)', c.ativ, e.ativ);
     cmp('alimentadores', c.alims, e.alimentadores);
+    for (const [, dia, mes, ini, fim, ...esperado] of e.hoje) {
+      const t = tamanhoAvisoHoje(c.locaisHoje, formatarData(dia, mes, 'pt-BR'), formatarHorario(ini, fim, 'pt-BR'));
+      cmp('tamanho do aviso de hoje ' + dia + '/' + mes, [t.locais, t.palavras, t.s], esperado);
+    }
     for (const [, data, dur, sug, notaPadrao] of e.janelas) {
       const [y, m, d] = data.split('-'), tipo = tipoDia(y, m, d), ct = contagemAtiv(c);
       cmp('janela ' + data + ' ' + dur, [sugerirJanelas(ct, tipo, dur).map(j => [j.inicio, j.nota, j.explicacao]), notaDano(ct, tipo, 8 * 60, dur)], [sug, notaPadrao]);

@@ -16,7 +16,7 @@ Nenhum dado de cliente real da distribuidora foi usado.
 
 ## O que o protótipo protege hoje
 
-**Minimização de dados no mapa (HTML).** O arquivo `saida/mapa_comunidades.html` não leva nome de titular, número de UC nem endereço. O clique num ponto mostra só a classe da unidade, a localidade digitada no cadastro, a comunidade identificada, a comunidade real (só para validação), a origem da coordenada e o transformador.
+**Minimização de dados no mapa (HTML).** O arquivo `saida/mapa_comunidades.html` não leva nome de titular, número de UC nem endereço. O clique num ponto mostra só a classe da unidade, a localidade digitada no cadastro (quando ela é nome de imóvel, pelo mesmo critério que já a descarta na votação, aparece "(nome de imóvel)", e o texto não vai para o HTML), a comunidade identificada, a comunidade real (só para validação), a origem da coordenada e o transformador. A varredura `py -m uv run python -m comunidades.validacao.minimizacao` confere isso: procura no HTML gerado cada titular, número de UC, nome de imóvel e logradouro do cadastro.
 
 **Minimização de dados no PDF para a rádio.** O roteiro traz só nomes de comunidades e contagens de unidades.
 
@@ -32,6 +32,8 @@ Nenhum dado de cliente real da distribuidora foi usado.
 **Biblioteca e fontes embutidas e conferidas.** A biblioteca de mapas (Leaflet 1.9.4) e as fontes IBM Plex Sans e IBM Plex Mono (licença SIL OFL 1.1) vêm embutidas no HTML, e não de uma CDN ou de um servidor de fontes. Foram copiadas dos pacotes oficiais, e o código de integridade de cada pacote foi conferido com o publicado pelo registro npm (ver `ORIGEM.md` em `src/comunidades/apresentacao/vendor/leaflet/` e em `vendor/ibm-plex/`). O git guarda esses arquivos sem converter o fim de linha (`.gitattributes`), para o SHA-256 de cada um continuar igual ao do pacote. Sem internet, o mapa funciona normalmente, só sem a imagem de fundo.
 
 **Contorno importado tratado como dado.** No desligamento por área, o arquivo (.kml, .geojson ou .json, até 5 MB e 20.000 vértices) é lido só no navegador, sem ir para nenhum servidor. Dele saem apenas as coordenadas dos polígonos: nomes, descrições e propriedades são descartados, e nenhum texto do arquivo entra na página como HTML (um KML pode trazer HTML e scripts nas descrições). O nome do arquivo aparece só como texto. A CSP continua a mesma, e o botão "Baixar área (GeoJSON)" funciona sem nenhuma exceção nova. Para a área, o HTML leva por UC só dois códigos a mais (distrito e atividade), nunca nome, número de UC ou endereço.
+
+**Tamanho do aviso de hoje no modo área.** Para comparar o aviso de hoje com o do Farol numa área, o HTML leva por UC só um código numérico do local que o aviso de hoje citaria (o imóvel, senão a rua) e, para cada código, o número de palavras do nome desse local. Os nomes não vão para o HTML, e os códigos seguem a ordem em que os locais aparecem no cadastro, não a alfabética, então nem o código nem a contagem de palavras permitem reconstruir um imóvel ou uma rua. Risco que fica: o código mostra quais UCs estão no mesmo imóvel ou na mesma rua (um agrupamento sem nome), parecido com o que o transformador de cada UC já mostra; como a rede e os clientes são fictícios, aceitamos esse risco no protótipo.
 
 **Código de verificação no PDF.** O rodapé do roteiro traz um código SHA-256 calculado no navegador. Qualquer alteração no texto gera um código diferente.
 

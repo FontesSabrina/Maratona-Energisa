@@ -38,6 +38,7 @@ As pastas seguem uma arquitetura em camadas, parente do MVC, que além de separa
 - Pipeline completo: py -m uv run comunidades
 - Só algoritmo, avaliação e mapa: py -m uv run comunidades --so-algoritmo
 - Avaliação detalhada: py -m uv run python -m comunidades.validacao.avaliacao
+- Varredura de minimização (titular, número de UC, imóvel e logradouro no HTML gerado): py -m uv run python -m comunidades.validacao.minimizacao (com $env:FAROL_DISTRIBUIDORA para Muriaé)
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez
 - Janela de menor dano (ramais rurais, perfis hipotéticos): py -m uv run python -m comunidades.validacao.janela
 - Página de entrada (lista os municípios já gerados): py -m uv run python -m comunidades.apresentacao.entrada (o pipeline já gera no fim)
@@ -45,7 +46,7 @@ As pastas seguem uma arquitetura em camadas, parente do MVC, que além de separa
 
 ## Referências para comparação (desde o passo 12)
 - Métricas: saida/metricas_passo12.txt (Leopoldina) e saida/muriae/metricas_passo12.txt (Muriaé), iguais às do passo 10b. São a referência de "antes e depois".
-- Avisos e janelas para os testes JS × Python: saida/referencias_passo12/ e saida/muriae/referencias_passo12/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações; areas.json: 200 áreas sorteadas com o resultado esperado; obra.json: 200 pontos da obra sorteados, desde o passo 13). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
+- Avisos e janelas para os testes JS × Python: saida/referencias_passo12/ e saida/muriae/referencias_passo12/ (avisos.json: avisos pt-BR e nos 3 idiomas; janelas.json: 3 sugestões por chave, 2 datas e 3 durações; areas.json: 200 áreas sorteadas com o resultado esperado; obra.json: 200 pontos da obra sorteados, desde o passo 13; tamanho_hoje.json: locais, palavras e segundos do aviso de hoje por chave, e esperado.hoje em areas.json, desde o passo 14). Gerados pelo Python; o navegador tem de reproduzi-los exatamente.
 - Regenerar: py -m uv run python -m comunidades.validacao.referencias, py -m uv run python -m comunidades.validacao.area e py -m uv run python -m comunidades.validacao.obra (com $env:FAROL_DISTRIBUIDORA para Muriaé).
 - Tela (desde o passo 13): tela.json nas mesmas pastas, gravado pelo testes/navegador/teste_tela.mjs --gravar a partir da versão do passo 12 (antes do MVC). É o retrato de tudo o que a tela mostra em cada chave, ponto da obra e área; uma reorganização do código tem de manter tudo idêntico. Só regrave quando uma mudança de tela for intencional.
 - No passo 12, resumir() passou a ordenar de forma estável (empate no número de UCs afetadas: ordem alfabética). Só mudou a ordem de comunidades empatadas em 30 avisos de Leopoldina e 21 de Muriaé; as referências do passo 10b (saida/referencias_passo10b/, saida/metricas_passo10b.txt) ficam guardadas para consulta.
@@ -55,5 +56,6 @@ As pastas seguem uma arquitetura em camadas, parente do MVC, que além de separa
 - Explique o plano antes de editar e espere minha confirmação.
 - Mudanças pequenas e testadas, uma etapa por vez.
 - Depois de cada mudança que afete o algoritmo ou o aviso, rode --so-algoritmo e mostre as métricas antes e depois.
+- Em todo passo que mexer no HTML (mapa, entrada ou dados que vão para eles), rode a varredura de minimização (validacao/minimizacao.py) nas duas cidades; ela tem de terminar sem nenhuma ocorrência proibida.
 - Código e comentários em português, seguindo o estilo dos arquivos existentes.
 - Nunca invente números para o README ou para o pitch: só use números que o pipeline imprimiu.

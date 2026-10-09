@@ -17,13 +17,13 @@ import shapely
 from .. import config as C
 from ..fontes import grafia, osm
 from ..nucleo.algoritmo import territorios_voronoi
-from ..nucleo.desligamento import duracao_s, locais_antigos, simular
+from ..nucleo.desligamento import CABECALHO_ANTIGO, codigos_locais, duracao_s, locais_antigos, palavras_do_e, simular
 from .. import distribuidora as dist_
 from ..nucleo import idiomas
 from ..nucleo.abrangencia import MARGEM_DIVISA_M, fatores_metros
 from ..nucleo.area import CASAS, MAX_VERTICES
 from ..nucleo.impacto import perfis_para_mapa
-from ..nucleo.nomes import exibir
+from ..nucleo.nomes import classificar, exibir, normalizar
 from ..validacao.avaliacao import avaliar
 
 TEMPLATE = Path(__file__).with_name("mapa_template.html")
@@ -86,17 +86,23 @@ def construir(dist=None):
 
     # LGPD: o HTML não leva titular, número da UC nem endereço; só classe, comunidade e dados técnicos
     classes = sorted(df["CLASSE"].unique())
-    loc_cad = sorted(df["BAIRRO_LOCALIDADE"].fillna("").astype(str).unique())  # texto digitado no campo localidade
+    # texto digitado no campo localidade; o que é nome de imóvel (o mesmo critério da votação) não vai
+    # para o HTML: essas UCs recebem -1 e o popup mostra "(nome de imóvel)"
+    imovel = lambda l: classificar(normalizar(l)) == "propriedade"
+    loc_cad = sorted(l for l in df["BAIRRO_LOCALIDADE"].fillna("").astype(str).unique() if not imovel(l))
     ic, il = {c: i for i, c in enumerate(classes)}, {c: i for i, c in enumerate(loc_cad)}
     # desligamento por área: distrito (para o aviso) e atividade (para a janela e as cargas sensíveis),
     # só como códigos; atividade fora dos perfis da distribuidora = -1 (não entra na contagem)
     distritos_uc = sorted(df["DISTRITO"].unique())
     idist, iativ = {d: i for i, d in enumerate(distritos_uc)}, {a: i for i, a in enumerate(atividades)}
+    # tamanho do aviso de hoje na área: o local de cada UC só como código (-1 = não entra) e as
+    # palavras de cada local; os nomes de imóveis e ruas não vão para o HTML
+    cod_local, palavras_local = codigos_locais(df)
     ucs = [[round(r.LAT_REAL, 5), round(r.LON_REAL, 5), trafo_idx[r.COD_TRAFO], ip[r.COMUNIDADE_PREVISTA],
             ir[r.COMUNIDADE], int(r.CONFIANCA * 100), int(r.ACERTO), origem[r.ORIGEM_COORD],
-            1 if r.CLASSE == "Rural" else 0, ic[r.CLASSE], il[str(r.BAIRRO_LOCALIDADE or "")],
-            idist[r.DISTRITO], iativ.get(r.ATIVIDADE, -1)]
-           for r in df.itertuples()]
+            1 if r.CLASSE == "Rural" else 0, ic[r.CLASSE], -1 if imovel(str(r.BAIRRO_LOCALIDADE or "")) else il[str(r.BAIRRO_LOCALIDADE or "")],
+            idist[r.DISTRITO], iativ.get(r.ATIVIDADE, -1), cl]
+           for r, cl in zip(df.itertuples(), cod_local)]
 
     # Cenários pré-calculados (mesma lógica do módulo desligamento)
     trafos_por_chave = {}
@@ -174,6 +180,8 @@ def construir(dist=None):
              "distritosUC": distritos_uc,
              "regrasAviso": {"limiarTotal": dist.regras.limiar_total, "limiteFragmento": dist.regras.limite_fragmento,
                              "limiteParticipacao": dist.regras.limite_participacao},
+             "avisoHoje": {"cabecalho": CABECALHO_ANTIGO.replace("{assinatura}", dist.regras.assinatura_aviso_atual),
+                           "palavrasLocal": palavras_local, "palavrasE": palavras_do_e()},
              "area": {"maxVertices": MAX_VERTICES, "casas": CASAS, "maxBytes": 5 * 1024 * 1024}}
     html = (TEMPLATE.read_text(encoding="utf-8")
             .replace("<!--__LOGO__-->", (MARCA / "farol.svg").read_text(encoding="utf-8").strip())

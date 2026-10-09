@@ -61,17 +61,58 @@ def resumir(afetadas: pd.DataFrame, todas: pd.DataFrame, regras: RegrasAviso) ->
     return c
 
 
+def _local_bruto(ucs: pd.DataFrame) -> pd.Series:
+    """O local de cada UC no aviso de hoje, como está no cadastro: o imóvel, senão o logradouro."""
+    return ucs["NOME_IMOVEL"].where(ucs["NOME_IMOVEL"].fillna("") != "", ucs["LOGRADOURO"])
+
+
 def locais_antigos(afetadas: pd.DataFrame) -> list[str]:
     """Como o sistema cita hoje: o imóvel (rural) ou a rua (urbano) de cada UC, sem repetir."""
-    locais = afetadas["NOME_IMOVEL"].where(afetadas["NOME_IMOVEL"].fillna("") != "", afetadas["LOGRADOURO"])
-    return [l.title() for l in pd.unique(locais.dropna())]
+    return [l.title() for l in pd.unique(_local_bruto(afetadas).dropna())]
+
+
+# Começo fixo do aviso de hoje (antes da lista de locais); o mapa recebe o mesmo modelo
+CABECALHO_ANTIGO = ("Atenção! A {assinatura} informa desligamento programado no dia {data}, "
+                    "das {horario}, para manutenção na rede elétrica, atingindo: ")
 
 
 def aviso_antigo(afetadas: pd.DataFrame, data: str, horario: str, regras: RegrasAviso) -> str:
     """O aviso como é hoje (em português): imóvel por imóvel (rural) e rua por rua (urbano)."""
-    return (f"Atenção! A {regras.assinatura_aviso_atual} informa desligamento programado no dia {data}, "
-            f"das {horario}, para manutenção na rede elétrica, atingindo: "
-            f"{idiomas.lista(locais_antigos(afetadas), 'pt-BR')}.")
+    return (CABECALHO_ANTIGO.format(assinatura=regras.assinatura_aviso_atual, data=data, horario=horario)
+            + f"{idiomas.lista(locais_antigos(afetadas), 'pt-BR')}.")
+
+
+def codigos_locais(ucs: pd.DataFrame) -> tuple[list[int], list[int]]:
+    """Local de cada UC no aviso de hoje como código (-1 = não entra) e as palavras de cada local.
+
+    O código segue a ordem em que o local aparece no cadastro (não a alfabética), e a repetição é
+    decidida pelo texto do cadastro, como em locais_antigos. Os nomes não saem daqui."""
+    codigos, unicos = pd.factorize(_local_bruto(ucs))
+    return [int(c) for c in codigos], [len(l.title().split()) for l in unicos]
+
+
+def palavras_do_e() -> int:
+    """Palavras de ligação antes do último local ("A, B e C"): o mesmo número com ou sem som de "i"."""
+    m = idiomas.IDIOMAS["pt-BR"]
+    if len(m["e"].split()) != len(m["e_antes_de_i"].split()):
+        raise ValueError("O tamanho do aviso de hoje supõe a mesma ligação antes do último local.")
+    return len(m["e"].split())
+
+
+def tamanho_aviso_antigo(codigos, palavras_por_local: list[int], data: str, horario: str,
+                         regras: RegrasAviso) -> tuple[int, int, int]:
+    """Locais citados, palavras e segundos no ar do aviso de hoje, sem montar o texto.
+
+    Mesmas regras de aviso_antigo: locais sem repetição, o começo fixo com a data e o horário e
+    a ligação da lista. Sem nenhum local o texto termina em "atingindo: .", e o ponto conta."""
+    locais = {c for c in codigos if c >= 0}
+    cab = CABECALHO_ANTIGO.format(assinatura=regras.assinatura_aviso_atual, data=data, horario=horario)
+    n = len(cab.split()) + sum(palavras_por_local[c] for c in locais)
+    if len(locais) >= 2:
+        n += palavras_do_e()
+    elif not locais:
+        n += 1  # o "." sozinho
+    return len(locais), n, round(n / PALAVRAS_POR_SEGUNDO)
 
 
 def partes_do_aviso(resumo: pd.DataFrame, municipio: str) -> tuple:

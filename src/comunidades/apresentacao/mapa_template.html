@@ -447,7 +447,7 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
           <label class="idioma">Idioma <select id="avIdioma" aria-label="Idioma do aviso"></select></label></div>
         <p class="aviso-txt" id="avisoNovo"></p>
       </div>
-      <p class="nota oculto" id="notaSemComparacao" style="margin:0">A comparação com o aviso de hoje fica disponível no modo por chave.</p>
+      <p class="nota oculto" id="notaSemComparacao" style="margin:0">No modo por área, mostramos só o tamanho do aviso de hoje, sem os nomes dos imóveis e das ruas. O texto completo aparece no modo por chave.</p>
       <div class="cmp" id="blocoComparacao">
         <div class="cmp-l"><span>Hoje (fazenda a fazenda)</span><b id="tAntigo"></b></div>
         <div class="trilho"><i id="barraAntigo"></i></div>
@@ -622,12 +622,26 @@ function antecedencia(f) {
   return { ...base, classe: 'verde', cod: 'ok', texto: 'Antecedência OK' };
 }
 
-// Os dois avisos da tela. No modo área não há aviso de hoje: ele lista o imóvel ou a rua de cada UC, que o HTML não leva
+// Tamanho do aviso de hoje sem montar o texto (modo área), com as regras de desligamento.tamanho_aviso_antigo:
+// locais sem repetição (códigos de D.ucs[i][13]; -1 não entra), o começo fixo com a data e o horário e o " e "
+// antes do último local. Sem nenhum local o texto termina em "atingindo: .", e o ponto conta como palavra.
+const AH = D.avisoHoje;
+function tamanhoAvisoHoje(locais, data, horario) {
+  let n = palavras(preencher(AH.cabecalho, { data, horario }));
+  for (const l of locais) n += AH.palavrasLocal[l];
+  if (locais.size >= 2) n += AH.palavrasE;
+  else if (!locais.size) n += 1;
+  return { locais: locais.size, palavras: n, s: Math.round(n / PALAVRAS_POR_SEGUNDO) };
+}
+
+// Os dois avisos da tela. No modo área não há texto do aviso de hoje (ele lista o imóvel ou a rua de cada UC,
+// que o HTML não leva): só o tamanho dele (hoje)
 function montarTextos(c, f, idioma) {
   const dataTxt = f.d ? formatarData(+f.d, +f.m, idioma) : '__/__';
   const novo = comTelefone(montarAviso(c, dataTxt, formatarHorario(minutos(f.ini), minutos(f.fim), idioma), idioma), f.tel, idioma);
+  if (c.area) return { novo, antigo: '', hoje: tamanhoAvisoHoje(c.locaisHoje, f.dataCurta, f.horario) };
   // o aviso antigo vem pronto do Python com a data padrão; troca só a data e o horário, para comparar igual
-  const antigo = c.area ? '' : c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
+  const antigo = c.antigo.replace('no dia 12/11, das 8h às 14h', `no dia ${f.dataCurta}, das ${f.horario}`);
   return { novo, antigo };
 }
 
@@ -864,10 +878,14 @@ function resumirArea(idx) {
 function cenarioDaArea(idx) {
   const ativ = PF.atividades.map(() => 0), alims = new Set();
   let rural = 0;
-  for (const i of idx) { const u = D.ucs[i]; if (u[12] >= 0) ativ[u[12]]++; alims.add(D.trafos[u[2]][4]); rural += u[8]; }
+  const locaisHoje = new Set();  // locais do aviso de hoje, só como códigos
+  for (const i of idx) {
+    const u = D.ucs[i]; if (u[12] >= 0) ativ[u[12]]++; alims.add(D.trafos[u[2]][4]); rural += u[8];
+    if (u[13] >= 0) locaisHoje.add(u[13]);
+  }
   const lista = [...alims].sort();
   return { area: true, ucsIdx: idx, n: idx.length, com: resumirArea(idx), ativ, alims: lista, alim: lista.join(', '),
-    rural: rural / idx.length, trafos: [], mt: [], antigo: '', nLocais: 0 };
+    rural: rural / idx.length, trafos: [], mt: [], antigo: '', locaisHoje, nLocais: locaisHoje.size };
 }
 
 // ----- Leitura do arquivo (GeoJSON ou KML): só as coordenadas -----
@@ -1034,9 +1052,9 @@ const estiloTrafo = () => ({ radius: 3, color: css('--texto'), weight: 1, fillCo
 // A comunidade real (gabarito) só aparece no modo apresentação.
 const ORIGEM = ['', 'sem coordenada no cadastro → usada a do transformador', 'coordenada do cadastro incoerente → usada a do transformador'];
 function popupUC(i) {
-  const u = D.ucs[i], loc = D.locCad[u[10]];
+  const u = D.ucs[i], loc = D.locCad[u[10]];  // u[10] = -1: digitaram o nome do imóvel, que o HTML não leva
   return `<div class="pop"><b>Unidade ${esc(D.classes[u[9]].toLowerCase())}</b>
-    <span class="k">Localidade digitada no cadastro:</span> ${loc ? esc(loc) : '<i>(vazio)</i>'}<br>
+    <span class="k">Localidade digitada no cadastro:</span> ${u[10] < 0 ? '<i>(nome de imóvel)</i>' : loc ? esc(loc) : '<i>(vazio)</i>'}<br>
     <span class="k">Comunidade identificada:</span> <b style="display:inline">${esc(D.comPrev[u[3]])}</b> (confiança ${u[5]}%)
     <span class="so-ap"><br><span class="k">Comunidade real (IBGE, só validação):</span> ${esc(D.comReal[u[4]])} ${u[6] ? '<span class="ok">✓</span>' : '<span class="ruim">✗</span>'}</span>
     ${u[7] ? `<br><span class="k">Coordenada:</span> ${ORIGEM[u[7]]}` : ''}<br>
@@ -1400,23 +1418,29 @@ function desenharAviso() {
   const sD = segundos(textos.novo);
   $('numRadio').innerHTML = `${sD}<small> s</small>`;
   $('avisoNovo').textContent = textos.novo;
-  ['blocoComparacao', 'blocoAntigo'].forEach(id => $(id).classList.toggle('oculto', !!c.area));
+  // no modo área não há o texto do aviso de hoje: o bloco mostra só o tamanho dele, e some o "Ver o aviso de hoje"
+  $('blocoAntigo').classList.toggle('oculto', !!c.area);
   $('notaSemComparacao').classList.toggle('oculto', !c.area);
-  if (c.area) {
-    $('numRadioHoje').textContent = '';
-    atualizarJanela(c, f);
-    return preencherRoteiro(c, f, ant, sD);
-  }
-  const sA = segundos(textos.antigo);
+  const sA = c.area ? textos.hoje.s : segundos(textos.antigo);
+  const rotAntigo = $('tAntigo').previousElementSibling, rotNovo = $('tNovo').previousElementSibling;  // rótulos das barras
   const red = Math.round((1 - sD / sA) * 100);
   $('numRadioHoje').textContent = `· hoje ${sA} s`;
-  $('avisoAntigo').textContent = textos.antigo;
-  $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
-  $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
+  if (c.area) {
+    const { inteiras, parciais } = classificar(c), k = inteiras.length + parciais.length;
+    rotAntigo.textContent = `Hoje: ${fmt(textos.hoje.locais)} ${textos.hoje.locais === 1 ? 'local citado' : 'locais citados'} · ${fmt(textos.hoje.palavras)} palavras`;
+    rotNovo.textContent = `Farol: ${fmt(k)} ${k === 1 ? 'comunidade' : 'comunidades'} · ${fmt(palavras(textos.novo))} palavras`;
+    $('tAntigo').textContent = `${tempo(sA)} no ar`; $('tNovo').textContent = `${tempo(sD)} no ar`;
+  } else {
+    $('avisoAntigo').textContent = textos.antigo;
+    $('resumoAntigo').textContent = `Ver o aviso de hoje (fazenda a fazenda, ${fmt(palavras(textos.antigo))} palavras)`;
+    rotAntigo.textContent = 'Hoje (fazenda a fazenda)'; rotNovo.textContent = 'Farol (por comunidade)';
+    $('tAntigo').textContent = tempo(sA); $('tNovo').textContent = tempo(sD);
+  }
   $('barraAntigo').style.width = '100%';
   $('barraNovo').style.width = `${Math.max(3, Math.min(100, sD / sA * 100))}%`;
   $('ganho').innerHTML = red > 0
     ? `Aviso <b>${red}% mais curto</b>: ${tempo(sA - sD)} a menos no ar por veiculação, e o ouvinte reconhece o nome da própria comunidade em vez de procurar o sítio numa lista de ${fmt(c.nLocais)} nomes.`
+    : c.area ? `Nesta área pequena os dois avisos têm tamanho parecido. O ganho aparece nas áreas com muitos imóveis.`
     : `Neste ramal pequeno os dois avisos têm tamanho parecido. O ganho aparece nos ramais com muitos imóveis.`;
   atualizarJanela(c, f);
   return preencherRoteiro(c, f, ant, sD);

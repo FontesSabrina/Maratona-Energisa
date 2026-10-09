@@ -7,8 +7,8 @@ Os testes esperam o mapa ficar pronto (a tela de abertura some quando ele termin
 ## O que cada arquivo confere
 
 - **`teste_equivalencia.mjs`** compara o JavaScript do mapa com as referências geradas pelo Python, em `saida/referencias_passo12/`:
-  - **Por chave:** o aviso pt-BR, o aviso de hoje, o aviso nos 3 idiomas (2 datas e horários) e as 3 janelas sugeridas (2 datas e 3 durações), para todas as chaves.
-  - **Por área:** 200 áreas sorteadas, mais uma fora do município e uma que engloba o município inteiro. Para cada uma: a situação, as UCs dentro, as comunidades e a classificação, o aviso nos 3 idiomas, as cargas sensíveis, os alimentadores, as janelas e o resumo do código de verificação.
+  - **Por chave:** o aviso pt-BR, o aviso de hoje, o aviso nos 3 idiomas (2 datas e horários) e as 3 janelas sugeridas (2 datas e 3 durações), para todas as chaves. Também o tamanho do aviso de hoje (locais, palavras e segundos) calculado pelos códigos de local, como no modo área, contra o contado no texto pelo Python.
+  - **Por área:** 200 áreas sorteadas, mais uma fora do município e uma que engloba o município inteiro. Para cada uma: a situação, as UCs dentro, as comunidades e a classificação, o aviso nos 3 idiomas, as cargas sensíveis, os alimentadores, as janelas, o tamanho do aviso de hoje e o resumo do código de verificação.
   - **Ponto da obra:** 200 pontos sorteados (perto da rede, longe, fora do município e no tronco), com o trecho, a distância e as chaves que desligam o trecho.
   - Também acusa exceções na página e violações da CSP.
 - **`teste_tela.mjs`** confere que uma reorganização do código não mudou nada na tela:

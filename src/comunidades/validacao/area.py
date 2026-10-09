@@ -5,8 +5,8 @@ município, meio a meio; raio de 150 m a 3 km; de 8 a 48 vértices), com semente
 uma vem em dois polígonos (MultiPolygon) e outra com um buraco no meio. Mais dois casos fixos: uma área fora do município e uma que
 engloba o município inteiro.
 
-O esperado é calculado pelas regras de sempre (desligamento.resumir, o aviso nos 3 idiomas e a
-janela), sobre as UCs que nucleo/area.py põe dentro da área. As coordenadas das UCs e o contorno
+O esperado é calculado pelas regras de sempre (desligamento.resumir, o aviso nos 3 idiomas, a
+janela e o tamanho do aviso de hoje, contado no texto montado), sobre as UCs que nucleo/area.py põe dentro da área. As coordenadas das UCs e o contorno
 do município são lidos do próprio mapa gerado, para os dois lados usarem exatamente os mesmos números.
 
 Uso: py -m uv run python -m comunidades.validacao.area (gera o mapa antes)
@@ -22,7 +22,7 @@ from .. import distribuidora as dist_
 from ..apresentacao.mapa import ARQ_SAIDA
 from ..nucleo import area as A
 from ..nucleo.abrangencia import poligonos_de_geojson
-from ..nucleo.desligamento import aviso_novo, resumir
+from ..nucleo.desligamento import aviso_novo, codigos_locais, resumir
 from . import referencias as R
 from .avaliacao import avaliar
 
@@ -80,7 +80,7 @@ def sortear_areas(municipio: list, kx: float, ky: float, lats: list, lons: list,
     return areas
 
 
-def _esperado(area: dict, df, lats: list, lons: list, municipio: list, kx: float, ky: float, dist) -> dict:
+def _esperado(area: dict, df, lats: list, lons: list, municipio: list, kx: float, ky: float, dist, locais) -> dict:
     r = A.analisar(lats, lons, area["poligonos"], municipio, kx, ky)
     out = {"situacao": r["situacao"], "ucs": r["ucs"], "resumo": A.resumo_da_area(area["poligonos"])}
     if r["situacao"] != "ok":
@@ -95,6 +95,8 @@ def _esperado(area: dict, df, lats: list, lons: list, municipio: list, kx: float
     out["ativ"] = [cont[a] for a in dist.perfis]
     out["janelas"] = R.janelas_de(area["id"], cont, dist.perfis, dist.expediente)
     out["alimentadores"] = sorted(sub["ALIMENTADOR"].unique())
+    codigos, palavras = locais
+    out["hoje"] = R.tamanho_hoje_de(area["id"], sub, [codigos[i] for i in r["ucs"]], palavras, dist.regras)
     return out
 
 
@@ -108,8 +110,9 @@ def gerar(dist=None) -> dict:
     kx, ky = D["rede"]["kx"], D["rede"]["ky"]
     lats, lons = [u[0] for u in D["ucs"]], [u[1] for u in D["ucs"]]
     areas = sortear_areas(municipio, kx, ky, lats, lons)
+    locais = codigos_locais(df)
     for a in areas:
-        a["esperado"] = _esperado(a, df, lats, lons, municipio, kx, ky, dist)
+        a["esperado"] = _esperado(a, df, lats, lons, municipio, kx, ky, dist, locais)
     return {"municipio": dist.municipio, "semente": C.SEMENTE, "areas": areas}
 
 

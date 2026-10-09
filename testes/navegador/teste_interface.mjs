@@ -84,7 +84,11 @@ conferir('modo área: validação com o Censo escondida (mesmo no modo apresenta
   await clicar('#btnApresentacao'); const oculto = await av(`getComputedStyle($('validCen')).display === 'none'`); await clicar('#btnApresentacao'); return oculto; })());
 await captura('1_area_desenhada_perto_CF-0066.png');
 await clicar('#tab-aviso');
-conferir('aba Aviso: sem aviso de hoje nem comparação; nota visível', await av(`$('blocoComparacao').classList.contains('oculto') && $('blocoAntigo').classList.contains('oculto') && !$('notaSemComparacao').classList.contains('oculto') && !$('ganho').closest('.oculto') === false`));
+// passo 14: a comparação volta (só o tamanho do aviso de hoje); o texto e o "Ouvir" do aviso de hoje continuam fora
+const cmpArea = await av(`({ cmp: !$('blocoComparacao').classList.contains('oculto'), antigo: !$('blocoAntigo').classList.contains('oculto'),
+  nota: !$('notaSemComparacao').classList.contains('oculto'), rot: $('tAntigo').previousElementSibling.textContent, t: $('tAntigo').textContent, ganho: $('ganho').textContent })`);
+conferir('aba Aviso: comparação com o tamanho do aviso de hoje, sem o texto dele; nota visível', cmpArea.cmp && !cmpArea.antigo && cmpArea.nota
+  && /^Hoje: [\d.]+ locais citados · [\d.]+ palavras$/.test(cmpArea.rot) && / no ar$/.test(cmpArea.t) && /% mais curto/.test(cmpArea.ganho), `${cmpArea.rot} | ${cmpArea.t}`);
 await captura('2_aviso_da_area_desenhada.png');
 const ent1 = await conferirCodigo('área desenhada', 'area=desenhada;poligonos=1;vertices=7;sha256=');
 const canon = await av(`formaCanonica(estado.area.poligonos)`);
