@@ -45,6 +45,19 @@ footer { margin-top: 32px; display: grid; gap: 6px; text-align: center; font-siz
 footer p { margin: 0; }
 code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--texto2); white-space: nowrap; }
 
+@media (max-width: 640px) {
+  main { padding-top: 28px; }
+  .nome { font-size: 28px; }
+  .slogan { font-size: 14px; }
+  .escolha { margin-top: 28px; }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+  .cartoes { gap: 12px; }
+  .cartao { padding: 16px; }
+  .cartao h2 { font-size: 20px; }
+  .numeros { gap: 6px; }
+  .numeros dd { font-size: 18px; }
+}
+
 /* Abertura curta, só com CSS (~1,2 s): o logo aparece grande no centro, o feixe gira uma vez,
    o logo sobe para o topo e os cartões aparecem. Com movimento reduzido, a página já abre pronta. */
 .topo .feixe { transform-box: view-box; transform-origin: 32px 18px; }

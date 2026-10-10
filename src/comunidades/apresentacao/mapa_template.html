@@ -316,6 +316,15 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
 #roteiro .rt-verif code { font: 8.5pt "IBM Plex Mono", ui-monospace, Consolas, monospace; color: #000; word-break: break-all; }
 
 /* ---------- Celular ---------- */
+@media (max-width: 980px) {
+  .topo { gap: 12px; padding: 10px 12px; }
+  .marca { min-width: 0; }
+  .marca .nome { font-size: 18px; }
+  .marca .lugar { font-size: 11.5px; line-height: 1.25; }
+  .acoes-topo { gap: 6px; }
+  .acoes-topo button { padding: 0 12px; }
+}
+
 @media (max-width: 760px) {
   body { display: block; height: auto; }
   .topo { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "marca acoes" "busca busca"; gap: 10px; position: sticky; top: 0; }
@@ -334,6 +343,19 @@ button.sw[aria-checked="true"] .chave-sw::after { left: 19px; background: var(--
   .numeros { gap: 10px; } .num { font-size: 28px; }
   .leaflet-bottom.leaflet-left .legenda { margin-bottom: 40px; }  /* acima dos créditos, que quebram em duas linhas */
   .valid-nums .num { font-size: 20px; }
+}
+
+@media (max-width: 420px) {
+  .topo { padding: 8px 10px; }
+  .marca .nome { font-size: 16px; }
+  .marca .lugar { max-width: 116px; }
+  .acoes-topo button { min-width: 0; }
+  .busca input { padding-left: 38px; }
+  .busca .lupa { left: 10px; }
+  .mapa-area { height: 50vh; }
+  aside { padding: 12px 12px 18px; }
+  .chave-cab .mono { font-size: 22px; }
+  .linha-botoes { gap: 8px; }
 }
 </style>
 </head>
