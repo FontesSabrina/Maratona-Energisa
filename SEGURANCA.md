@@ -56,6 +56,28 @@ Nenhum dado de cliente real da distribuidora foi usado.
 
 **Sem segredos no código.** Não há senha, token nem chave de acesso no código nem no histórico do git.
 
+## Área administrativa — protótipo
+
+A página `saida/admin.html` (link "Área administrativa (protótipo)" na página de entrada) mostra como seria o cadastro das empresas que usam o Farol e dos usuários de cada empresa. **Ela não é um controle de acesso real.** É uma demonstração navegável:
+
+- **Entrada simulada.** "Entrar como" (Admin do Farol, Admin da empresa, Operador ou Consulta) não pede senha e não protege nada. Quem abre o arquivo pode escolher qualquer perfil. As permissões por perfil existem só para mostrar o comportamento esperado.
+- **Tudo na memória do navegador.** Nada é gravado: nem em servidor, nem em `localStorage` ou `sessionStorage`. Recarregar a página volta aos dados de demonstração.
+- **Dados fictícios.** Duas empresas ("Distribuidora Demonstração MG" e "Cooperativa Rural Exemplo") e cinco usuários com nomes de exemplo, e-mails em subdomínios de `example.com` (reservado para exemplos) e CNPJs alfanuméricos de teste, válidos no cálculo dos dígitos mas sem empresa real. Os municípios e códigos IBGE são reais.
+- **Mesmas travas do mapa.** CSP com os scripts só por hash, `connect-src 'none'` e nenhum servidor externo (nem os fundos de mapa). Todo texto digitado é exibido como texto (nunca como HTML): um nome de empresa como `<img src=x onerror=...>` aparece escrito, sem rodar nada. O teste `testes/navegador/teste_admin.mjs` confere isso, a falta de requisições de rede e de erros no console.
+- **Minimização (LGPD).** O cadastro de usuário pede só o necessário para dar acesso: nome, e-mail corporativo (do domínio permitido da empresa), cargo ou setor (opcional), perfil e municípios. **Não há campo de CPF, data de nascimento, endereço nem telefone pessoal.** Da empresa, além dos dados cadastrais, só o gestor do contrato e o encarregado de dados (DPO), exigido pela LGPD (art. 41).
+- **Convite sem senha.** "Convidar usuário" não cria senha: a tela explica que, na produção, a pessoa recebe um link e cria a própria senha.
+- **Arquivo de configuração.** O botão "Gerar arquivo de configuração (.toml)" gera o arquivo no formato de `distribuidoras/*.toml`, que o pipeline carrega. Ele nunca leva usuários nem e-mails (o teste confere com o `distribuidora.py`).
+- **Registro de atividades** só da sessão, na memória, com opção de baixar em texto.
+
+**Como seria em produção:**
+
+- **No servidor da distribuidora**, com o cadastro num banco de dados dela, e não num arquivo aberto no navegador. Cada regra de permissão é conferida no servidor, a cada pedido.
+- **Login corporativo** (SSO com OpenID Connect, por exemplo o Microsoft Entra ID da empresa) e **verificação em 2 etapas** obrigatória para administradores.
+- **Senhas, quando houver, só como hash Argon2id.** O convite é um link de uso único, com prazo, e a pessoa cria a própria senha.
+- **Isolamento por empresa** garantido no servidor e no banco: o admin de uma empresa nunca lê nem altera dados de outra, nem por acesso direto ao endereço.
+- **Auditoria imutável:** quem fez o quê, quando e em qual registro, guardado num registro que não pode ser apagado nem alterado.
+- **LGPD:** minimização (os campos acima), encarregado de dados indicado por empresa, base legal (execução do contrato com a distribuidora e cumprimento da obrigação regulatória de aviso), prazo de guarda dos dados de quem deixa de ser usuário e atendimento aos direitos do titular.
+
 ## O que a implantação real exigiria
 
 O protótipo usa dados públicos e fictícios. Com o cadastro real da distribuidora, seria preciso:

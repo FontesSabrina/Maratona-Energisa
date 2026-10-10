@@ -41,6 +41,11 @@ h1 { margin: 0 0 20px; font-size: 22px; font-weight: 600; text-align: center; }
 .abrir:hover { filter: brightness(1.06); }
 .abrir:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
 .vazio { text-align: center; color: var(--texto2); }
+.admin { margin: 28px 0 0; text-align: center; }
+.admin a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 10px;
+  border: 1px solid var(--linha); color: var(--texto); text-decoration: none; }
+.admin a:hover { background: var(--sup); }
+.admin a:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
 footer { margin-top: 32px; display: grid; gap: 6px; text-align: center; font-size: 13px; color: var(--apagado); }
 footer p { margin: 0; }
 code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--texto2); white-space: nowrap; }
@@ -66,7 +71,7 @@ code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-siz
   .topo svg { animation: encolher .5s cubic-bezier(.2, .7, .2, 1) .7s both; }
   .topo .feixe { animation: feixe-gira .7s ease-in-out both; }
   .nome, .slogan { animation: surgir .35s ease .25s both; }
-  .escolha, footer { animation: surgir .4s ease .95s both; }
+  .escolha, .admin, footer { animation: surgir .4s ease .95s both; }
 }
 /* só o logo cresce (o cabeçalho inteiro ampliado passaria da largura da tela) */
 @keyframes subir { from { transform: translateY(calc(50vh - 150px)); } to { transform: none; } }
@@ -87,6 +92,7 @@ code { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; font-siz
     <h1 id="pergunta">Qual área você quer abrir?</h1>
     <!--__CARTOES__-->
   </section>
+  <!--__ADMIN__-->
   <footer>
     <p>Rede elétrica e clientes fictícios. Território, endereços e vias reais (IBGE Censo 2022 e OpenStreetMap).</p>
     <p>Para outro município, gere o Farol pelo comando com <code>--coordenada</code> ou <code>--distribuidora</code>.</p>

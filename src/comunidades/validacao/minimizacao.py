@@ -1,7 +1,7 @@
 """Varredura de minimização: o HTML gerado não pode levar titular, número de UC nem endereço.
 
-Procura no mapa (mapa_comunidades.html), no resumo do cartão (resumo_mapa.json) e na página de
-entrada (index.html) cada titular, nome de imóvel, logradouro e número de UC do cadastro fictício.
+Procura no mapa (mapa_comunidades.html), no resumo do cartão (resumo_mapa.json), na página de
+entrada (index.html) e na área administrativa (admin.html, com usuários fictícios de exemplo) cada titular, nome de imóvel, logradouro e número de UC do cadastro fictício.
 A busca ignora acentos, maiúsculas e pontuação e compara palavra por palavra, então "SITIO BOA VISTA"
 acha "Sítio Boa Vista" e "sitio-boa-vista".
 
@@ -78,7 +78,7 @@ def _separar_avisos_de_hoje(html: str) -> tuple[str, str, dict]:
 def varrer(mapa: Path = ARQ_SAIDA) -> dict:
     ucs = gpd.read_file(C.SINTETICO / "ucs.gpkg", ignore_geometry=True)
     html, avisos, D = _separar_avisos_de_hoje(mapa.read_text(encoding="utf-8"))
-    outros = [p for p in (ARQ_RESUMO, SAIDA_RAIZ / "index.html") if p.exists()]
+    outros = [p for p in (ARQ_RESUMO, SAIDA_RAIZ / "index.html", SAIDA_RAIZ / "admin.html") if p.exists()]
     texto = "\n".join([html] + [p.read_text(encoding="utf-8") for p in outros])
     indice, ind_avisos = Indice(texto), Indice(avisos)
     publicos = {origem: Indice("\n".join(map(str, nomes))) for origem, nomes in textos_publicos(D).items()}

@@ -32,6 +32,14 @@ Os testes esperam o mapa ficar pronto (a tela de abertura some quando ele termin
   - **Navegação:** "Abrir" leva ao mapa certo, e "Trocar área" volta à entrada, nas duas cidades.
   - Grava as capturas em `saida/capturas_passo13/`.
 - **`varredura_44px.mjs`** procura botões, links e campos visíveis com menos de 44 × 44 px no mapa (inicial, camadas, chave, abas, popup, busca, ponto da obra, área e desenho) e na página de entrada, no computador e no celular.
+- **`teste_admin.mjs`** testa a área administrativa (protótipo, `saida/admin.html`). São 169 verificações:
+  - **Perfis:** o Admin do Farol vê Empresas e Registro; o Admin da empresa vê só Usuários, Configuração e Registro da própria empresa; Operador e Consulta veem "Sem acesso à administração" e o link para os mapas.
+  - **Telas proibidas:** abrir pelo endereço a lista de empresas, o cadastro de uma empresa ou os usuários e a configuração de outra empresa mostra "Sem acesso".
+  - **Fluxo completo:** cadastro de empresa com validação na hora (CNPJ, código IBGE, antecedência), convite simulado, último admin protegido, empresa suspensa, `.toml` e registro baixados.
+  - **Segurança:** um nome de empresa com `<img onerror>` aparece como texto e a sentinela fica intacta; nenhuma requisição de rede; console vazio; nenhuma violação de CSP; nada em `localStorage` ou `sessionStorage`.
+  - **Tela:** alvos de 44 px em cada tela, nos temas claro e escuro, no computador e no celular; faixa de protótipo sempre visível; nenhuma rolagem horizontal a 390 px.
+  - Grava as capturas em `saida/capturas_passo17/`.
+- **`../admin/teste_modelo.mjs`** testa o Model da área administrativa no Node, sem navegador (182 verificações): CNPJ numérico e alfanumérico, domínio de e-mail, código IBGE, permissões por perfil, isolamento entre empresas, último admin, registro e o `.toml`. Grava os `.toml` das empresas de demonstração em `saida/admin_toml_teste/` e confere que o `distribuidora.py` carrega cada um (`comunidades.validacao.configuracao_admin`).
 - **`cdp.mjs`** abre o navegador e conversa com ele pelo DevTools Protocol. Os outros testes usam este arquivo.
 - **`exemplos/`** tem os contornos usados no teste de interface. São cópias dos que ficam em `saida/exemplos/`, que não vai para o git.
 
@@ -60,11 +68,16 @@ node testes/navegador/teste_tela.mjs                      # Leopoldina (saida/mu
 node testes/navegador/teste_interface.mjs                 # interface do modo área (Leopoldina)
 node testes/navegador/teste_abertura.mjs                  # abertura, entrada e "Trocar área"
 node testes/navegador/varredura_44px.mjs                  # alvos de toque (saida/muriae para Muriaé)
+node testes/navegador/teste_admin.mjs                     # área administrativa (protótipo)
+node testes/admin/teste_modelo.mjs                        # Model da área administrativa e .toml gerados
 ```
+
+O retrato de Muriaé (`teste_tela.mjs saida/muriae`) passa do limite de memória padrão do Node (cerca de 2 GB). Rode com mais memória: `node --max-old-space-size=8192 testes/navegador/teste_tela.mjs saida/muriae`.
 
 Cada teste termina com código 0 quando está tudo certo e 1 quando há diferença. O resultado esperado é:
 - 0 erros no teste de equivalência;
 - 0 retratos diferentes no teste de tela;
 - "39 de 39 verificações OK" no teste de interface;
 - todas as verificações OK no teste de abertura;
-- "Nenhum alvo de toque abaixo de 44 px" na varredura.
+- "Nenhum alvo de toque abaixo de 44 px" na varredura;
+- "169 de 169 verificações OK" no teste da área administrativa e "182 de 182" no teste do Model.

@@ -50,7 +50,10 @@ def construir() -> Path:
             .replace("<!--__LOGO__-->", logo_com_feixe())
             .replace("__FAVICON__", favicon())
             .replace("/*__FONTES__*/", _fontes_embutidas())
-            .replace("<!--__CARTOES__-->", cartoes))
+            .replace("<!--__CARTOES__-->", cartoes)
+            # Link para a área administrativa (protótipo), quando ela já foi gerada
+            .replace("<!--__ADMIN__-->", '<p class="admin"><a href="admin.html">Área administrativa (protótipo)</a></p>'
+                     if (SAIDA_RAIZ / "admin.html").exists() else ""))
     html = html.replace("/*__CSP__*/", politica_seguranca(html))
     ARQ_ENTRADA.write_text(html, encoding="utf-8", newline="\n")
     return ARQ_ENTRADA

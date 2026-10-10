@@ -10,7 +10,7 @@ import geopandas as gpd
 
 from . import config as C
 from . import distribuidora as dist_
-from .apresentacao import entrada, mapa
+from .apresentacao import admin, entrada, mapa
 from .fontes import dados, grafia, ibge, osm
 from .nucleo import algoritmo
 from .simulacao import clientes, rede
@@ -38,9 +38,11 @@ ETAPAS = [
     ("Cadastro fictício de UCs", clientes.construir),
     ("Algoritmo de comunidades", rodar_algoritmo),
     ("Mapa interativo (inclui avaliação)", "mapa"),
+    ("Área administrativa (protótipo)", admin.construir),
     ("Página de entrada (escolha da área)", entrada.construir),
 ]
-SO_ALGORITMO = {"Algoritmo de comunidades", "Mapa interativo (inclui avaliação)", "Página de entrada (escolha da área)"}
+SO_ALGORITMO = {"Algoritmo de comunidades", "Mapa interativo (inclui avaliação)", "Área administrativa (protótipo)",
+                "Página de entrada (escolha da área)"}
 
 
 def executar(argv: list[str]) -> None:
@@ -65,6 +67,7 @@ def executar(argv: list[str]) -> None:
           f"precisão média {cen.PRECISAO.mean():.1%} | aviso {cen.SEG_ANTES.mean():.0f}s -> {cen.SEG_DEPOIS.mean():.0f}s")
     print(f"\nMapa: {mapa.ARQ_SAIDA}")
     print(f"Entrada: {entrada.ARQ_ENTRADA}")
+    print(f"Área administrativa (protótipo): {admin.ARQ_ADMIN}")
 
 
 if __name__ == "__main__":

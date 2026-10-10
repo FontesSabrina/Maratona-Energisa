@@ -228,16 +228,17 @@ def _fontes_embutidas() -> str:
     return "\n".join(regras)
 
 
-def politica_seguranca(html: str) -> str:
+def politica_seguranca(html: str, fundo_mapa: bool = True) -> str:
     """Content Security Policy do mapa: só roda os scripts embutidos (pelo hash SHA-256 de cada um)
-    e só carrega imagens dos fundos de mapa da Esri. Nenhuma outra conexão externa."""
+    e só carrega imagens dos fundos de mapa da Esri. Nenhuma outra conexão externa.
+    Sem fundo_mapa (área administrativa), nem as imagens da Esri: só as embutidas."""
     hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode('utf-8')).digest()).decode()}'"
                       for s in re.findall(r"<script>(.*?)</script>", html, flags=re.S)) or "'none'"  # sem script: nenhum roda
     return "; ".join([
         "default-src 'none'",
         f"script-src {hashes}",
         "style-src 'unsafe-inline'",
-        f"img-src {FUNDO_MAPA} data:",  # data: = imagem embutida (o Leaflet usa para cancelar blocos), sem conexão
+        f"img-src {FUNDO_MAPA} data:" if fundo_mapa else "img-src data:",  # data: = imagem embutida (o Leaflet usa para cancelar blocos), sem conexão
         "font-src data:",  # só as fontes embutidas no próprio arquivo, sem servidor
         "connect-src 'none'", "media-src 'none'", "object-src 'none'",
         "frame-src 'none'", "worker-src 'none'", "base-uri 'none'", "form-action 'none'",

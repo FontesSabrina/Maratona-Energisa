@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# .NET (acesso/)
+acesso/bin/
+acesso/obj/
+
 # Dados (baixados/gerados pelo pipeline: `uv run comunidades`)
 data/
 saida/*
@@ -16,6 +20,8 @@ saida/*
 # Página de entrada e os resumos de cada município (para refazer a entrada a partir de um clone)
 !saida/index.html
 !saida/resumo_mapa.json
+# Área administrativa (protótipo, dados fictícios)
+!saida/admin.html
 # saida/muriae/ volta a valer só para estes arquivos (o resto da pasta continua ignorado)
 !saida/muriae/
 saida/muriae/*
