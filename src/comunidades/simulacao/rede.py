@@ -158,7 +158,10 @@ def _chaves(T: nx.DiGraph, raiz, jusante: dict, alim: dict) -> list:
     return chaves
 
 
-def construir():
+def construir(G=None, so_rede: bool = False):
+    """Rede fictícia do município configurado. G: grafo viário pronto (fontes/osm_regiao.py); sem ele,
+    o do Overpass (fontes/osm.py). so_rede: grava só subestação, média tensão, chaves e trafos (sem a
+    baixa tensão nem a base de UCs, que só servem aos clientes fictícios)."""
     rng = np.random.default_rng(C.SEMENTE)
     end = gpd.read_file(C.INTERIM / "enderecos_gabarito.gpkg")
     end = end[end["COD_ESPECIE"] != "7"].reset_index(drop=True)  # obras não são clientes
@@ -172,7 +175,7 @@ def construir():
     tr["COD_TRAFO"] = [f"TR-{i:05d}" for i in rng.permutation(len(tr)) + 10000]
 
     # Grafo viário não-direcionado, em metros, só o maior componente
-    G = ox.project_graph(osm.carregar(), to_crs=C.CRS_METRICO)
+    G = ox.project_graph(osm.carregar() if G is None else G, to_crs=C.CRS_METRICO)
     G = ox.convert.to_undirected(G)
     G = G.subgraph(max(nx.connected_components(G), key=len)).copy()
     Gs = nx.Graph()
@@ -231,6 +234,12 @@ def construir():
     tr["ALIMENTADOR"] = tr["NO_VIA"].map(alim)
     tr["CHAVES_MONTANTE"] = tr["NO_VIA"].map(lambda n: ";".join(a_jusante.get(n, [])))
     uc = uc.merge(tr[["TRAFO_IDX", "COD_TRAFO", "ALIMENTADOR", "CHAVES_MONTANTE"]], on="TRAFO_IDX")
+
+    if so_rede:
+        for nome, gdf in {"subestacao": se, "rede_mt": rede_mt, "chaves": ch,
+                          "transformadores": tr.drop(columns=["TRAFO_IDX"])}.items():
+            gdf.to_crs(C.CRS_GEO).to_file(C.SINTETICO / f"{nome}.gpkg")
+        return se, rede_mt, ch, tr, uc
 
     # Ramal de baixa tensão: trafo -> UC (linha reta)
     pos_tr = tr.set_index("TRAFO_IDX").geometry

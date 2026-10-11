@@ -1,0 +1,299 @@
+"""Login, sessão e permissões da API.
+
+- Senha: Argon2id (argon2-cffi); a mensagem de erro é a mesma para e-mail desconhecido e senha
+  errada, e o tempo também (o hash é conferido mesmo sem usuário). 5 erros seguidos bloqueiam a
+  conta por 15 minutos; cada IP tem um limite de tentativas por janela de tempo.
+- Sessão: token aleatório num cookie HttpOnly, SameSite=Strict (Secure em produção); o banco
+  guarda só o hash. Acaba com 8 h sem uso ou 24 h no total, ao sair, ao trocar a senha (as
+  outras sessões) e ao bloquear o usuário.
+- Toda rota confere a sessão e a permissão no servidor (nucleo/acesso.py). Quem precisa trocar a
+  senha só consegue trocá-la, ver quem é e sair.
+- Requisições que mudam dados vindas de outra origem são recusadas (além do SameSite).
+"""
+
+import os
+import secrets
+import time
+from collections import defaultdict, deque
+from urllib.parse import urlsplit
+
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel
+
+from ..banco import acesso as banco
+from ..nucleo import acesso as regras
+
+COOKIE = "farol_sessao"
+PRODUCAO = os.environ.get("FAROL_PRODUCAO", "") == "1"   # no Render: cookie só por HTTPS
+HASHER = PasswordHasher()                                # Argon2id, parâmetros recomendados pela biblioteca
+HASH_FALSO = HASHER.hash(secrets.token_urlsafe(16))      # para e-mail desconhecido levar o mesmo tempo
+LIMITE_IP, JANELA_IP = 30, 600                           # tentativas de login por IP a cada 10 minutos
+_tentativas_ip: dict[str, deque] = defaultdict(deque)
+ERRO_LOGIN = "E-mail ou senha incorretos."
+
+rotas = APIRouter(prefix="/api")
+
+
+def senha_temporaria() -> str:
+    """16 caracteres sem os ambíguos (0/O, 1/l/I), em 4 grupos para ditar: 'k7Pm-3xQa-...'"""
+    alfabeto = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    s = "".join(secrets.choice(alfabeto) for _ in range(16))
+    return "-".join(s[i:i + 4] for i in range(0, 16, 4))
+
+
+def hash_senha(senha: str) -> str:
+    return HASHER.hash(senha)
+
+
+def _publico(u: dict) -> dict:
+    """O que a tela pode saber do usuário (nada de hash, tentativas ou bloqueio)."""
+    return {"id": u["id"], "nome": u["nome"], "email": u["email"], "perfil": u["perfil"],
+            "perfil_nome": regras.PERFIS[u["perfil"]], "empresa_id": u["empresa_id"], "empresa": u.get("empresa_nome"),
+            "empresa_sigla": u.get("empresa_sigla"), "trocar_senha": u["trocar_senha"], "acoes": regras.acoes(u["perfil"])}
+
+
+# ---------- Dependências: sessão e permissão ----------
+def _origem_confere(request: Request) -> None:
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return
+    # só o host: atrás do proxy de produção o servidor vê http, e o navegador manda a origem em https
+    origem = request.headers.get("origin")
+    if origem and urlsplit(origem).netloc != request.headers.get("host", ""):
+        raise HTTPException(403, "Origem não permitida.")
+
+
+def sessao_atual(request: Request) -> dict:
+    _origem_confere(request)
+    token = request.cookies.get(COOKIE)
+    u = banco.sessao(token, regras.SESSAO_INATIVA, regras.SESSAO_MAXIMA) if token else None
+    if not u or u["status"] != "ativo" or u.get("empresa_status") == "suspensa":
+        raise HTTPException(401, "Entre com o seu e-mail e senha.")
+    return u
+
+
+def usuario_atual(u: dict = Depends(sessao_atual)) -> dict:
+    """Sessão válida e senha já trocada (a temporária só serve para trocar)."""
+    if u["trocar_senha"]:
+        raise HTTPException(403, "Troque a senha temporária antes de continuar.")
+    return u
+
+
+def exigir(acao: str):
+    def conferir(u: dict = Depends(usuario_atual)) -> dict:
+        if not regras.pode(u["perfil"], acao):
+            raise HTTPException(403, "Seu perfil não tem acesso a isto.")
+        return u
+    return conferir
+
+
+# ---------- Login, saída, senha ----------
+class Entrada(BaseModel):
+    email: str
+    senha: str
+
+
+class TrocaSenha(BaseModel):
+    atual: str
+    nova: str
+
+
+def _limite_ip(ip: str) -> None:
+    agora, fila = time.monotonic(), _tentativas_ip[ip]
+    while fila and agora - fila[0] > JANELA_IP:
+        fila.popleft()
+    if len(fila) >= LIMITE_IP:
+        raise HTTPException(429, "Tentativas demais deste endereço. Espere alguns minutos.")
+    fila.append(agora)
+
+
+def _conferir_senha(hash_: str, senha: str) -> bool:
+    try:
+        return HASHER.verify(hash_, senha)
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
+
+
+@rotas.post("/entrar")
+def entrar(dados: Entrada, request: Request, response: Response) -> dict:
+    _origem_confere(request)
+    _limite_ip(request.client.host if request.client else "?")
+    email = regras.normalizar_email(dados.email)
+    u = banco.usuario_por_email(email) if len(email) <= 254 else None
+    senha_ok = _conferir_senha(u["senha_hash"] if u else HASH_FALSO, dados.senha[:regras.SENHA_MAX])
+    if not u:
+        raise HTTPException(401, ERRO_LOGIN)
+    if u["bloqueado_ate"] and u["bloqueado_ate"].timestamp() > time.time():
+        banco.registrar("login recusado (conta em bloqueio temporário)", "", u["id"], u["empresa_id"])
+        raise HTTPException(423, "Conta bloqueada por algumas tentativas erradas. Tente de novo em 15 minutos.")
+    if not senha_ok:
+        f = banco.registrar_falha(u["id"], regras.MAX_TENTATIVAS, regras.BLOQUEIO)
+        banco.registrar("senha errada" + (" (conta bloqueada por 15 min)" if f["bloqueado_ate"] else ""), "", u["id"], u["empresa_id"])
+        raise HTTPException(401, ERRO_LOGIN)
+    if u["status"] != "ativo" or u.get("empresa_status") == "suspensa":
+        banco.registrar("login recusado (usuário bloqueado ou empresa suspensa)", "", u["id"], u["empresa_id"])
+        raise HTTPException(403, "Acesso desativado. Fale com o administrador da sua empresa.")
+    banco.registrar_acesso(u["id"], hash_senha(dados.senha) if HASHER.check_needs_rehash(u["senha_hash"]) else None)
+    token = secrets.token_urlsafe(32)
+    banco.criar_sessao(u["id"], token)
+    response.set_cookie(COOKIE, token, httponly=True, secure=PRODUCAO, samesite="strict", path="/",
+                        max_age=int(regras.SESSAO_MAXIMA.total_seconds()))
+    banco.registrar("entrou", "", u["id"], u["empresa_id"])
+    return {"usuario": _publico(u)}
+
+
+@rotas.post("/sair")
+def sair(request: Request, response: Response) -> dict:
+    _origem_confere(request)
+    token = request.cookies.get(COOKIE)
+    if token:
+        u = banco.sessao(token, regras.SESSAO_INATIVA, regras.SESSAO_MAXIMA)
+        banco.encerrar_sessao(token)
+        if u:
+            banco.registrar("saiu", "", u["id"], u["empresa_id"])
+    response.delete_cookie(COOKIE, path="/", samesite="strict", secure=PRODUCAO, httponly=True)
+    return {"ok": True}
+
+
+@rotas.get("/eu")
+def eu(u: dict = Depends(sessao_atual)) -> dict:
+    return {"usuario": _publico(u)}
+
+
+@rotas.post("/senha")
+def trocar_senha(dados: TrocaSenha, request: Request, u: dict = Depends(sessao_atual)) -> dict:
+    completo = banco.usuario(u["id"])
+    if not _conferir_senha(completo["senha_hash"], dados.atual[:regras.SENHA_MAX]):
+        raise HTTPException(422, "A senha atual não confere.")
+    problema = regras.problema_senha(dados.nova, u["email"])
+    if problema:
+        raise HTTPException(422, problema)
+    if dados.nova == dados.atual:
+        raise HTTPException(422, "A senha nova tem de ser diferente da atual.")
+    banco.definir_senha(u["id"], hash_senha(dados.nova), trocar_senha=False)
+    banco.encerrar_sessoes(u["id"], exceto_token=request.cookies.get(COOKIE))
+    banco.registrar("trocou a senha", "", u["id"], u["empresa_id"])
+    return {"usuario": _publico({**u, "trocar_senha": False})}
+
+
+# ---------- Usuários da empresa (Admin da empresa) ----------
+class NovoUsuario(BaseModel):
+    nome: str
+    email: str
+    perfil: str
+
+
+class AlteraUsuario(BaseModel):
+    perfil: str
+    status: str
+
+
+def _linha_usuario(x: dict) -> dict:
+    return {"id": x["id"], "nome": x["nome"], "email": x["email"], "perfil": x["perfil"], "perfil_nome": regras.PERFIS[x["perfil"]],
+            "status": x["status"], "trocar_senha": x["trocar_senha"],
+            "ultimo_acesso": x["ultimo_acesso"].isoformat() if x["ultimo_acesso"] else None}
+
+
+def _nome(nome: str) -> str:
+    n = " ".join(str(nome).split())
+    if not 2 <= len(n) <= 120:
+        raise HTTPException(422, "Nome: de 2 a 120 caracteres.")
+    return n
+
+
+@rotas.get("/usuarios")
+def listar_usuarios(u: dict = Depends(exigir("gerenciar_usuarios"))) -> dict:
+    return {"usuarios": [_linha_usuario(x) for x in banco.usuarios(u["empresa_id"])],
+            "perfis": {p: regras.PERFIS[p] for p in regras.PERFIS_EMPRESA}}
+
+
+@rotas.post("/usuarios")
+def criar_usuario(dados: NovoUsuario, u: dict = Depends(exigir("gerenciar_usuarios"))) -> dict:
+    emp = banco.empresa(u["empresa_id"])
+    email, nome = regras.normalizar_email(dados.email), _nome(dados.nome)
+    if (p := regras.problema_email(email, emp["dominio"])):
+        raise HTTPException(422, p)
+    if dados.perfil not in regras.PERFIS_EMPRESA:
+        raise HTTPException(422, "Perfil inválido.")
+    if banco.usuario_por_email(email):
+        raise HTTPException(409, "Já existe um usuário com este e-mail.")
+    temporaria = senha_temporaria()
+    novo = banco.criar_usuario(u["empresa_id"], email, nome, dados.perfil, hash_senha(temporaria))
+    banco.registrar("cadastrou usuário", f"{nome} ({regras.PERFIS[dados.perfil]})", u["id"], u["empresa_id"])
+    # a senha temporária aparece só nesta resposta, para o admin passar ao usuário
+    return {"usuario": _linha_usuario(banco.usuario(novo["id"])), "senha_temporaria": temporaria}
+
+
+def _da_empresa(id_: int, u: dict) -> dict:
+    alvo = banco.usuario(id_)
+    if not alvo or alvo["empresa_id"] != u["empresa_id"]:
+        raise HTTPException(404, "Usuário não encontrado nesta empresa.")
+    return alvo
+
+
+@rotas.patch("/usuarios/{id_}")
+def alterar_usuario(id_: int, dados: AlteraUsuario, u: dict = Depends(exigir("gerenciar_usuarios"))) -> dict:
+    alvo = _da_empresa(id_, u)
+    if dados.perfil not in regras.PERFIS_EMPRESA or dados.status not in ("ativo", "bloqueado"):
+        raise HTTPException(422, "Perfil ou situação inválidos.")
+    antes = alvo["perfil"] == "admin_empresa" and alvo["status"] == "ativo"
+    depois = dados.perfil == "admin_empresa" and dados.status == "ativo"
+    if regras.deixa_sem_admin(banco.admins_ativos(u["empresa_id"]), antes, depois):
+        raise HTTPException(409, "Este é o último admin ativo da empresa: cadastre outro admin antes de mudar o perfil ou bloquear.")
+    banco.alterar_usuario(id_, dados.perfil, dados.status)
+    banco.registrar("alterou usuário", f"{alvo['nome']}: {regras.PERFIS[dados.perfil]}, {dados.status}", u["id"], u["empresa_id"])
+    return {"usuario": _linha_usuario(banco.usuario(id_))}
+
+
+@rotas.post("/usuarios/{id_}/senha-temporaria")
+def nova_temporaria(id_: int, u: dict = Depends(exigir("gerenciar_usuarios"))) -> dict:
+    alvo = _da_empresa(id_, u)
+    temporaria = senha_temporaria()
+    banco.definir_senha(id_, hash_senha(temporaria), trocar_senha=True)
+    banco.encerrar_sessoes(id_)
+    banco.registrar("gerou senha temporária", alvo["nome"], u["id"], u["empresa_id"])
+    return {"senha_temporaria": temporaria}
+
+
+# ---------- Empresas (Admin do Farol) e registro ----------
+class NovaEmpresa(BaseModel):
+    nome: str
+    sigla: str
+    dominio: str
+    admin_nome: str
+    admin_email: str
+
+
+@rotas.get("/empresas")
+def listar_empresas(u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
+    return {"empresas": [{"id": e["id"], "nome": e["nome"], "sigla": e["sigla"], "dominio": e["dominio"], "status": e["status"],
+                          "usuarios": e["usuarios"], "avisos": e["avisos"]} for e in banco.empresas()]}
+
+
+@rotas.post("/empresas")
+def criar_empresa(dados: NovaEmpresa, u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
+    nome, sigla, dominio = _nome(dados.nome), dados.sigla.strip().upper(), dados.dominio.strip().lower()
+    if not (2 <= len(sigla) <= 10 and sigla.isalnum()):
+        raise HTTPException(422, "Sigla: de 2 a 10 letras ou números.")
+    if regras.problema_email(f"x@{dominio}"):
+        raise HTTPException(422, "Domínio de e-mail inválido.")
+    email = regras.normalizar_email(dados.admin_email)
+    if (p := regras.problema_email(email, dominio)):
+        raise HTTPException(422, p)
+    if banco.empresa_por_sigla(sigla):
+        raise HTTPException(409, "Já existe uma empresa com esta sigla.")
+    if banco.usuario_por_email(email):
+        raise HTTPException(409, "Já existe um usuário com este e-mail.")
+    e = banco.criar_empresa(nome, sigla, dominio)
+    temporaria = senha_temporaria()
+    banco.criar_usuario(e["id"], email, _nome(dados.admin_nome), "admin_empresa", hash_senha(temporaria))
+    banco.registrar("cadastrou empresa", f"{nome} ({sigla}) e o primeiro admin", u["id"], e["id"])
+    return {"empresa": {"id": e["id"], "nome": nome, "sigla": sigla}, "senha_temporaria": temporaria}
+
+
+@rotas.get("/registro")
+def registro(u: dict = Depends(exigir("ver_registro"))) -> dict:
+    linhas = banco.registros(None if u["perfil"] == "admin_farol" else u["empresa_id"])
+    return {"registro": [{"quando": r["quando"].isoformat(), "acao": r["acao"], "detalhe": r["detalhe"],
+                          "usuario": r["usuario"], "empresa": r["empresa"]} for r in linhas]}

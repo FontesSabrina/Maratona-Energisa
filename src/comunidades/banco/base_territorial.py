@@ -145,11 +145,15 @@ def concessao_geojson() -> dict:
 
 @functools.lru_cache(maxsize=80)
 def comunidades_geojson(codigo: str) -> dict | None:
-    """Território de cada comunidade do município (nome, distrito, enderecos); None se o município não existe."""
+    """Território de cada comunidade do município (nome, distrito, enderecos e rotulo, [lat, lon] de um ponto
+    sempre dentro dela, para o nome no mapa); None se o município não existe."""
     with conectar() as c, c.cursor() as cur:
         cur.execute("SELECT 1 FROM municipio WHERE codigo_ibge = %s", (codigo,))
         if not cur.fetchone():
             return None
-        cur.execute("SELECT nome, distrito, enderecos, ST_AsGeoJSON(ST_SimplifyPreserveTopology(territorio, %s), 5)"
-                    " FROM comunidade WHERE codigo_ibge = %s ORDER BY nome", (SIMPLIFICAR_COMUNIDADE, codigo))
-        return _colecao(cur.fetchall(), ["nome", "distrito", "enderecos"])
+        cur.execute("SELECT nome, distrito, enderecos,"
+                    " ARRAY[ROUND(ST_Y(p)::numeric, 5)::float8, ROUND(ST_X(p)::numeric, 5)::float8],"
+                    " ST_AsGeoJSON(ST_SimplifyPreserveTopology(territorio, %s), 5)"
+                    " FROM comunidade, LATERAL ST_PointOnSurface(territorio) AS p"
+                    " WHERE codigo_ibge = %s ORDER BY nome", (SIMPLIFICAR_COMUNIDADE, codigo))
+        return _colecao(cur.fetchall(), ["nome", "distrito", "enderecos", "rotulo"])

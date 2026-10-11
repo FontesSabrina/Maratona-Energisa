@@ -73,7 +73,12 @@ def _local_bruto(ucs: pd.DataFrame) -> pd.Series:
 
 def locais_antigos(afetadas: pd.DataFrame) -> list[str]:
     """Como o sistema cita hoje: o imóvel (rural) ou a rua (urbano) de cada UC, sem repetir."""
-    return [l.title() for l in pd.unique(_local_bruto(afetadas).dropna())]
+    return locais_de(_local_bruto(afetadas))
+
+
+def locais_de(locais: pd.Series) -> list[str]:
+    """O local de cada UC (imóvel ou rua, como no cadastro; None = sem local) -> os locais citados, sem repetir, na ordem."""
+    return [l.title() for l in pd.unique(locais.dropna())]
 
 
 # Começo fixo do aviso de hoje (antes da lista de locais); o mapa recebe o mesmo modelo
@@ -83,8 +88,13 @@ CABECALHO_ANTIGO = ("Atenção! A {assinatura} informa desligamento programado n
 
 def aviso_antigo(afetadas: pd.DataFrame, data: str, horario: str, regras: RegrasAviso) -> str:
     """O aviso como é hoje (em português): imóvel por imóvel (rural) e rua por rua (urbano)."""
+    return aviso_antigo_de_locais(_local_bruto(afetadas), data, horario, regras)
+
+
+def aviso_antigo_de_locais(locais: pd.Series, data: str, horario: str, regras: RegrasAviso) -> str:
+    """O aviso de hoje a partir do local de cada UC (a coluna local da planilha, ou o cadastro)."""
     return (CABECALHO_ANTIGO.format(assinatura=regras.assinatura_aviso_atual, data=data, horario=horario)
-            + f"{idiomas.lista(locais_antigos(afetadas), 'pt-BR')}.")
+            + f"{idiomas.lista(locais_de(locais), 'pt-BR')}.")
 
 
 def codigos_locais(ucs: pd.DataFrame) -> tuple[list[int], list[int]]:
