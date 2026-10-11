@@ -46,7 +46,12 @@ def _sem_sufixo(nome: str) -> str:
 
 
 def resumir(afetadas: pd.DataFrame, todas: pd.DataFrame, regras: RegrasAviso) -> pd.DataFrame:
-    total = todas["COMUNIDADE_PREVISTA"].value_counts()
+    return resumir_por_total(afetadas, todas["COMUNIDADE_PREVISTA"].value_counts(), regras)
+
+
+def resumir_por_total(afetadas: pd.DataFrame, total: pd.Series, regras: RegrasAviso) -> pd.DataFrame:
+    """Como resumir, com o tamanho de cada comunidade já contado (total: comunidade -> unidades).
+    Na planilha de UCs afetadas o total vem da base territorial, e não das próprias UCs."""
     c = afetadas.groupby("COMUNIDADE_PREVISTA").agg(
         UC_AFETADAS=("UC", "count"), CONFIANCA=("CONFIANCA", "mean"), DISTRITO=("DISTRITO", lambda s: s.mode().iat[0])
     )

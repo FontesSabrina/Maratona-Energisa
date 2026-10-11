@@ -27,3 +27,8 @@ saida/*
 saida/muriae/*
 !saida/muriae/mapa_comunidades.html
 !saida/muriae/resumo_mapa.json
+
+# Segredos locais (senha do banco etc.): nunca no git
+.env
+.env.*
+!.env.exemplo

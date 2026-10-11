@@ -20,7 +20,8 @@ const espera = ms => new Promise(r => setTimeout(r, ms));
 // antesDeNavegar(pagina): para preparar a página (emulação, scripts de teste) antes de carregar o arquivo
 export async function abrir(html, { largura = 1440, altura = 900, antesDeNavegar = null } = {}) {
   if (!NAVEGADOR) throw new Error('Edge ou Chrome não encontrado. Defina FAROL_NAVEGADOR com o caminho do msedge.exe ou chrome.exe.');
-  if (!existsSync(html)) throw new Error(`Mapa não encontrado: ${html}. Rode o pipeline antes (py -m uv run comunidades --so-algoritmo).`);
+  const url = /^https?:\/\//.test(html) ? html : null;  // a tela do app vem do servidor local da API
+  if (!url && !existsSync(html)) throw new Error(`Mapa não encontrado: ${html}. Rode o pipeline antes (py -m uv run comunidades --so-algoritmo).`);
   const porta = 9300 + Math.floor(Math.random() * 500);
   const perfil = mkdtempSync(join(tmpdir(), 'farol-navegador-'));  // perfil descartável, sem tocar no do usuário
   const proc = spawn(NAVEGADOR, ['--headless=new', `--remote-debugging-port=${porta}`, `--user-data-dir=${perfil}`,
@@ -44,7 +45,7 @@ export async function abrir(html, { largura = 1440, altura = 900, antesDeNavegar
     "window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI));" });
   if (antesDeNavegar) await antesDeNavegar(pagina);
   const carregou = pagina.uma('Page.loadEventFired');
-  await pagina.send('Page.navigate', { url: pathToFileURL(html).href });
+  await pagina.send('Page.navigate', { url: url || pathToFileURL(html).href });
   await carregou;
   // O mapa termina de montar depois do "load" (por etapas, com a tela de abertura): espera o estado "pronto".
   // Páginas sem esse estado (a de entrada) seguem direto.

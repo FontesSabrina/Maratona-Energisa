@@ -24,7 +24,9 @@ def _sem_acento(s: str) -> str:
 
 
 def _textos() -> list[str]:
-    textos = list(gpd.read_file(C.INTERIM / "vias.gpkg")["name"].dropna().astype(str))
+    # sem as vias do OSM (base territorial da concessão, que não precisa delas), só o IBGE
+    vias = C.INTERIM / "vias.gpkg"
+    textos = list(gpd.read_file(vias)["name"].dropna().astype(str)) if vias.exists() else []
     textos += list(gpd.read_file(C.INTERIM / "localidades_oficiais.gpkg")["NM_LOCALIDADE"].astype(str))
     textos += list(gpd.read_file(C.INTERIM / "distritos.gpkg")["NM_DIST"].astype(str))
     return [t for t in textos if t and t != "nan"]

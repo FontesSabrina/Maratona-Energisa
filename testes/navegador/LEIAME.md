@@ -28,7 +28,8 @@ Os testes esperam o mapa ficar pronto (a tela de abertura some quando ele termin
 - **`teste_abertura.mjs`** testa a tela de abertura, a página de entrada e o botão "Trocar área":
   - **Abertura do mapa:** com a CPU desacelerada, registra quadro a quadro o que a tela mostrava. A abertura tem de ser a primeira coisa desenhada, mostrar "Carregando o território…", "Montando a rede…" e "Pronto", nessa ordem, e sumir sozinha quando o mapa fica pronto.
   - **Movimento reduzido:** sem animação do feixe, e a abertura some na hora.
-  - **Entrada:** um cartão por município com links relativos, nenhum script, CSP com `script-src 'none'`, a nota de dados fictícios, a animação só com CSS em cerca de 1,2 s e nenhuma rolagem horizontal.
+  - **Entrada:** um cartão por município com links relativos, só scripts embutidos (liberados pelo hash na CSP), a nota de dados fictícios, a animação só com CSS em cerca de 1,2 s e nenhuma rolagem horizontal.
+  - **Mapa do Brasil na entrada:** as 27 UFs, a concessão e os 66 municípios; Leopoldina e Muriaé marcados como prontos; o ponto de Muriaé aproxima e abre o popup com o link do mapa; um município não processado mostra a situação, sem link; nenhuma exceção, nenhuma violação da CSP e nenhuma requisição além dos fundos da Esri.
   - **Navegação:** "Abrir" leva ao mapa certo, e "Trocar área" volta à entrada, nas duas cidades.
   - Grava as capturas em `saida/capturas_passo13/`.
 - **`varredura_44px.mjs`** procura botões, links e campos visíveis com menos de 44 × 44 px no mapa (inicial, camadas, chave, abas, popup, busca, ponto da obra, área e desenho) e na página de entrada, no computador e no celular.

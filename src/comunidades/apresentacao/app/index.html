@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farol · Aviso de desligamento</title>
+<link rel="icon" type="image/svg+xml" href="/assets/marca/farol-pequeno.svg">
+<!-- Leaflet 1.9.4 e IBM Plex vêm do próprio projeto (vendor/): nenhuma CDN. A CSP vem do servidor. -->
+<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/assets/app/app.css">
+<script src="/assets/vendor/leaflet/leaflet.js" defer></script>
+<script src="/assets/app/app.js" defer></script>
+</head>
+<body>
+<header class="topo">
+  <div class="marca">
+    <img src="/assets/marca/farol.svg" alt="" width="40" height="40">
+    <div><p class="nome">Farol</p><p class="slogan">Cada comunidade avisada pelo nome</p></div>
+  </div>
+  <p class="faixa" id="faixa">Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
+</header>
+
+<main class="layout">
+  <section class="painel" aria-labelledby="titulo">
+    <h1 id="titulo">Aviso de desligamento programado</h1>
+
+    <form id="form" class="cartao" novalidate>
+      <fieldset>
+        <legend><span class="num">1</span> Planilha das UCs afetadas</legend>
+        <label class="arquivo" id="zona">
+          <input type="file" id="arquivo" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+          <span class="arquivo-icone" aria-hidden="true">⇪</span>
+          <span id="arquivoNome">Escolha ou arraste o arquivo (.csv ou .xlsx, até 10 MB)</span>
+        </label>
+        <p class="ajuda">Colunas: <code>uc</code>, <code>latitude</code>, <code>longitude</code> e, se tiver, <code>equipamento_vital</code> e <code>classe</code>.
+          <a href="/api/modelo-planilha" download>Baixar o modelo</a></p>
+        <p class="ajuda">A planilha é lida no servidor e descartada: nenhuma UC ou coordenada é guardada.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend><span class="num">2</span> Data e horário do desligamento</legend>
+        <div class="campos">
+          <label>Data <input type="date" id="data" required></label>
+          <label>Início <input type="time" id="inicio" value="08:00" step="900" required></label>
+          <label>Fim <input type="time" id="fim" value="14:00" step="900" required></label>
+        </div>
+        <label class="idioma">Idioma do aviso <select id="idioma"></select></label>
+      </fieldset>
+
+      <button type="submit" class="prim" id="gerar">Gerar aviso</button>
+      <p id="estado" class="estado" role="status" aria-live="polite"></p>
+    </form>
+
+    <section id="resultado" class="resultado" hidden aria-labelledby="tituloResultado">
+      <h2 id="tituloResultado" class="visualmente-oculto">Resultado</h2>
+      <div id="resumo" class="cartao resumo"></div>
+      <div id="municipios"></div>
+      <details id="problemas" class="cartao problemas" hidden>
+        <summary id="problemasTitulo"></summary>
+        <div id="problemasCorpo"></div>
+      </details>
+    </section>
+  </section>
+
+  <section class="mapa-area" aria-label="Mapa">
+    <div id="mapa" role="region" aria-label="Mapa dos municípios da concessão e das comunidades afetadas"></div>
+    <ul class="legenda" aria-label="Legenda do mapa">
+      <li><span class="amostra inteira"></span>Comunidade inteira</li>
+      <li><span class="amostra parte"></span>Parte da comunidade</li>
+      <li><span class="amostra vizinha"></span>Localidade vizinha</li>
+      <li><span class="amostra municipio"></span>Município afetado</li>
+    </ul>
+  </section>
+</main>
+
+<!-- Roteiro para a rádio: só aparece na impressão (Salvar como PDF), um município por vez -->
+<article id="roteiro" aria-hidden="true"></article>
+</body>
+</html>

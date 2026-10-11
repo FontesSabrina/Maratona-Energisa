@@ -21,7 +21,7 @@ async function captura(p, nome, clip) {
   writeFileSync(join(CAP, nome), Buffer.from(r.data, 'base64'));
 }
 async function clicar(p, sel) {
-  const [x, y] = await p.avaliar(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
+  const [x, y] = await p.avaliar(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center' }); const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; })()`);
   for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased'])
     await p.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
 }
@@ -88,30 +88,64 @@ for (const [cidade, arq] of [['Leopoldina', 'mapa_comunidades.html'], ['Muriaé'
   await p.fechar();
 }
 
-// ---------- 3. Página de entrada: cartões, links, sem script, abertura só com CSS ----------
+// ---------- 3. Página de entrada: cartões, links, mapa do Brasil, abertura só com CSS ----------
+// requisições da página: só o próprio arquivo, dados embutidos e os fundos de mapa da Esri
+const registrarRede = lista => async pg => {
+  await pg.send('Network.enable');
+  pg.on('Network.requestWillBeSent', e => lista.push(e.request.url));
+};
+const externa = u => !/^(file:|data:|https:\/\/server\.arcgisonline\.com\/)/.test(u);
+const textoPopup = `(() => { const e = document.querySelector('.leaflet-popup'), a = e?.querySelector('a.abrir');
+  return { texto: e?.textContent.replace(/\\s+/g, ' ').trim(), link: a ? a.getAttribute('href') : null, zoom: mapa.getZoom() }; })()`;
 for (const [largura, altura, nome] of [[1440, 900, 'computador'], [390, 844, 'celular']]) {
-  const p = await abrir(join(SAIDA, 'index.html'), { largura, altura });
+  const rede = [];
+  const p = await abrir(join(SAIDA, 'index.html'), { largura, altura, antesDeNavegar: registrarRede(rede) });
   const info = await p.avaliar(`({
     csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]').content,
-    scripts: document.scripts.length, pergunta: document.querySelector('h1').textContent,
+    scripts: document.scripts.length, externos: [...document.scripts].filter(s => s.src).length,
+    pergunta: document.querySelector('h1').textContent,
     cartoes: [...document.querySelectorAll('.cartao')].map(c => [c.querySelector('h2').textContent, c.querySelector('.uf').textContent,
       [...c.querySelectorAll('dd')].map(d => d.textContent).join(' / '), c.querySelector('a.abrir').getAttribute('href')]),
     nota: document.querySelector('footer').textContent.replace(/\\s+/g, ' ').trim(),
-    fim: Math.max(...document.getAnimations().map(a => a.effect.getComputedTiming().endTime)),
+    fim: Math.max(...document.getAnimations().filter(a => a instanceof CSSAnimation).map(a => a.effect.getComputedTiming().endTime)),
+    mapa: { visivel: getComputedStyle(document.querySelector('.painel-mapa')).display !== 'none', ufs: D.ufs.features.length,
+      municipios: D.municipios.features.length, contagem: document.getElementById('n-municipios').textContent + ' / ' + document.getElementById('n-prontos').textContent,
+      prontos: D.municipios.features.filter(f => f.properties.MAPA).map(f => f.properties.NM_MUN + '|' + f.properties.MAPA).join(', ') },
     rolagem: document.documentElement.scrollWidth > innerWidth })`);
   if (nome === 'computador') {
     conferir('entrada: um cartão por município processado, com links relativos', info.cartoes.length === 2 && info.cartoes.every(c => !/^(\/|[a-z]+:)/i.test(c[3])), JSON.stringify(info.cartoes));
     conferir('entrada: pergunta "Qual área você quer abrir?"', info.pergunta === 'Qual área você quer abrir?');
-    conferir('entrada: nenhum script e CSP com script-src \'none\'', info.scripts === 0 && info.csp.includes("script-src 'none'"), info.csp);
+    conferir('entrada: só scripts embutidos, liberados pelo hash na CSP, e nenhuma conexão', info.scripts === 2 && !info.externos
+      && /script-src 'sha256-[^']+' 'sha256-[^']+';/.test(info.csp) && info.csp.includes("connect-src 'none'"), info.csp.replace(/'sha256-[^']+'/g, "'sha256-…'"));
     conferir('entrada: nota de dados fictícios e de como gerar outro município', /fictícios/.test(info.nota) && info.nota.includes('Para outro município, gere o Farol pelo comando com --coordenada ou --distribuidora.'), info.nota);
     conferir('entrada: abertura só com CSS, terminando em cerca de 1,2 s', info.fim >= 1000 && info.fim <= 1500, `${Math.round(info.fim)} ms`);
+    conferir('entrada: mapa do Brasil com as 27 UFs, a concessão e os 66 municípios', info.mapa.visivel && info.mapa.ufs === 27 && info.mapa.municipios === 66 && info.mapa.contagem === '66 / 2', JSON.stringify(info.mapa));
+    conferir('entrada: Leopoldina e Muriaé marcados como prontos, com o link do mapa', info.mapa.prontos === 'Leopoldina|mapa_comunidades.html, Muriaé|muriae/mapa_comunidades.html', info.mapa.prontos);
     // capturas: congela a animação a 0,3 s (logo grande no centro) e no fim
     await p.avaliar('(document.getAnimations().forEach(a => { a.pause(); a.currentTime = 300; }), 0)');
     await captura(p, '2_entrada_abertura.png');
-    await p.avaliar('(document.getAnimations().forEach(a => a.finish()), 0)');
+    await p.avaliar('(document.getAnimations().forEach(a => a.finish()), 0)'); await espera(1500);
     await captura(p, '3_escolha_da_cidade.png');
+    // ponto de Muriaé na escala do país: aproxima e abre o popup com as contagens e o link do mapa
+    await p.avaliar(`(() => { const c = camadas.municipios.getLayers().find(c => c.feature.properties.NM_MUN === 'Muriaé');
+      camadas.pontos.getLayers().find(m => c.getBounds().contains(m.getLatLng())).fire('click'); return 0; })()`);
+    await espera(1500);
+    const pop = await p.avaliar(textoPopup);
+    conferir('entrada: o ponto de Muriaé aproxima e abre o popup com as contagens e o link do mapa',
+      pop.link === 'muriae/mapa_comunidades.html' && /Muriaé/.test(pop.texto) && /comunidades/.test(pop.texto) && pop.zoom >= 7, JSON.stringify(pop));
+    await captura(p, '3c_entrada_popup_muriae.png');
+    // município ainda não processado: só o nome e a situação, sem link
+    await p.avaliar(`(() => { const c = camadas.municipios.getLayers().find(c => c.feature.properties.NM_MUN === 'Cataguases'); c.openPopup(c.getCenter()); return 0; })()`);
+    await espera(800);
+    const pend = await p.avaliar(textoPopup);
+    conferir('entrada: município não processado mostra a situação, sem link', /Cataguases/.test(pend.texto) && /Ainda não processado/.test(pend.texto) && !pend.link, JSON.stringify(pend));
+    await p.avaliar(`(irPara('concessao'), mapa.closePopup(), 0)`); await espera(1500);
+    await captura(p, '3d_entrada_concessao.png');
+    const csp = await p.avaliar('window.__csp');
+    conferir('entrada: nenhuma exceção nem violação da CSP', !p.excecoes.length && !csp.length, JSON.stringify([p.excecoes, csp]));
+    conferir('entrada: nenhuma requisição além dos fundos de mapa da Esri', rede.some(u => u.includes('arcgisonline')) && !rede.some(externa), JSON.stringify(rede.filter(externa)));
   } else {
-    await p.avaliar('(document.getAnimations().forEach(a => a.finish()), 0)');
+    await p.avaliar('(document.getAnimations().forEach(a => a.finish()), 0)'); await espera(1500);
     await captura(p, '3b_escolha_da_cidade_celular.png');
   }
   conferir(`entrada (${nome}): sem rolagem horizontal`, !info.rolagem);

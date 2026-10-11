@@ -157,6 +157,11 @@ def gabarito(g: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         valido = rot.map(lambda n: _rotulo_valido(n, zona == "Rural"))
         cont = rot[valido].value_counts()
         valido &= rot.map(cont).fillna(0) >= MIN_ENDERECOS
+        if not valido.any():
+            # cidade pequena: a zona inteira vem genérica (o urbano todo como "CENTRO"); a comunidade é a sede
+            g.iloc[idx, g.columns.get_loc("COMUNIDADE")] = normalizar(C.NOME_MUNICIPIO)
+            g.iloc[idx, g.columns.get_loc("REATRIBUIDO")] = True
+            continue
         knn = KNeighborsClassifier(n_neighbors=K_VIZINHOS).fit(xy[idx][valido.values], rot[valido].values)
         final = rot.where(valido, None).to_numpy(dtype=object)
         if (~valido).any():

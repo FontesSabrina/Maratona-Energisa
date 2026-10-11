@@ -196,7 +196,7 @@ def construir(dist=None):
     ARQ_SAIDA.write_text(html, encoding="utf-8", newline="\n")
     # Cartão do município na página de entrada: nome, UF e contagens (nada de dados de clientes)
     ARQ_RESUMO.write_text(json.dumps({
-        "municipio": dist.municipio, "uf": dist.uf, "mapa": ARQ_SAIDA.relative_to(SAIDA_RAIZ).as_posix(),
+        "municipio": dist.municipio, "uf": dist.uf, "codigo_ibge": C.COD_MUNICIPIO, "mapa": ARQ_SAIDA.relative_to(SAIDA_RAIZ).as_posix(),
         "clientes": metricas["nUC"], "comunidades": metricas["nComunidades"], "chaves": metricas["nChaves"],
     }, ensure_ascii=False, indent=1), encoding="utf-8")
     return ARQ_SAIDA

@@ -64,6 +64,7 @@ Todos os caminhos são relativos a `src/comunidades/`.
 | Métricas de avaliação e teste de robustez | `validacao/avaliacao.py`, `validacao/robustez.py` |
 | Visual e comportamento do mapa, aviso editável e roteiro em PDF | `apresentacao/mapa_template.html` |
 | Dados embutidos no mapa e política de segurança (CSP) | `apresentacao/mapa.py` |
+| Página de entrada com o mapa do Brasil e a área de concessão | `apresentacao/entrada.py` e `entrada_template.html`; contorno em `distribuidoras/concessao/EMG.kml` (`fontes/concessao.py`) |
 
 ## Camadas
 
@@ -74,6 +75,8 @@ Todos os caminhos são relativos a `src/comunidades/`.
 | Endereços (30.955, sendo 5.553 rurais) | Real | IBGE, CNEFE 2022 |
 | **Gabarito**: comunidade de cada endereço | Real | CNEFE `DSC_LOCALIDADE`, limpo (65 comunidades rurais e 47 bairros) |
 | Vias | Real | OpenStreetMap |
+| Área de concessão EMG (página de entrada) | Real | KML da Energisa |
+| UFs e municípios da concessão (página de entrada) | Real | IBGE, API de malhas |
 | Subestação, 9 alimentadores, 835 chaves, 2.160 transformadores | Fictícia | Gerada pelas vias reais (`rede.py`) |
 | 29.865 UCs com titular, imóvel e localidade digitada com ruído | Fictícia | `clientes.py` |
 

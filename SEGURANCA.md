@@ -11,8 +11,21 @@ Este documento explica, em linguagem simples, como o protótipo trata segurança
 | Vias | OpenStreetMap (público) | Não |
 | Rede elétrica (subestação, alimentadores, chaves, transformadores) | **Fictícia**, gerada pelo projeto | Não |
 | Clientes (titular, número da UC, campo de localidade) | **Fictícios**, gerados pelo projeto | Inventados |
+| Planilha de UCs afetadas (UC e coordenada), entrada do app em construção | Distribuidora (hoje, planilhas de teste geradas da rede fictícia) | **Sim**, quando for real |
 
-Nenhum dado de cliente real da distribuidora foi usado.
+Nenhum dado de cliente real da distribuidora foi usado até agora.
+
+## O que muda com a planilha, a API e o banco (em construção)
+
+Desde 11/10/2026 o Farol está passando de um HTML de demonstração para um app com API em Python e banco Postgres. A entrada passa a ser a planilha que a distribuidora envia, com as UCs afetadas e suas coordenadas. Uma UC com coordenada identifica uma casa, então a planilha é tratada como dado pessoal desde já, mesmo nos testes:
+
+- **A planilha não é guardada.** A API lê o arquivo em memória, calcula os municípios, as comunidades e o aviso e descarta o arquivo. O banco guarda só o resultado agregado: municípios, comunidades, contagens e o texto do aviso. Nunca número de UC nem coordenada.
+- **A tela não mostra UCs.** O relatório de validação aponta problemas pelo número da linha da planilha (sem coordenada, fora da área de concessão, UC repetida), sem repetir a UC.
+- **Login antes de dado real.** Nenhuma planilha real entra antes de existirem login e perfis de acesso de verdade. A área administrativa atual continua sendo só um protótipo.
+- **Conexões.** O app só fala com a própria API (CSP `connect-src 'self'`) e com os fundos de mapa da Esri. O mapa de demonstração continua sem nenhuma conexão.
+- **Tela sem nada embutido.** A tela (`apresentacao/app/`) carrega o script, o estilo, o Leaflet e as fontes do próprio servidor. A CSP vem no cabeçalho de toda resposta da API: `script-src 'self'` e `style-src 'self'`, sem `unsafe-inline`, mais `frame-ancestors 'none'`. Só a documentação interativa (`/api/docs`, para desenvolvimento) fica fora, porque carrega o Swagger de fora. Todo texto vindo da API ou da planilha entra na tela como texto, nunca como HTML. O teste `testes/navegador/teste_app.mjs` confere que nenhuma UC nem coordenada da planilha aparece na página ou no PDF.
+- **O mapa não mostra UCs.** A resposta da API não traz coordenadas. O mapa desenha só os contornos públicos dos municípios e os territórios das comunidades, que vêm do IBGE.
+- **Segredos fora do código.** A senha do banco fica só na variável de ambiente `DATABASE_URL`, num arquivo `.env` que o git ignora. Antes de publicar: usuário próprio do app no banco (não o superusuário `postgres`) e senha forte.
 
 ## O que o protótipo protege hoje
 
@@ -32,6 +45,8 @@ Nenhum dado de cliente real da distribuidora foi usado.
 **Biblioteca e fontes embutidas e conferidas.** A biblioteca de mapas (Leaflet 1.9.4) e as fontes IBM Plex Sans e IBM Plex Mono (licença SIL OFL 1.1) vêm embutidas no HTML, e não de uma CDN ou de um servidor de fontes. Foram copiadas dos pacotes oficiais, e o código de integridade de cada pacote foi conferido com o publicado pelo registro npm (ver `ORIGEM.md` em `src/comunidades/apresentacao/vendor/leaflet/` e em `vendor/ibm-plex/`). O git guarda esses arquivos sem converter o fim de linha (`.gitattributes`), para o SHA-256 de cada um continuar igual ao do pacote. Sem internet, o mapa funciona normalmente, só sem a imagem de fundo.
 
 **Contorno importado tratado como dado.** No desligamento por área, o arquivo (.kml, .geojson ou .json, até 5 MB e 20.000 vértices) é lido só no navegador, sem ir para nenhum servidor. Dele saem apenas as coordenadas dos polígonos: nomes, descrições e propriedades são descartados, e nenhum texto do arquivo entra na página como HTML (um KML pode trazer HTML e scripts nas descrições). O nome do arquivo aparece só como texto. A CSP continua a mesma, e o botão "Baixar área (GeoJSON)" funciona sem nenhuma exceção nova. Para a área, o HTML leva por UC só dois códigos a mais (distrito e atividade), nunca nome, número de UC ou endereço.
+
+**Contorno da concessão tratado como dado.** A página de entrada desenha a área de concessão a partir de `distribuidoras/concessao/EMG.kml`. O Python (`fontes/concessao.py`) lê do KML só as coordenadas dos polígonos e descarta nomes, descrições e propriedades. As malhas das UFs e dos municípios vêm da API pública do IBGE na geração da página, e nunca do navegador. No HTML vão só a geometria simplificada, o nome e o código IBGE dos municípios e, dos já processados, o link do mapa e as contagens do resumo. A entrada tem a mesma CSP do mapa: scripts só pelo hash, `connect-src 'none'` e só os fundos da Esri de fora. Todo nome vindo dos dados entra na tela como texto, nunca como HTML.
 
 **Tamanho do aviso de hoje no modo área.** Para comparar o aviso de hoje com o do Farol numa área, o HTML leva por UC só um código numérico do local que o aviso de hoje citaria (o imóvel, senão a rua) e, para cada código, o número de palavras do nome desse local. Os nomes não vão para o HTML, e os códigos seguem a ordem em que os locais aparecem no cadastro, não a alfabética, então nem o código nem a contagem de palavras permitem reconstruir um imóvel ou uma rua. Risco que fica: o código mostra quais UCs estão no mesmo imóvel ou na mesma rua (um agrupamento sem nome), parecido com o que o transformador de cada UC já mostra; como a rede e os clientes são fictícios, aceitamos esse risco no protótipo.
 
