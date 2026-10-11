@@ -10,7 +10,8 @@ import psycopg
 
 from .. import config as C
 
-ARQ_ENV = C.RAIZ / ".env"
+# FAROL_ENV escolhe outro arquivo (ex.: .env.producao, para a semente no banco de produção)
+ARQ_ENV = C.RAIZ / (os.environ.get("FAROL_ENV") or ".env")
 
 
 def url() -> str:

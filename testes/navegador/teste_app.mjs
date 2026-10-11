@@ -206,6 +206,12 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const ok = await Promise.race([baixou, espera(60000).then(() => false)]);
   const tamanho = ok && nomeArq ? readFileSync(join(CAP, nomeArq)).length : 0;
   conferir('Baixar áudio: o MP3 é salvo no disco', ok && /^farol-aviso-Leopoldina-20-11\.mp3$/.test(nomeArq) && tamanho > 100_000, `${nomeArq} ${Math.round(tamanho / 1024)} KB`);
+  // servidor sem a voz (FAROL_AUDIO=0, produção no plano gratuito): sem Ouvir nem Baixar áudio, com o aviso na tela
+  const semVoz = await p.avaliar(`(() => { estado.config.audio = false; desenharResultado(); desenharComparativo();
+    const r = { botoes: document.querySelectorAll('[data-acao=ouvir], [data-acao=audio], [data-comp]').length,
+      aviso: document.getElementById('municipios').textContent.includes('desligado neste servidor') };
+    estado.config.audio = true; desenharResultado(); desenharComparativo(); return r; })()`);
+  conferir('sem a voz no servidor: nenhum botão de áudio e o aviso na tela', !semVoz.botoes && semVoz.aviso, JSON.stringify(semVoz));
 
   // PDF: o que o botão faz antes de abrir a impressão (roteiro + texto final no histórico)
   await p.avaliar(`desenharRoteiro('${cod}').then(() => guardarFinal('${cod}'))`);

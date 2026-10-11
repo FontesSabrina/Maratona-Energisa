@@ -76,7 +76,9 @@ function validarSenhaNova(nova, repetida) {
 
 // o áudio vale enquanto o texto não muda; só em português por enquanto
 const audioAtual = codigo => estado.audios[codigo]?.texto === estado.avisos[codigo] ? estado.audios[codigo] : null;
-const temAudio = () => estado.formulario?.idioma === 'pt-BR';
+// o servidor pode estar sem a voz (FAROL_AUDIO=0, em produção no plano gratuito)
+const audioLigado = () => estado.config?.audio !== false;
+const temAudio = () => audioLigado() && estado.formulario?.idioma === 'pt-BR';
 
 // 754 s -> "12 min 34 s"
 const tempoNoAr = s => s < 60 ? `${fmt(s)} s` : `${fmt(Math.floor(s / 60))} min${s % 60 ? ` ${s % 60} s` : ''}`;
@@ -260,7 +262,8 @@ function desenharMunicipios() {
         temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: 'Baixar áudio (MP3)' }),
         editavel && no('button', { type: 'button', 'data-acao': 'restaurar', 'data-codigo': cod, texto: 'Desfazer edição' })),
       no('div', { id: `tocador-${cod}`, classe: 'tocador' }),
-      temAudio() ? null : no('p', { classe: 'ajuda', texto: 'Áudio só para avisos em português, por enquanto.' })));
+      temAudio() ? null : no('p', { classe: 'ajuda', texto: audioLigado() ? 'Áudio só para avisos em português, por enquanto.'
+        : 'O áudio do aviso está desligado neste servidor.' })));
   });
   $('municipios').replaceChildren(...cartoes);
   for (const m of estado.resultado.municipios) { desenharFinal(m.codigo_ibge); desenharTocador(m.codigo_ibge); }

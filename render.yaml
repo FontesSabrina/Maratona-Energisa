@@ -1,0 +1,19 @@
+# Render (Blueprint): o serviço web do Farol a partir do Dockerfile, com deploy a cada push na master.
+# O banco (Postgres com PostGIS) fica fora daqui: a conexão vai em DATABASE_URL, cadastrada no painel
+# do Render como segredo (nunca no git). Carga dos dados públicos: ver DEPLOY.md.
+services:
+  - type: web
+    name: farol
+    runtime: docker
+    plan: free
+    region: virginia            # a região do Render mais perto do Brasil
+    branch: master
+    autoDeploy: true
+    healthCheckPath: /api/saude
+    envVars:
+      - key: DATABASE_URL
+        sync: false             # segredo: o Render pede o valor ao criar o serviço
+      - key: FAROL_PRODUCAO
+        value: "1"
+      - key: FAROL_AUDIO          # sem a voz: o plano gratuito tem 512 MB e a voz pede ~520 MB a mais
+        value: "0"

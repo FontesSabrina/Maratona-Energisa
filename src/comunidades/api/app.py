@@ -12,6 +12,7 @@ no servidor. Cada planilha processada fica no histórico da empresa só como agr
 Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000
 """
 
+import os
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,18 +36,22 @@ from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
 from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv, validar
 from . import leitura
-from .acesso import exigir, rotas, usuario_atual
+from .acesso import PRODUCAO, exigir, rotas, usuario_atual
 
 MAX_PROBLEMAS = 200          # problemas listados um a um na resposta (o total vem sempre)
 MAX_TEXTO = 40               # data e horário: o que vai no aviso, digitado pelo operador
 CASAS_PONTO = 5              # casas decimais dos pontos no mapa (cerca de 1 m)
+# FAROL_AUDIO=0 desliga o áudio do aviso (o plano gratuito do Render não tem memória para a voz)
+AUDIO = os.environ.get("FAROL_AUDIO", "1") != "0"
 AVISO_FICTICIO = ("Rede elétrica e clientes fictícios nesta demonstração; território, endereços e "
                   "comunidades reais (IBGE, Censo 2022).")
 BRASILIA = timezone(timedelta(hours=-3))  # sem horário de verão desde 2019
 MAX_AVISOS_PAINEL = 5000      # avisos considerados no dashboard (os mais recentes)
 GEO_PARA_BASE = Transformer.from_crs("EPSG:4674", CRS_BASE, always_xy=True)
 
-app = FastAPI(title="Farol", version="0.1.0", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+# em produção, sem a documentação interativa (é a única parte sem CSP: carrega o Swagger de fora)
+app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
+              openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None)
 DIST = dist_.carregar()
 app.include_router(rotas)
 APRESENTACAO = Path(__file__).resolve().parents[1] / "apresentacao"
@@ -71,6 +76,8 @@ async def cabecalhos(request, chamar):
     if not request.url.path.startswith(SEM_CSP):
         r.headers["Content-Security-Policy"] = CSP
     r.headers.setdefault("Cache-Control", "no-store")  # resultados de planilha nunca ficam em cache
+    if PRODUCAO:  # só HTTPS daqui para a frente (o Render serve em HTTPS)
+        r.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return r
 
 
@@ -86,7 +93,7 @@ def config(u: dict = Depends(usuario_atual)) -> dict:
             "idiomas": {k: v["nome"] for k, v in idiomas.IDIOMAS.items()}, "idioma_padrao": DIST.idioma_padrao,
             "prazo_legal_horas": DIST.prazo_legal_horas, "prazo_vital_dias_uteis": DIST.prazo_vital_dias_uteis,
             "norma": DIST.norma, "palavras_por_segundo": PALAVRAS_POR_SEGUNDO,
-            "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}}
+            "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}, "audio": AUDIO}
 
 
 @app.get("/api/concessao")
@@ -265,6 +272,8 @@ class PedidoAudio(BaseModel):
 @app.post("/api/audio")
 def gerar_audio(dados: PedidoAudio, u: dict = Depends(exigir("ver_historico"))) -> Response:
     """MP3 do aviso falado (voz sintetizada no próprio servidor, sem enviar o texto para fora)."""
+    if not AUDIO:
+        raise HTTPException(503, "O áudio do aviso está desligado neste servidor.")
     try:
         mp3, segundos = audio.mp3(dados.texto, dados.idioma,
                                   max_caracteres=audio.MAX_CARACTERES_COMPARATIVO if dados.comparativo else audio.MAX_CARACTERES)

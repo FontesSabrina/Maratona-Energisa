@@ -62,6 +62,7 @@ As pastas seguem uma arquitetura em camadas, parente do MVC, que além de separa
 - Perfis (nucleo/acesso.py; o servidor confere em toda rota): Admin do Farol (empresas e registro geral), Admin da empresa (usuários da empresa, avisos, histórico e registro da empresa), Operador (gera avisos e vê o histórico) e Consulta (só o histórico).
 - Teste da API (banco x arquivo, csv x xlsx, dois municípios, problemas por linha, erros, nenhum número de UC na resposta, coordenadas só nos pontos do mapa e nunca no histórico): uv run python -W ignore testes/api/teste_api.py
 - Planilhas de teste (UCs fictícias a jusante de uma chave, em saida/planilhas_teste/): uv run python -m comunidades.simulacao.planilhas_teste CF-0066 [--ruido 15]
+- Deploy (Render + Neon, planos gratuitos; passo a passo em DEPLOY.md): Dockerfile e render.yaml na raiz; em produção FAROL_PRODUCAO=1 (cookie Secure, HSTS, sem /api/docs) e FAROL_AUDIO=0 (sem a voz: o plano free tem 512 MB e a voz pede ~520 MB a mais). Base pública para o banco de produção: uv run python -m comunidades.publicar_banco (destino em .env.producao, ignorado pelo git). Semente em produção: $env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente.
 - Nesta máquina o comando py não existe: use uv run direto (uv run comunidades, uv run python -m ...)
 - Varredura de minimização (titular, número de UC, imóvel e logradouro no HTML gerado): py -m uv run python -m comunidades.validacao.minimizacao (com $env:FAROL_DISTRIBUIDORA para Muriaé)
 - Teste de robustez: py -m uv run python -m comunidades.validacao.robustez

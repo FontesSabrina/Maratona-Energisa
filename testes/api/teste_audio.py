@@ -18,6 +18,7 @@ os.environ["FAROL_ESQUEMA"] = "teste_audio"
 from fastapi.testclient import TestClient  # noqa: E402
 
 from comunidades.api import acesso as api_acesso  # noqa: E402
+from comunidades.api import app as app_mod  # noqa: E402
 from comunidades.api.app import app  # noqa: E402
 from comunidades.banco.conexao import conectar  # noqa: E402
 from comunidades.nucleo.desligamento import PALAVRAS_POR_SEGUNDO  # noqa: E402
@@ -109,6 +110,13 @@ with conectar() as c, c.cursor() as cur:
     cur.execute("SELECT detalhe FROM registro WHERE acao = 'gerou o áudio do aviso'")
     reg = [d for (d,) in cur.fetchall()]
 conferir("registro: áudio gerado (município e duração, sem o texto)", len(reg) == 3 and all("Graminha" not in d for d in reg), str(reg))
+# produção no plano gratuito (FAROL_AUDIO=0): a tela é avisada e a API recusa, sem carregar a voz
+app_mod.AUDIO = False
+desligado = op.post("/api/audio", json=pedido)
+conferir("FAROL_AUDIO=0: a API responde 503 e a configuração avisa a tela", desligado.status_code == 503
+         and op.get("/api/config").json()["audio"] is False, f"{desligado.status_code} {desligado.text[:80]}")
+app_mod.AUDIO = True
+conferir("com o áudio ligado, a configuração diz que há áudio", op.get("/api/config").json()["audio"] is True)
 longo = "Sítio Boa Vista, " * 220   # ~3.700 caracteres: passa do limite do aviso, cabe no do comparativo
 r = op.post("/api/audio", json={**pedido, "texto": longo, "comparativo": True})
 conferir("comparativo: o aviso de hoje, mais longo, gera o áudio (limite maior só aí)", r.status_code == 200 and len(r.content) > 100_000
