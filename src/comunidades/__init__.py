@@ -2,30 +2,33 @@
 
 
 def main() -> None:
-    """Executa o pipeline completo: dados reais -> rede fictícia -> algoritmo -> avaliação -> mapa."""
+    """Comando `comunidades`: executa o pipeline (ver pipeline.py).
+
+    --distribuidora arquivo.toml  usa outra configuração (o município vem dela)
+    --coordenada "lat,lon"        descobre o município pela malha do IBGE e usa a distribuidora dele
+    """
+    import os
     import sys
 
-    from . import algoritmo, avaliacao, clientes, dados, ibge, mapa, osm, rede
+    argv = list(sys.argv)
+    if "--coordenada" in argv:
+        from . import localizar
 
-    etapas = [
-        ("Dados do IBGE (download na primeira vez)", dados.garantir),
-        ("IBGE: camadas reais e gabarito", ibge.construir),
-        ("OSM: malha viária", osm.carregar),
-        ("Rede elétrica fictícia", rede.construir),
-        ("Cadastro fictício de UCs", clientes.construir),
-        ("Algoritmo de comunidades", algoritmo.construir),
-        ("Mapa interativo (inclui avaliação)", mapa.construir),
-    ]
-    pular_dados = "--so-algoritmo" in sys.argv
-    for nome, f in etapas:
-        if pular_dados and f in (dados.garantir, ibge.construir, osm.carregar, rede.construir, clientes.construir):
-            continue
-        print(f"> {nome}...", flush=True)
-        f()
+        try:
+            lat, lon = localizar.ler_coordenada(argv[argv.index("--coordenada") + 1])
+            mun = localizar.municipio_da_coordenada(lat, lon)
+        except (ValueError, IndexError) as e:
+            sys.exit(f"Erro: {e}")
+        arq, criado = localizar.distribuidora_do_municipio(mun)
+        print(f"Coordenada em {mun['nome']}/{mun['uf']} (IBGE {mun['codigo']}). Distribuidora: {arq.name}", flush=True)
+        if criado:
+            print(f"ATENÇÃO: {arq.name} foi criado com os valores de demonstração do demo-leopoldina. "
+                  "Revise os campos da distribuidora (nome, assinatura, telefone, prazos e perfis).", flush=True)
+        argv += ["--distribuidora", str(arq)]
+    if "--distribuidora" in argv:
+        # o config.py lê o município daqui, então precisa vir antes de importar o pipeline
+        os.environ["FAROL_DISTRIBUIDORA"] = argv[argv.index("--distribuidora") + 1]
 
-    _, por_uc, _, cen = avaliacao.avaliar()
-    print("\nAcerto por UC (cadastro digitado x algoritmo):")
-    print(por_uc.to_string())
-    print(f"\nCenários: {len(cen)} | cobertura média {cen.COBERTURA.mean():.1%} | "
-          f"precisão média {cen.PRECISAO.mean():.1%} | aviso {cen.SEG_ANTES.mean():.0f}s -> {cen.SEG_DEPOIS.mean():.0f}s")
-    print(f"\nMapa: {mapa.ARQ_SAIDA}")
+    from .pipeline import executar
+
+    executar(argv)
