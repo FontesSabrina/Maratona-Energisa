@@ -98,7 +98,8 @@ conferir("CF-0066: 758 UCs, 754 em Leopoldina e 4 além da divisa em São João 
          [(mm["nome"], mm["ucs"]) for mm in j["municipios"]] == [("Leopoldina", 754), ("São João Nepomuceno", 4)]
          and j["planilha"]["validas"] == 758 and j["fora_da_concessao"]["ucs"] == 0,
          json.dumps([(mm["nome"], mm["ucs"]) for mm in j["municipios"]], ensure_ascii=False))
-sem_id = lambda d: {k: v for k, v in d.items() if k != "id"}  # cada envio ganha um id no histórico
+# cada envio ganha um id no histórico; nome, formato e aba do arquivo mudam de .csv para .xlsx
+sem_id = lambda d: {k: ({**v, "arquivo": None} if k == "traducao" else v) for k, v in d.items() if k != "id"}
 conferir(".xlsx dá a mesma resposta que o .csv (fora o id do histórico)", rx.status_code == 200 and sem_id(rx.json()) == sem_id(j))
 from pyproj import Transformer
 x, y = Transformer.from_crs("EPSG:4674", BT.CRS_BASE, always_xy=True).transform(t["longitude"].to_numpy(), t["latitude"].to_numpy())
@@ -241,13 +242,25 @@ ruins = pd.DataFrame([
 ])
 r3 = enviar(ruins.to_csv(sep=";", index=False).encode("utf-8"))
 j3 = r3.json() if r3.status_code == 200 else {}
-probs = {p["linha"]: p["motivo"] for p in j3.get("planilha", {}).get("problemas", [])}
-esperado = {2: "sem número de UC", 3: "sem coordenada", 4: "trocadas", 5: "fora do Brasil", 7: "repetida (já aparece na linha 6)", 8: "a confirmar"}
-conferir("cada problema aponta a linha certa", r3.status_code == 200 and all(k in probs and v in probs[k] for k, v in esperado.items()),
+probs = {p["linha"]: p["codigo"] for p in j3.get("planilha", {}).get("problemas", [])}
+esperado = {2: "uc_vazia", 3: "coordenada_incompleta", 5: "fora_da_concessao", 7: "uc_repetida", 8: "fora_da_concessao"}
+conferir("cada problema aponta a linha certa, com o código da lista fechada", r3.status_code == 200 and probs == esperado,
          json.dumps(probs, ensure_ascii=False))
-conferir("UC em São Paulo: fora da concessão, pela linha (8)", j3.get("fora_da_concessao") == {"ucs": 1, "linhas": [8]},
-         json.dumps(j3.get("fora_da_concessao"), ensure_ascii=False))
-conferir("a válida (linha 6) entra em Leopoldina", [mm["nome"] for mm in j3.get("municipios", [])] == ["Leopoldina"])
+conferir("os problemas trazem o texto da lista fechada", all(p["motivo"] == j3["traducao"]["textos"][p["codigo"]]
+                                                           for p in j3.get("planilha", {}).get("problemas", [])))
+tr = j3.get("traducao", {})
+conferir("linha 4 (trocadas, dentro da concessão): corrigida, listada com o que mudou",
+         tr.get("corrigidas") == [{"linha": 4, "codigo": "latitude_e_longitude_trocadas", "correcao": "latitude e longitude estavam trocadas"}],
+         json.dumps(tr.get("corrigidas"), ensure_ascii=False))
+conferir("vital inválido e UC repetida: avisos pela linha", {"linha": 6, "avisos": ["uc_repetida_em_outra_linha"]} in tr.get("avisos", [])
+         and any(a["linha"] == 8 and "equipamento_vital_invalido" in a["avisos"] for a in tr.get("avisos", [])),
+         json.dumps(tr.get("avisos"), ensure_ascii=False))
+conferir("resumo da tradução: 7 linhas = 1 ok + 1 corrigida + 5 rejeitadas", {k: tr.get("resumo", {}).get(k) for k in
+         ("total", "ok", "corrigidas", "rejeitadas")} == {"total": 7, "ok": 1, "corrigidas": 1, "rejeitadas": 5}, json.dumps(tr.get("resumo")))
+conferir("Madri e São Paulo: fora da concessão, pela linha (5 e 8)", j3.get("fora_da_concessao") == {"ucs": 2, "linhas": [5, 8]}
+         and len(j3.get("pontos_fora", [])) == 2, json.dumps(j3.get("fora_da_concessao"), ensure_ascii=False))
+conferir("a válida (6) e a corrigida (4) entram em Leopoldina", [(mm["nome"], mm["ucs"]) for mm in j3.get("municipios", [])]
+         == [("Leopoldina", 2)], json.dumps([(mm["nome"], mm["ucs"]) for mm in j3.get("municipios", [])], ensure_ascii=False))
 
 # ---------- 5. Erros da planilha inteira e do formulário ----------
 # exemplo oficial com duas abas que servem (Modelo e Postes): a API pede a escolha; com a aba, gera

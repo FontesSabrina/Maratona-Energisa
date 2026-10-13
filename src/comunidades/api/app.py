@@ -12,6 +12,8 @@ no servidor. Cada planilha processada fica no histórico da empresa só como agr
 Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 """
 
+import functools
+import hashlib
 import os
 import time
 from collections import Counter, defaultdict, deque
@@ -23,6 +25,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import shapely
 from pyproj import Transformer
 
 from .. import distribuidora as dist_
@@ -36,7 +39,11 @@ from ..fontes.base_territorial import CRS_BASE
 from ..nucleo import idiomas, painel
 from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
-from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv, validar
+from ..nucleo import planilha
+from ..nucleo.acesso import PERFIS
+from ..nucleo.coordenadas import Area
+from ..nucleo.motivos import TEXTOS, Motivo
+from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv
 from . import leitura
 from .acesso import PRODUCAO, exigir, rotas, usuario_atual
 from .proxy import ProxyConfiavel
@@ -203,6 +210,48 @@ def _prazo(vital: Counter) -> dict:
     return {"antecedencia_minima": regra, "norma": DIST.norma, "planejamento_interno_dias": DIST.prazo_interno_dias}
 
 
+@functools.lru_cache(maxsize=1)
+def _area() -> Area:
+    """A área da concessão (os contornos dos municípios do banco) com a margem de 50 m, para o tradutor."""
+    return Area(shapely.union_all([g for _, _, _, g in banco.contornos("EPSG:4674")]))
+
+
+def _parametros() -> planilha.Parametros:
+    c = DIST.planilha
+    return planilha.Parametros(dentro=_area(), epsg_utm=c.epsg_utm, isolado_km=c.ponto_isolado_km,
+                               muitas_ucs=c.muitas_ucs_mesma_coordenada)
+
+
+def _nome_arquivo(nome: str | None) -> str:
+    """O nome do arquivo enviado, limpo: sem pasta, sem caracteres de controle, até 100 caracteres."""
+    base = str(nome or "planilha").replace("\\", "/").rsplit("/", 1)[-1]
+    return (planilha.limpar(base) or "planilha")[:100]
+
+
+def _traduzir(conteudo: bytes, nome: str | None, aba: str | None, u: dict):
+    """Arquivo -> JSON padronizado validado (nucleo/planilha.montar). O arquivo não é guardado."""
+    tabela = leitura.ler_tabela(conteudo, aba)
+    if not tabela.linhas:
+        raise PlanilhaInvalida("A planilha não tem nenhuma linha de dados.")
+    return planilha.montar(
+        tabela.campos, tabela.cabecalho, tabela.linhas, _parametros(),
+        arquivo={"nome": _nome_arquivo(nome), "sha256": hashlib.sha256(conteudo).hexdigest(), "formato": tabela.formato,
+                 "aba": tabela.aba, "colunas_ignoradas": tabela.colunas_ignoradas},
+        empresa=(u.get("empresa_nome") or "")[:120], gerado_em=datetime.now(BRASILIA).strftime("%Y-%m-%dT%H:%M"),
+        gerado_por=f"{u['nome']} ({PERFIS[u['perfil']]})"[:160])
+
+
+def _traducao(m) -> dict:
+    """O que a tela mostra da tradução: arquivo, colunas reconhecidas, resumo e o que foi corrigido (sem UC)."""
+    return {"arquivo": {k: getattr(m.arquivo, k) for k in ("nome", "formato", "aba", "linhas", "colunas_ignoradas")},
+            "colunas": list(m.colunas), "resumo": m.resumo.model_dump(), "versao": m.tradutor,
+            "corrigidas": [{"linha": pt.linha, "codigo": pt.correcao.value, "correcao": TEXTOS[pt.correcao]}
+                           for pt in m.pontos if pt.status == "corrigida"][:MAX_PROBLEMAS],
+            "avisos": [{"linha": pt.linha, "avisos": [a.value for a in pt.avisos]}
+                       for pt in m.pontos if pt.avisos][:MAX_PROBLEMAS],
+            "textos": {k.value: v for k, v in TEXTOS.items()}}
+
+
 LIMITE_ENVIOS, JANELA_ENVIOS = 20, 3600       # planilhas por usuário por hora
 _envios: dict[int, deque] = defaultdict(deque)
 
@@ -227,20 +276,26 @@ async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario
     _limite_envios(u["id"])
     conteudo = await arquivo.read(leitura.MAX_BYTES + 1)
     try:
-        p = validar(leitura.ler(conteudo, aba or None))
+        modelo = _traduzir(conteudo, arquivo.filename, aba or None, u)
     except leitura.EscolhaDeAba as e:
         return JSONResponse({"detail": str(e), "abas": e.abas}, status_code=409)
     except PlanilhaInvalida as e:
         raise HTTPException(422, str(e)) from None
     finally:
         del conteudo
-    v = p.validas
+    # daqui em diante só o JSON validado (o arquivo já saiu da memória)
+    v = planilha.validas(modelo)
+    rejeitadas = [pt for pt in modelo.pontos if pt.status == "rejeitada"]
+    fora_planilha = [pt for pt in rejeitadas if pt.motivo == Motivo.FORA_DA_CONCESSAO]
     resposta = {"aviso_ficticio": AVISO_FICTICIO,
-                "planilha": {"linhas": p.linhas, "validas": len(v), "total_problemas": len(p.problemas),
-                             "problemas_por_motivo": dict(Counter(p.problemas["MOTIVO"])),
-                             "problemas": [{"linha": int(l), "motivo": m} for l, m in p.problemas.head(MAX_PROBLEMAS).itertuples(index=False)]},
-                "fora_da_concessao": {"ucs": 0, "linhas": []}, "municipios": [], "prazo": _prazo(Counter()),
-                "pontos_fora": []}
+                "planilha": {"linhas": modelo.resumo.total, "validas": len(v), "total_problemas": len(rejeitadas),
+                             "problemas_por_motivo": dict(Counter(TEXTOS[pt.motivo] for pt in rejeitadas)),
+                             "problemas": [{"linha": pt.linha, "codigo": pt.motivo.value, "motivo": TEXTOS[pt.motivo]}
+                                           for pt in rejeitadas[:MAX_PROBLEMAS]]},
+                "traducao": _traducao(modelo),
+                "fora_da_concessao": {"ucs": len(fora_planilha), "linhas": [pt.linha for pt in fora_planilha[:MAX_PROBLEMAS]]},
+                "municipios": [], "prazo": _prazo(Counter()),
+                "pontos_fora": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)] for pt in fora_planilha]}
     if v.empty:
         return JSONResponse(_guardar(resposta, u, data, horario, idioma))
     x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
@@ -248,8 +303,11 @@ async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario
     bases = _bases(xy)
     r = afetados(xy, bases, DIST.regras, data, horario, idioma) if bases else None
     fora = r.fora if r else np.arange(len(v))
-    resposta["fora_da_concessao"] = {"ucs": int(len(fora)), "linhas": [int(l) for l in v["LINHA"].iloc[fora[:MAX_PROBLEMAS]]]}
-    resposta["pontos_fora"] = _pontos(v.iloc[fora])
+    if len(fora):   # dentro da área com a margem, mas fora dos contornos dos municípios (na divisa da concessão)
+        resposta["fora_da_concessao"]["ucs"] += int(len(fora))
+        resposta["fora_da_concessao"]["linhas"] = sorted(resposta["fora_da_concessao"]["linhas"]
+                                                         + [int(l) for l in v["LINHA"].iloc[fora]])[:MAX_PROBLEMAS]
+        resposta["pontos_fora"] += _pontos(v.iloc[fora])
     vital_total = Counter()
     for m in (r.municipios if r else []):
         ucs = v.iloc[m.ucs.index]
@@ -262,7 +320,7 @@ async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario
                              "confianca": round(float(c.CONFIANCA), 2)} for c in m.comunidades.itertuples()],
             "aviso": m.aviso, "segundos": m.segundos,
             # o aviso de hoje (fazenda a fazenda), se a planilha trouxe a coluna local: só para o comparativo
-            "hoje": _aviso_hoje(ucs["LOCAL"], data, horario) if p.tem_local else None,
+            "hoje": _aviso_hoje(ucs["LOCAL"], data, horario) if "local" in modelo.colunas else None,
             # [lat, lon, posição da comunidade na lista acima (-1 = sem comunidade)], sem o número da UC
             "pontos": _pontos(ucs, m.ucs["COMUNIDADE_PREVISTA"], [c.COMUNIDADE_PREVISTA for c in m.comunidades.itertuples()]),
             "equipamento_vital": {k: vital[k] for k in ("sim", "nao", "a_confirmar")},

@@ -17,7 +17,8 @@ import pandas as pd
 
 from comunidades import distribuidora as dist_
 from comunidades.nucleo.desligamento import aviso_antigo_de_locais
-from comunidades.nucleo.planilha import colunas, so_rua, validar
+from comunidades.nucleo import planilha as P
+from comunidades.nucleo.planilha import colunas, so_rua
 from comunidades.validacao.minimizacao import numero_de_casa_ou_cep
 
 resultados = []
@@ -59,15 +60,30 @@ for entrada, esperado in casos.items():
     conferir(f"so_rua({entrada!r}) sem número de casa nem CEP", not numero_de_casa_ou_cep(obtido),
              numero_de_casa_ou_cep(obtido))
 
-# --- sinônimos
+# --- sinônimos (pelo tradutor: JSON validado -> as linhas que entram)
 def planilha(**cols) -> pd.DataFrame:
     return pd.DataFrame(cols, dtype=str)
+
+
+class Traduzida:
+    def __init__(self, t: pd.DataFrame):
+        cab = list(t.columns)
+        linhas = [(i + 2, list(r)) for i, r in enumerate(t.itertuples(index=False))]
+        self.modelo = P.montar(P.campos_por_indice(cab), cab, linhas, P.Parametros(dentro=None),
+                               arquivo={"nome": "teste.csv", "sha256": "0" * 64, "formato": "csv", "aba": None,
+                                        "colunas_ignoradas": 0},
+                               empresa="Teste", gerado_em="2026-10-13T12:00", gerado_por="Teste (Operador)")
+        self.validas = P.validas(self.modelo)
+        self.problemas = [pt for pt in self.modelo.pontos if pt.status == "rejeitada"]
+
+
+validar = Traduzida
 
 
 base = {"latitude": ["-21,5321", "-21,5410", "-21,5500"], "longitude": ["-42,6412", "-42,6503", "-42,6600"]}
 p = validar(planilha(NUMCDC=["101", "102", "103"], **base))
 conferir("NUMCDC reconhecida como UC", colunas(["NUMCDC", "latitude", "longitude"]).get("uc") == "NUMCDC")
-conferir("planilha com NUMCDC é aceita (3 UCs, nenhum problema)", len(p.validas) == 3 and p.problemas.empty,
+conferir("planilha com NUMCDC é aceita (3 UCs, nenhum problema)", len(p.validas) == 3 and not p.problemas,
          f"{len(p.validas)} válidas, {len(p.problemas)} problemas")
 
 enderecos = ["Rua das Flores, 123, casa 2 - CEP 36700-000", "Av. Brasil nº 45", "Rua das Flores, 98"]

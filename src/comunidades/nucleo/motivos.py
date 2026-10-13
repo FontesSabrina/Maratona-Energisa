@@ -20,6 +20,11 @@ class Motivo(str, Enum):
     COORD_LIMITES = "coordenada_fora_dos_limites"
     FORA_DA_CONCESSAO = "fora_da_concessao"
     CORRECAO_AMBIGUA = "correcao_ambigua"
+    # linha (nucleo/planilha.py)
+    UC_VAZIA = "uc_vazia"
+    UC_INVALIDA = "uc_invalida"
+    UC_REPETIDA = "uc_repetida"
+    CELULA_LONGA = "celula_longa"
 
 
 class Correcao(str, Enum):
@@ -35,6 +40,13 @@ class Correcao(str, Enum):
 class Aviso(str, Enum):
     """Alerta que não rejeita a linha."""
     POUCAS_CASAS = "menos_de_4_casas_decimais"
+    COORD_DUPLICADA = "coordenada_repetida"
+    COORD_MUITAS_UCS = "mesma_coordenada_em_muitas_ucs"
+    PONTO_ISOLADO = "ponto_isolado"
+    UC_REPETIDA = "uc_repetida_em_outra_linha"
+    VITAL_INVALIDO = "equipamento_vital_invalido"
+    CAMPO_FORMULA = "formula_sem_valor_ignorada"
+    TEXTO_CORTADO = "texto_cortado"
 
 
 TEXTOS = {
@@ -48,6 +60,10 @@ TEXTOS = {
     Motivo.COORD_LIMITES: "coordenada fora dos limites (latitude de -90 a 90, longitude de -180 a 180)",
     Motivo.FORA_DA_CONCESSAO: "fora da área de concessão",
     Motivo.CORRECAO_AMBIGUA: "mais de uma correção possível: nada foi adivinhado",
+    Motivo.UC_VAZIA: "sem número de UC",
+    Motivo.UC_INVALIDA: "número de UC inválido (fórmula, data ou mais de 40 caracteres)",
+    Motivo.UC_REPETIDA: "UC repetida: só a primeira linha com ela entra",
+    Motivo.CELULA_LONGA: "célula com mais de 200 caracteres",
     Correcao.TROCA: "latitude e longitude estavam trocadas",
     Correcao.SINAL_LAT: "faltava o sinal negativo da latitude",
     Correcao.SINAL_LON: "faltava o sinal negativo da longitude",
@@ -55,6 +71,13 @@ TEXTOS = {
     Correcao.TROCA_E_SINAL: "latitude e longitude trocadas e sem o sinal negativo",
     Correcao.UTM_TROCADO: "coordenadas UTM com X e Y trocados",
     Aviso.POUCAS_CASAS: "coordenada com menos de 4 casas decimais (cerca de 11 m de precisão ou pior)",
+    Aviso.COORD_DUPLICADA: "mesma coordenada de outra linha",
+    Aviso.COORD_MUITAS_UCS: "a mesma coordenada aparece em muitas UCs (suspeito)",
+    Aviso.PONTO_ISOLADO: "ponto muito longe de todos os outros da planilha (suspeito)",
+    Aviso.UC_REPETIDA: "esta UC aparece de novo em outra linha (só esta entra)",
+    Aviso.VITAL_INVALIDO: "equipamento_vital com valor inválido (use sim ou não): fica \"a confirmar\"",
+    Aviso.CAMPO_FORMULA: "fórmula sem valor guardado num campo opcional: o campo foi ignorado",
+    Aviso.TEXTO_CORTADO: "texto longo cortado no limite do campo",
 }
 
 

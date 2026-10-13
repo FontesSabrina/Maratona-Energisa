@@ -51,6 +51,7 @@ class Coordenada:
     original: tuple[float, float] | None = None  # (lat, lon) como veio, na corrigida
     origem: str | None = None                    # decimal | celula | gms | utm
     avisos: tuple[Aviso, ...] = ()
+    lido: tuple[float, float] | None = None      # (lat, lon) lido, na rejeitada fora_da_concessao (para o mapa)
 
 
 class _Recusa(Exception):
@@ -222,7 +223,9 @@ def _decidir(lat: float, lon: float, origem: str, avisos: tuple, dentro, alterna
         return Coordenada(CORRIGIDA, nlat, nlon, correcao=correcao, original=(lat, lon), origem=origem, avisos=avisos)
     if achadas:
         return Coordenada(REJEITADA, motivo=Motivo.CORRECAO_AMBIGUA)
-    return Coordenada(REJEITADA, motivo=Motivo.FORA_DA_CONCESSAO if _nos_limites(lat, lon) else Motivo.COORD_LIMITES)
+    if _nos_limites(lat, lon):
+        return Coordenada(REJEITADA, motivo=Motivo.FORA_DA_CONCESSAO, lido=(lat, lon))
+    return Coordenada(REJEITADA, motivo=Motivo.COORD_LIMITES)
 
 
 def _dois(a, b) -> None:
@@ -274,5 +277,5 @@ def _de_utm(x: float, y: float, epsg: int, dentro) -> Coordenada:
         lat, lon = utm(y, x, epsg)
         if dentro(lat, lon):
             return Coordenada(CORRIGIDA, lat, lon, correcao=Correcao.UTM_TROCADO, original=None, origem="utm")
-        return Coordenada(REJEITADA, motivo=Motivo.FORA_DA_CONCESSAO)
+        return Coordenada(REJEITADA, motivo=Motivo.FORA_DA_CONCESSAO, lido=(lat, lon))
     return Coordenada(REJEITADA, motivo=Motivo.COORD_LIMITES)
