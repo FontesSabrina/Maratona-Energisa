@@ -24,7 +24,20 @@ SINONIMOS = {
     # a ordem importa: na base da distribuidora a coluna LOCAL é URBANO/RURAL, não o imóvel; por isso
     # endereco vem antes de local (no modelo antigo, sem endereco, local continua valendo)
     "local": ("local_aviso", "imovel", "nome_imovel", "endereco", "local"),
+    "transformador": ("transformador", "trafo", "cod_trafo", "codigo_trafo", "cod_transformador"),
+    "circuito": ("circuito", "alimentador", "cod_circuito", "codigo_circuito"),
+    # alternativas à latitude/longitude decimal (nucleo/coordenadas.py)
+    "celula": ("coordenada", "coordenadas", "lat_lon", "latlon", "lat_long", "latitude_longitude", "gps"),
+    "lat_gms": ("lat_gms", "latitude_gms"),
+    "lon_gms": ("long_gms", "lon_gms", "longitude_gms"),
+    "coord_x": ("coord_x", "utm_x", "x_utm", "easting"),
+    "coord_y": ("coord_y", "utm_y", "y_utm", "northing"),
 }
+# só estas colunas são lidas; todas as outras (nome, número da casa, medidor, conta...) são descartadas
+# logo depois de achar o cabeçalho, antes de qualquer processamento
+MANTIDAS = tuple(SINONIMOS)
+# uma fonte de coordenada basta (a primeira completa, na ordem de nucleo/coordenadas.interpretar)
+FONTES_COORDENADA = (("latitude", "longitude"), ("celula",), ("lat_gms", "lon_gms"), ("coord_x", "coord_y"))
 # colunas de endereço completo: delas o aviso de hoje leva só o nome da rua (so_rua)
 ENDERECO = ("endereco",)
 SIM = {"sim", "s", "1", "true", "verdadeiro", "x", "yes", "y"}
@@ -64,6 +77,26 @@ def colunas(cabecalho: list[str]) -> dict[str, str]:
                 achadas[campo] = por_chave[n]
                 break
     return achadas
+
+
+def campos_por_indice(cabecalho: list) -> dict[str, int]:
+    """Campo do modelo -> posição da coluna que o traz (a primeira que bater, na ordem dos sinônimos).
+    Colunas sem campo não aparecem: são as descartadas."""
+    por_chave: dict[str, int] = {}
+    for i, c in enumerate(cabecalho):
+        if c is not None and str(c).strip():
+            por_chave.setdefault(_chave(c), i)
+    achadas = {}
+    for campo, nomes in SINONIMOS.items():
+        i = next((por_chave[n] for n in nomes if n in por_chave), None)
+        if i is not None:
+            achadas[campo] = i
+    return achadas
+
+
+def serve(campos) -> bool:
+    """A aba tem o que é obrigatório: a UC e pelo menos uma fonte completa de coordenada."""
+    return "uc" in campos and any(all(c in campos for c in fonte) for fonte in FONTES_COORDENADA)
 
 
 def numero(txt) -> float | None:

@@ -15,6 +15,7 @@ Uso (na raiz, depois do pipeline de Leopoldina e do base_concessao): uv run pyth
 """
 
 import io
+from pathlib import Path
 import json
 import re
 from collections import Counter
@@ -28,6 +29,7 @@ import pandas as pd  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from comunidades import distribuidora as dist_  # noqa: E402
+from comunidades.api import app as app_mod  # noqa: E402
 from comunidades.api.app import app  # noqa: E402
 from comunidades.banco import base_territorial as banco  # noqa: E402
 from comunidades.banco.conexao import conectar  # noqa: E402
@@ -52,6 +54,7 @@ def conferir(nome, ok, extra=""):
 
 
 def enviar(conteudo: bytes, nome="planilha.csv", data="12/11", horario="8h às 14h", **extra):
+    app_mod._envios.clear()   # o limite de envios por hora tem teste próprio (seção 5)
     return cli.post("/api/avisos", files={"arquivo": (nome, conteudo)}, data={"data": data, "horario": horario, **extra})
 
 
@@ -247,6 +250,27 @@ conferir("UC em São Paulo: fora da concessão, pela linha (8)", j3.get("fora_da
 conferir("a válida (linha 6) entra em Leopoldina", [mm["nome"] for mm in j3.get("municipios", [])] == ["Leopoldina"])
 
 # ---------- 5. Erros da planilha inteira e do formulário ----------
+# exemplo oficial com duas abas que servem (Modelo e Postes): a API pede a escolha; com a aba, gera
+POSTES = (Path(__file__).resolve().parents[1] / "planilha" / "exemplos" / "planilha_postes.xlsx").read_bytes()
+r = enviar(POSTES, "planilha_postes.xlsx")
+conferir("duas abas servem: 409 com a lista para escolher", r.status_code == 409 and r.json().get("abas") == ["Modelo", "Postes"],
+         f"{r.status_code} {r.text[:160]}")
+rm, rp = enviar(POSTES, "planilha_postes.xlsx", aba="Modelo"), enviar(POSTES, "planilha_postes.xlsx", aba="Postes")
+conferir("aba escolhida (Modelo e Postes): 200, as mesmas 200 UCs", rm.status_code == rp.status_code == 200
+         and rm.json()["planilha"]["validas"] == rp.json()["planilha"]["validas"] == 200, f"{rm.status_code} {rp.status_code} {rp.text[:160]}")
+r = enviar(POSTES, "planilha_postes.xlsx", aba="Notas")
+conferir("aba que não serve: 422", r.status_code == 422, f"{r.status_code} {r.text[:120]}")
+saida = rp.text
+conferir("aba Postes: nada de NOME, NUM_CASA, MEDIDOR ou NUM_CONTA na resposta",
+         not any(c in saida for c in ("NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA")), "")
+# limite de envios por usuário
+app_mod._envios.clear()
+pequena = "uc;latitude;longitude\n1;-21,53;-42,64\n".encode()
+codigos = [cli.post("/api/avisos", files={"arquivo": ("p.csv", pequena)}, data={"data": "12/11", "horario": "8h"}).status_code
+           for _ in range(app_mod.LIMITE_ENVIOS + 2)]
+conferir(f"limite de {app_mod.LIMITE_ENVIOS} planilhas por hora por usuário: depois, 429", set(codigos[:app_mod.LIMITE_ENVIOS]) == {200}
+         and codigos[app_mod.LIMITE_ENVIOS:] == [429, 429], str(codigos))
+app_mod._envios.clear()
 casos = {
     "arquivo vazio": enviar(b""),
     "sem a coluna longitude": enviar("uc;latitude\n1;-21,5\n".encode()),

@@ -13,7 +13,8 @@ Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-pr
 """
 
 import os
-from collections import Counter
+import time
+from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -202,15 +203,33 @@ def _prazo(vital: Counter) -> dict:
     return {"antecedencia_minima": regra, "norma": DIST.norma, "planejamento_interno_dias": DIST.prazo_interno_dias}
 
 
+LIMITE_ENVIOS, JANELA_ENVIOS = 20, 3600       # planilhas por usuário por hora
+_envios: dict[int, deque] = defaultdict(deque)
+
+
+def _limite_envios(usuario_id: int) -> None:
+    """No máximo LIMITE_ENVIOS planilhas por usuário em JANELA_ENVIOS segundos (cada uma custa CPU e memória)."""
+    agora, fila = time.monotonic(), _envios[usuario_id]
+    while fila and agora - fila[0] > JANELA_ENVIOS:
+        fila.popleft()
+    if len(fila) >= LIMITE_ENVIOS:
+        raise HTTPException(429, f"Limite de {LIMITE_ENVIOS} planilhas por hora atingido. Tente de novo mais tarde.")
+    fila.append(agora)
+
+
 @app.post("/api/avisos")
 async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario: str = Form(...),
-                 idioma: str = Form(idiomas.PADRAO), u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
+                 idioma: str = Form(idiomas.PADRAO), aba: str | None = Form(None, max_length=leitura.MAX_NOME_ABA),
+                 u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
     data, horario = _texto_do_aviso("data", data), _texto_do_aviso("horário", horario)
     if idioma not in idiomas.IDIOMAS:
         raise HTTPException(422, f"idioma: use um de {', '.join(idiomas.IDIOMAS)}.")
+    _limite_envios(u["id"])
     conteudo = await arquivo.read(leitura.MAX_BYTES + 1)
     try:
-        p = validar(leitura.ler(conteudo))
+        p = validar(leitura.ler(conteudo, aba or None))
+    except leitura.EscolhaDeAba as e:
+        return JSONResponse({"detail": str(e), "abas": e.abas}, status_code=409)
     except PlanilhaInvalida as e:
         raise HTTPException(422, str(e)) from None
     finally:
