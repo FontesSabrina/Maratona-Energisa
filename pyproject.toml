@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "argon2-cffi>=25.1.0",
+    "defusedxml>=0.7.1",
     "fastapi>=0.143.0",
     "folium>=0.20.0",
     "geopandas>=1.2.0",
@@ -34,3 +35,9 @@ comunidades = "comunidades:main"
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "coverage>=7.16.2",
+    "hypothesis>=6.169.0",
+]
