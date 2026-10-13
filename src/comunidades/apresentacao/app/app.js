@@ -78,7 +78,8 @@ function validarSenhaNova(nova, repetida) {
 const audioAtual = codigo => estado.audios[codigo]?.texto === estado.avisos[codigo] ? estado.audios[codigo] : null;
 // o servidor pode estar sem a voz (FAROL_AUDIO=0, em produção no plano gratuito)
 const audioLigado = () => estado.config?.audio !== false;
-const temAudio = () => audioLigado() && estado.formulario?.idioma === 'pt-BR';
+// gerar o áudio é de quem gera o aviso (Consulta só lê; a API também recusa)
+const temAudio = () => audioLigado() && pode('gerar_aviso') && estado.formulario?.idioma === 'pt-BR';
 
 // 754 s -> "12 min 34 s"
 const tempoNoAr = s => s < 60 ? `${fmt(s)} s` : `${fmt(Math.floor(s / 60))} min${s % 60 ? ` ${s % 60} s` : ''}`;
@@ -262,7 +263,7 @@ function desenharMunicipios() {
         temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: 'Baixar áudio (MP3)' }),
         editavel && no('button', { type: 'button', 'data-acao': 'restaurar', 'data-codigo': cod, texto: 'Desfazer edição' })),
       no('div', { id: `tocador-${cod}`, classe: 'tocador' }),
-      temAudio() ? null : no('p', { classe: 'ajuda', texto: audioLigado() ? 'Áudio só para avisos em português, por enquanto.'
+      temAudio() || !pode('gerar_aviso') ? null : no('p', { classe: 'ajuda', texto: audioLigado() ? 'Áudio só para avisos em português, por enquanto.'
         : 'O áudio do aviso está desligado neste servidor.' })));
   });
   $('municipios').replaceChildren(...cartoes);
@@ -676,7 +677,7 @@ function desenharUcs() {
   if (!temPontos() || !estado.verUcs) return;
   telaUcs ||= L.canvas({ padding: .3 });
   const ponto = (lat, lon, cor, dica) => L.circleMarker([lat, lon], { renderer: telaUcs, radius: 3.5, weight: 1, color: '#FFFFFF', fillColor: cor, fillOpacity: .95 })
-    .bindTooltip(dica);
+    .bindTooltip(() => no('span', { texto: dica }));   // nó de texto: o Leaflet poria uma string como HTML
   const marcas = [];
   for (const m of r.municipios) {
     for (const [lat, lon, i] of m.pontos || []) {

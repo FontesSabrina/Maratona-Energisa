@@ -9,7 +9,7 @@ sem o número) para o mapa de quem enviou; eles não entram no histórico.
 
 Toda rota, menos /api/saude e /api/entrar, exige login (api/acesso.py), e a permissão é conferida
 no servidor. Cada planilha processada fica no histórico da empresa só como agregado.
-Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000
+Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers
 """
 
 import os
@@ -21,10 +21,11 @@ import numpy as np
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pyproj import Transformer
 
 from .. import distribuidora as dist_
+from .. import senhas
 from ..config import sem_acento
 from ..apresentacao import audio
 from ..banco import acesso as banco_acesso
@@ -37,6 +38,7 @@ from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, 
 from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv, validar
 from . import leitura
 from .acesso import PRODUCAO, exigir, rotas, usuario_atual
+from .proxy import ProxyConfiavel
 
 MAX_PROBLEMAS = 200          # problemas listados um a um na resposta (o total vem sempre)
 MAX_TEXTO = 40               # data e horário: o que vai no aviso, digitado pelo operador
@@ -54,6 +56,16 @@ app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/a
               openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None)
 DIST = dist_.carregar()
 app.include_router(rotas)
+if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
+    app.add_middleware(ProxyConfiavel)
+
+
+@app.exception_handler(senhas.Ocupado)
+def _ocupado(request, erro: senhas.Ocupado) -> JSONResponse:
+    """Hashes de senha demais ao mesmo tempo (memória do servidor): recusa e pede para tentar de novo."""
+    return JSONResponse({"detail": str(erro)}, status_code=503, headers={"Retry-After": "5"})
+
+
 APRESENTACAO = Path(__file__).resolve().parents[1] / "apresentacao"
 TELA = APRESENTACAO / "app"            # a tela (index.html, app.js, app.css)
 # A tela só fala com a própria API e só busca de fora os fundos de mapa da Esri
@@ -263,14 +275,15 @@ class TextoFinal(BaseModel):
 
 
 class PedidoAudio(BaseModel):
-    texto: str
-    idioma: str = idiomas.PADRAO
-    municipio: str = ""      # só para o nome do arquivo e o registro
+    # o limite do texto é conferido de novo, com o tamanho de cada caso, ao gerar (audio.mp3)
+    texto: str = Field(max_length=audio.MAX_CARACTERES_COMPARATIVO)
+    idioma: str = Field(idiomas.PADRAO, max_length=10)
+    municipio: str = Field("", max_length=100)   # só para o nome do arquivo e o registro
     comparativo: bool = False  # o aviso de hoje no comparativo: pode ser bem mais longo
 
 
 @app.post("/api/audio")
-def gerar_audio(dados: PedidoAudio, u: dict = Depends(exigir("ver_historico"))) -> Response:
+def gerar_audio(dados: PedidoAudio, u: dict = Depends(exigir("gerar_aviso"))) -> Response:
     """MP3 do aviso falado (voz sintetizada no próprio servidor, sem enviar o texto para fora)."""
     if not AUDIO:
         raise HTTPException(503, "O áudio do aviso está desligado neste servidor.")

@@ -72,7 +72,9 @@ h1 { margin: 0 0 20px; font-size: 22px; font-weight: 600; text-align: center; }
 /* Leaflet no tema da página: botões de 44 px, popup e dica escuros */
 .leaflet-container { background: var(--noite); font: 14px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
 .leaflet-bar { border: 1px solid var(--linha) !important; box-shadow: none !important; }
-.leaflet-bar a, .leaflet-bar a:hover { width: 44px; height: 44px; line-height: 44px; font-size: 20px; background: var(--sup); color: var(--texto); border-color: var(--linha); }
+/* .leaflet-touch: o Leaflet põe 30 px em qualquer navegador com Pointer Events; aqui o + e o − ficam com 44 px */
+.leaflet-bar a, .leaflet-touch .leaflet-bar a, .leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out {
+  width: 44px; height: 44px; line-height: 44px; font-size: 20px; background: var(--sup); color: var(--texto); border-color: var(--linha); }
 .leaflet-bar a:hover { background: var(--sup2); }
 .leaflet-control-attribution { background: rgba(21, 32, 43, .88) !important; color: var(--texto2) !important; font-size: 11.5px; }
 .leaflet-control-attribution a { color: var(--info) !important; }

@@ -16,6 +16,7 @@ Uso (na raiz, depois do pipeline de Leopoldina e do base_concessao): uv run pyth
 
 import io
 import json
+import re
 from collections import Counter
 import os
 import sys
@@ -34,6 +35,7 @@ from comunidades.fontes import base_territorial as BT  # noqa: E402
 from comunidades.nucleo.afetados import BaseMunicipio, afetados  # noqa: E402
 from comunidades.semente import semear  # noqa: E402
 from comunidades.simulacao import planilhas_teste  # noqa: E402
+from comunidades.validacao.minimizacao import numero_de_casa_ou_cep  # noqa: E402
 
 # entra como Operador (a semente cria os usuários; a senha temporária é trocada na hora)
 with conectar() as _c:
@@ -163,6 +165,21 @@ conferir("histórico: do aviso de hoje só as contagens (sem o texto, sem imóve
          json.dumps(hist_um.get("hoje")))
 sem_local = enviar(csv_bytes(t.drop(columns="local"))).json()
 conferir("sem a coluna local: sem aviso de hoje (o comparativo explica o que falta)", all(mm["hoje"] is None for mm in sem_local["municipios"]))
+# formato da base da distribuidora: NUMCDC, ENDERECO completo e LOCAL = URBANO/RURAL
+dist = t.rename(columns={"uc": "NUMCDC", "latitude": "LATITUDE", "longitude": "LONGITUDE"}).drop(columns="local")
+dist["ENDERECO"] = [f"{l}, {100 + i}, casa {i % 4 + 1} - CEP 36700-{i % 1000:03d}" for i, l in enumerate(t["local"])]
+dist["LOCAL"] = ["RURAL" if str(l).upper().startswith(("SITIO", "FAZENDA", "CHACARA")) else "URBANO" for l in t["local"]]
+rd = enviar(csv_bytes(dist))
+jd = rd.json()
+textos_hoje = " ".join((mm.get("hoje") or {}).get("texto", "") for mm in jd.get("municipios", []))
+conferir("planilha da distribuidora (NUMCDC, ENDERECO, LOCAL URBANO/RURAL) aceita, com as mesmas UCs",
+         rd.status_code == 200 and jd["planilha"]["validas"] == j["planilha"]["validas"] == 758
+         and [(mm["nome"], mm["ucs"]) for mm in jd["municipios"]] == [(mm["nome"], mm["ucs"]) for mm in j["municipios"]],
+         f"{rd.status_code} {str(jd)[:160]}")
+conferir("aviso de hoje pelo ENDERECO: sem número de casa nem CEP", bool(textos_hoje) and not numero_de_casa_ou_cep(textos_hoje),
+         str(numero_de_casa_ou_cep(textos_hoje)[:5]))
+conferir("aviso de hoje pelo ENDERECO: cita ruas e imóveis, não URBANO/RURAL",
+         not re.search(r"\b(urbano|rural)\b", textos_hoje, re.I) and imovel in textos_hoje, textos_hoje[:200])
 
 # ---------- 3a. Dashboard: os números batem com o histórico ----------
 hist = cli.get("/api/historico").json()["avisos"]

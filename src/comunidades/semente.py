@@ -12,7 +12,7 @@ Uso:
 
 import sys
 
-from .api.acesso import hash_senha, senha_temporaria
+from .senhas import hash_senha, senha_temporaria
 from .banco import acesso as banco
 from .nucleo.acesso import PERFIS
 

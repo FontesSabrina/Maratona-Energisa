@@ -1,8 +1,8 @@
 """Login, sessão e permissões da API.
 
-- Senha: Argon2id (argon2-cffi); a mensagem de erro é a mesma para e-mail desconhecido e senha
-  errada, e o tempo também (o hash é conferido mesmo sem usuário). 5 erros seguidos bloqueiam a
-  conta por 15 minutos; cada IP tem um limite de tentativas por janela de tempo.
+- Senha: Argon2id (senhas.py); a mensagem de erro é a mesma para e-mail desconhecido, senha
+  errada e conta em bloqueio, e o tempo também (o hash é conferido mesmo sem usuário). 5 erros
+  seguidos bloqueiam a conta por 15 minutos; cada IP tem um limite de tentativas por janela de tempo.
 - Sessão: token aleatório num cookie HttpOnly, SameSite=Strict (Secure em produção); o banco
   guarda só o hash. Acaba com 8 h sem uso ou 24 h no total, ao sair, ao trocar a senha (as
   outras sessões) e ao bloquear o usuário.
@@ -17,34 +17,22 @@ import time
 from collections import defaultdict, deque
 from urllib.parse import urlsplit
 
-from argon2 import PasswordHasher
-from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from .. import senhas
 from ..banco import acesso as banco
 from ..nucleo import acesso as regras
+from ..senhas import HASH_FALSO, hash_senha, senha_temporaria
 
 COOKIE = "farol_sessao"
 PRODUCAO = os.environ.get("FAROL_PRODUCAO", "") == "1"   # no Render: cookie só por HTTPS
-HASHER = PasswordHasher()                                # Argon2id, parâmetros recomendados pela biblioteca
-HASH_FALSO = HASHER.hash(secrets.token_urlsafe(16))      # para e-mail desconhecido levar o mesmo tempo
 LIMITE_IP, JANELA_IP = 30, 600                           # tentativas de login por IP a cada 10 minutos
 _tentativas_ip: dict[str, deque] = defaultdict(deque)
-ERRO_LOGIN = "E-mail ou senha incorretos."
+# a mesma para e-mail desconhecido, senha errada e conta em bloqueio temporário: não revela se o e-mail existe
+ERRO_LOGIN = "E-mail ou senha incorretos. Após 5 tentativas erradas o acesso fica suspenso por 15 minutos."
 
 rotas = APIRouter(prefix="/api")
-
-
-def senha_temporaria() -> str:
-    """16 caracteres sem os ambíguos (0/O, 1/l/I), em 4 grupos para ditar: 'k7Pm-3xQa-...'"""
-    alfabeto = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    s = "".join(secrets.choice(alfabeto) for _ in range(16))
-    return "-".join(s[i:i + 4] for i in range(0, 16, 4))
-
-
-def hash_senha(senha: str) -> str:
-    return HASHER.hash(senha)
 
 
 def _publico(u: dict) -> dict:
@@ -109,10 +97,7 @@ def _limite_ip(ip: str) -> None:
 
 
 def _conferir_senha(hash_: str, senha: str) -> bool:
-    try:
-        return HASHER.verify(hash_, senha)
-    except (VerifyMismatchError, VerificationError, InvalidHashError):
-        return False
+    return senhas.conferir(hash_, senha)
 
 
 @rotas.post("/entrar")
@@ -126,7 +111,7 @@ def entrar(dados: Entrada, request: Request, response: Response) -> dict:
         raise HTTPException(401, ERRO_LOGIN)
     if u["bloqueado_ate"] and u["bloqueado_ate"].timestamp() > time.time():
         banco.registrar("login recusado (conta em bloqueio temporário)", "", u["id"], u["empresa_id"])
-        raise HTTPException(423, "Conta bloqueada por algumas tentativas erradas. Tente de novo em 15 minutos.")
+        raise HTTPException(401, ERRO_LOGIN)
     if not senha_ok:
         f = banco.registrar_falha(u["id"], regras.MAX_TENTATIVAS, regras.BLOQUEIO)
         banco.registrar("senha errada" + (" (conta bloqueada por 15 min)" if f["bloqueado_ate"] else ""), "", u["id"], u["empresa_id"])
@@ -134,7 +119,9 @@ def entrar(dados: Entrada, request: Request, response: Response) -> dict:
     if u["status"] != "ativo" or u.get("empresa_status") == "suspensa":
         banco.registrar("login recusado (usuário bloqueado ou empresa suspensa)", "", u["id"], u["empresa_id"])
         raise HTTPException(403, "Acesso desativado. Fale com o administrador da sua empresa.")
-    banco.registrar_acesso(u["id"], hash_senha(dados.senha) if HASHER.check_needs_rehash(u["senha_hash"]) else None)
+    # hash de parâmetros antigos (ex.: o padrão de 64 MiB): refeito com os atuais, com a mesma senha conferida
+    senha = dados.senha[:regras.SENHA_MAX]
+    banco.registrar_acesso(u["id"], hash_senha(senha) if senhas.precisa_refazer(u["senha_hash"]) else None)
     token = secrets.token_urlsafe(32)
     banco.criar_sessao(u["id"], token)
     response.set_cookie(COOKIE, token, httponly=True, secure=PRODUCAO, samesite="strict", path="/",

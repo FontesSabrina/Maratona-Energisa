@@ -25,6 +25,8 @@ SINONIMOS = {
     # endereco vem antes de local (no modelo antigo, sem endereco, local continua valendo)
     "local": ("local_aviso", "imovel", "nome_imovel", "endereco", "local"),
 }
+# colunas de endereço completo: delas o aviso de hoje leva só o nome da rua (so_rua)
+ENDERECO = ("endereco",)
 SIM = {"sim", "s", "1", "true", "verdadeiro", "x", "yes", "y"}
 NAO = {"nao", "n", "0", "false", "falso", "no", ""}
 MAX_LINHAS = 50_000
@@ -84,6 +86,49 @@ def _texto(v) -> str:
     return "" if v is None or pd.isna(v) else str(v).strip()
 
 
+# Endereço -> só a rua. O aviso de hoje cita a rua, nunca o número da casa, o complemento ou o CEP.
+_CEP = re.compile(r"\bCEP\b\.?:?\s*\d{2}\.?\d{3}-?\d{3}|\b\d{2}\.?\d{3}-\d{3}\b|\b\d{8}\b", re.I)
+_CORTE = re.compile(r",|\s[-–—]\s|\s\(")   # depois da vírgula, do " - " ou do "(" vem número, bairro ou cidade
+_NUMERO = re.compile(r"\s+(n[º°ºo]\.?|n\.|num\.?|n[úu]mero)\s*\d.*$", re.I)
+_COMPLEMENTO = re.compile(r"\s+(casa|ap|apt|apto|apartamento|lote|lt|quadra|qd|bloco|bl|sala|loja|km|s/n|s\.n\.?|sn)"
+                          r"(\.|\b|$).*$", re.I)
+# um número solto no fim é o da casa, salvo quando é o nome da via ("Estrada 267") ou de uma rodovia ("BR 116")
+_TIPO_VIA = {"rua", "r", "avenida", "av", "travessa", "tv", "alameda", "al", "praca", "pc", "estrada", "est",
+             "rodovia", "rod", "beco", "vila", "largo", "ladeira", "acesso", "via", "viela", "servidao"}
+_RODOVIA = set("BR AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split())
+_FIM_NUMERO = re.compile(r"^(?P<antes>.*?)\s+(?P<num>\d+[a-zA-Z]?)$")
+
+
+def e_so_tipo_de_via(texto: str) -> bool:
+    """'Rua', 'Av.', 'Beco': só o tipo, sem o nome (o que vem depois dele é o nome da via)."""
+    p = str(texto).split()
+    return len(p) == 1 and _chave(p[0]) in _TIPO_VIA
+
+
+def so_rua(endereco: str) -> str:
+    """'Rua das Flores, 123, casa 2 - CEP 36700-000' -> 'Rua das Flores'; 'Av. Brasil nº 45' -> 'Av. Brasil'.
+
+    Tira o CEP, o que vem depois da vírgula ou do " - " (número, bairro, cidade), o "nº 45" e o
+    complemento (casa, apto, lote...). Um nome sem nada disso ("Fazenda Boa Vista") fica igual.
+    Vazio quando não sobra nome de rua."""
+    s = _CEP.sub(" ", " ".join(str(endereco).split()))
+    s = _CORTE.split(s, maxsplit=1)[0]
+    sem_numero = _NUMERO.sub("", s)
+    if not e_so_tipo_de_via(sem_numero):   # "Beco Número 399" (CNEFE) é o nome da via, não o número da casa
+        s = sem_numero
+    s = _COMPLEMENTO.sub("", s)
+    m = _FIM_NUMERO.match(s.strip())
+    if m:
+        antes = m.group("antes").split()
+        so_o_tipo = e_so_tipo_de_via(m.group("antes"))
+        rodovia = antes[-1].upper() in _RODOVIA   # Rodovia BR 116, Estrada MG 120
+        # "Beco Número 399": se o "número" sobrou até aqui, é parte do nome da via (o _NUMERO não o tirou)
+        numero_da_via = _chave(antes[-1]) in {"numero", "n", "no", "num"}
+        if not (so_o_tipo or rodovia or numero_da_via):
+            s = m.group("antes")
+    return s.strip(" .,;:-–—/")
+
+
 def validar(t: pd.DataFrame) -> Planilha:
     """t: a planilha como lida (todas as colunas como texto), na ordem das linhas."""
     if len(t) == 0:
@@ -96,6 +141,7 @@ def validar(t: pd.DataFrame) -> Planilha:
         raise PlanilhaInvalida("Faltam colunas obrigatórias: " + ", ".join(faltam)
                                + ". O modelo tem: uc, latitude, longitude, equipamento_vital, classe e local.")
     problemas, validas, vistas = [], [], {}
+    e_endereco = "local" in col and _chave(col["local"]) in ENDERECO
     for i, r in enumerate(t.itertuples(index=False)):
         linha = i + 2  # a linha 1 é o cabeçalho
         v = dict(zip(t.columns, r))
@@ -128,6 +174,8 @@ def validar(t: pd.DataFrame) -> Planilha:
                 problemas.append((linha, "equipamento_vital com valor inválido (use sim ou não); a UC entra como \"a confirmar\""))
         classe = _texto(v[col["classe"]]) if "classe" in col else ""
         local = " ".join(_texto(v[col["local"]]).split()) if "local" in col else ""
+        if e_endereco:
+            local = so_rua(local)
         if len(local) > MAX_LOCAL:
             problemas.append((linha, f"local com mais de {MAX_LOCAL} caracteres (cortado)"))
             local = local[:MAX_LOCAL].rstrip()

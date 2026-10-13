@@ -28,7 +28,9 @@ const agora = new Date('2026-10-10T12:00:00Z');
 const novo = () => M.criarEstado(D.demo);
 
 // ---------- O Model embutido na página é o mesmo do arquivo-fonte ----------
-ok(html.includes(fonte), 'admin.html embute exatamente o admin_modelo.js');
+// ignorando o fim de linha: no Windows o git entrega o .js com CRLF, e o gerador grava LF
+const semCR = s => s.replace(/\r\n/g, '\n');
+ok(semCR(html).includes(semCR(fonte)), 'admin.html embute exatamente o admin_modelo.js');
 
 // ---------- CNPJ ----------
 for (const c of ['11.222.333/0001-81', '11222333000181', '12.ABC.345/01DE-35', '12abc34501de35', 'FA.ROL.DEM/0001-19', 'CO.OPE.XEM/0001-27'])

@@ -20,7 +20,7 @@ from pathlib import Path
 
 os.environ["FAROL_ESQUEMA"] = "teste_app"
 
-from comunidades.api.acesso import hash_senha  # noqa: E402
+from comunidades.senhas import hash_senha  # noqa: E402
 from comunidades.banco import acesso as banco  # noqa: E402
 from comunidades.banco.conexao import conectar  # noqa: E402
 from comunidades.semente import semear  # noqa: E402
@@ -41,7 +41,7 @@ for email in ("admin@emg.example", "consulta@emg.example", "admin@farol.example"
     banco.definir_senha(banco.usuario_por_email(email)["id"], hash_senha(senhas[email]), trocar_senha=False)
 
 env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
-api = subprocess.Popen([sys.executable, "-m", "uvicorn", "comunidades.api.app:app", "--host", "127.0.0.1", "--port", str(PORTA)],
+api = subprocess.Popen([sys.executable, "-m", "uvicorn", "comunidades.api.app:app", "--host", "127.0.0.1", "--port", str(PORTA), "--no-proxy-headers"],
                        env=env, cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     for _ in range(100):

@@ -154,7 +154,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const contornos = await p.avaliar(`camadaComunidades.getLayers().filter(l => !l.feature.properties.c).length`);
   conferir('mapa: contorno das outras comunidades dos municípios afetados', contornos > 20, String(contornos));
   const pts = await p.avaliar(`({ n: camadaUcs ? camadaUcs.getLayers().length : 0, botao: !$('botaoUcs').closest('li').hidden,
-    canvas: !!document.querySelector('#mapa canvas'), dicas: camadaUcs.getLayers().slice(0, 50).map(l => l.getTooltip().getContent()) })`);
+    canvas: !!document.querySelector('#mapa canvas'), dicas: camadaUcs.getLayers().slice(0, 50).map(l => {
+      const c = l.getTooltip().getContent(); return typeof c === 'function' ? c(l).textContent : String(c); }) })`);
   const dicaComUc = pts.dicas.filter(d => /\d{6,}/.test(d));
   conferir('mapa: um ponto por UC válida (758), num canvas, dica sem número de UC', pts.n === 758 && pts.botao && pts.canvas && !dicaComUc.length,
     JSON.stringify({ ...pts, dicas: pts.dicas.slice(0, 2) }));
@@ -162,6 +163,21 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const escondeu = await p.avaliar(`!camadaUcs && $('botaoUcs').textContent === 'Mostrar UCs'`);
   await p.avaliar(`($('botaoUcs').click(), 0)`);
   conferir('botão esconde e mostra as UCs', escondeu && await p.avaliar(`camadaUcs?.getLayers().length === 758`));
+  // dica da UC com HTML no nome da comunidade: vira texto, nada é executado nem carregado
+  const xss = await p.avaliar(`(() => {
+    const m = estado.resultado.municipios.find(x => (x.pontos || []).some(pt => x.comunidades[pt[2]]));
+    const c = m.comunidades[m.pontos.find(pt => m.comunidades[pt[2]])[2]], nome = c.nome;
+    c.nome = '<img src=x onerror="window.__xss=1">Teste';
+    desenharUcs();
+    const l = camadaUcs.getLayers().find(x => { const d = x.getTooltip().getContent(); return (typeof d === 'function' ? d(x).textContent : String(d)).includes('<img'); });
+    l?.openTooltip();
+    const el = l?.getTooltip().getElement();
+    const r = { achou: !!l, texto: el?.textContent || '', imgs: el ? el.querySelectorAll('img').length : -1 };
+    l?.closeTooltip(); c.nome = nome; desenharUcs();
+    return r; })()`);
+  await new Promise(r => setTimeout(r, 300));
+  conferir('dica da UC: HTML no nome vira texto (sem <img>, nada executado)', xss.achou && xss.imgs === 0
+    && xss.texto.includes('<img src=x') && await p.avaliar(`window.__xss === undefined`), JSON.stringify(xss));
   conferir('resumo: 758 linhas e o prazo de 5 dias úteis', /758/.test(tela.resumo) && /5 dias úteis/.test(tela.resumo), tela.resumo);
   await captura(p, '2_resultado.png');
   await p.avaliar(`($('avancarResultado').click(), 0)`);
@@ -297,6 +313,11 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('Consulta: aviso só para ler (sem editar nem desfazer), com PDF', leitura.readonly && !leitura.desfazer && leitura.pdf > 0, JSON.stringify(leitura));
   conferir('Consulta: nenhum ponto de UC no mapa', await p.avaliar(`!camadaUcs && $('botaoUcs').closest('li').hidden`));
   conferir('Consulta: a API recusa gerar aviso (403)', await p.avaliar(`fetch('/api/avisos', { method: 'POST' }).then(r => r.status === 403)`));
+  const semAudio = await p.avaliar(`(() => { desenharComparativo();
+    return document.querySelectorAll('[data-acao=ouvir], [data-acao=audio], [data-comp]').length; })()`);
+  conferir('Consulta: sem Ouvir nem Baixar áudio (no aviso e no comparativo)', semAudio === 0, String(semAudio));
+  conferir('Consulta: a API recusa gerar áudio (403)', await p.avaliar(`fetch('/api/audio', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: 'teste' }) }).then(r => r.status === 403)`));
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const a = await entrarNaTela(p, 'admin@emg.example', SENHAS['admin@emg.example']);

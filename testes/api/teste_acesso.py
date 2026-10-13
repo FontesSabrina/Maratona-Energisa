@@ -166,7 +166,17 @@ conferir("registro: Admin do Farol vê tudo; Admin da empresa só a dele",
 for _ in range(5):
     entrar("consulta@emg.example", "senha-errada-xyz")
 _, r = entrar("consulta@emg.example", NOVA)
-conferir("5 senhas erradas bloqueiam a conta (mesmo com a senha certa depois: 423)", r.status_code == 423, r.text[:100])
+conferir("5 senhas erradas bloqueiam a conta (mesmo com a senha certa depois)", r.status_code == 401, r.text[:100])
+_, desconhecido = entrar("ninguem@emg.example", NOVA)
+_, errada = entrar("consulta@emg.example", "senha-errada-xyz")
+conferir("conta bloqueada responde igual a e-mail desconhecido e a senha errada (status e texto)",
+         r.status_code == desconhecido.status_code == errada.status_code == 401
+         and r.json() == desconhecido.json() == errada.json() == {"detail": api_acesso.ERRO_LOGIN},
+         f"{r.status_code} {r.text[:80]} | {desconhecido.status_code} {desconhecido.text[:80]}")
+conferir("a mensagem genérica avisa da suspensão por 15 minutos",
+         "Após 5 tentativas erradas o acesso fica suspenso por 15 minutos" in r.json().get("detail", ""), r.text[:120])
+conferir("o bloqueio fica no registro interno", any("bloqueio temporário" in x[0] for x in
+         sql("SELECT acao FROM registro ORDER BY id DESC LIMIT 5")), "")
 sql("UPDATE usuario SET bloqueado_ate = NULL WHERE email = 'consulta@emg.example'")
 c, _ = entrar("consulta@emg.example", NOVA)
 c.post("/api/sair")
