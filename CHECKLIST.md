@@ -11,6 +11,16 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - [x] Fase E: telas por perfil, visual único Farol, Ajuda
 - [x] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito) — parcial, ver resumo
 - [x] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
+- [ ] Fase H: relatórios completos, registro total, ficha da comunidade
+  - [ ] H0 regras dos relatórios (rodapé, segunda via, comparações, Como calculamos, PDF/CSV/Enviar, filtros, permissões)
+  - [ ] H1 mensal (diretoria)
+  - [ ] H2 custos por rádio
+  - [ ] H3 comunidades mais afetadas
+  - [ ] H4 prazos
+  - [ ] H5 auditoria e auditoria geral
+  - [ ] H6 registro total e linha do tempo do aviso
+  - [ ] H7 ficha da comunidade, mapa de calor, alerta de repetição
+  - [ ] Semente do ano, DEMO.md, PR atualizado
 
 ## Resumos por fase
 
@@ -49,3 +59,5 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Feito: README completo (o que é, resultados do pipeline, passo a passo no Windows, perfis, arquitetura MVC, segurança/LGPD, validação, próximos passos); SEGURANCA.md com a tabela "Ameaça → proteção → teste que prova"; ORIGEM.md na raiz (dados, componentes, voz, Mailpit, dependências, licenças e hashes); docs/DEMO.md (roteiro de 5 minutos com o bloqueio do equipamento vital); DEPLOY.md com as variáveis novas; testes/rodar_testes.ps1 (desde a Fase B). Banco local migrado e com a semente de demonstração (16 avisos, 19 envios, 4 rádios; auditoria íntegra).
 - Bateria final: rodar_testes.ps1 21 de 21 (980 verificações); --so-algoritmo igual ao passo 12.
 - PR: sabrina/plano-final -> melhorias (link no fim da sessão).
+
+## Decisões da Fase H (tomadas sem perguntar: a opção mais segura e mais simples)
