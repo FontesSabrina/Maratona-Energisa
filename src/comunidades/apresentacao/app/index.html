@@ -128,6 +128,26 @@
       <div id="painelDash" class="dash"></div>
     </section>
 
+    <!-- Relatórios: o do período (mensal), com filtros, PDF e CSV -->
+    <section id="vista-relatorios" class="vista" hidden aria-labelledby="tituloRelatorios">
+      <h1 id="tituloRelatorios">Relatórios</h1>
+      <p class="ajuda">Desligamentos, avisos, envios às rádios, custo e economia do período. Só números agregados: nenhuma UC nem
+        nome de cliente. Ao baixar em PDF ou CSV, o relatório ganha o seu nome e um código de verificação (fica na auditoria).</p>
+      <form id="formRelatorio" class="cartao filtros-relatorio" novalidate>
+        <label>Mês <select id="relMes"></select></label>
+        <label>Município <select id="relMunicipio"><option value="">Todos</option></select></label>
+        <label>Tipo <select id="relTipo"><option value="">Todos</option></select></label>
+        <label>Rádio <select id="relRadio"><option value="">Todas</option></select></label>
+        <label>Pessoa <select id="relPessoa"><option value="">Todas</option></select></label>
+        <div class="acoes">
+          <button type="submit" class="prim">Ver o relatório</button>
+          <button type="button" data-rel="pdf">Baixar PDF</button>
+          <button type="button" data-rel="csv">Baixar CSV</button>
+        </div>
+      </form>
+      <div id="relatorio" class="relatorio"></div>
+    </section>
+
     <!-- Comparativo: o aviso de hoje (fazenda a fazenda) x o aviso por comunidade -->
     <section id="vista-comparativo" class="vista" hidden aria-labelledby="tituloComparativo">
       <h1 id="tituloComparativo">Comparativo do aviso</h1>
@@ -192,6 +212,14 @@
         guarda o código da anterior: qualquer adulteração quebra a corrente.</p>
       <div class="acoes"><button type="button" id="verificarAuditoria">Conferir a integridade</button></div>
       <p id="estadoAuditoria" class="estado" role="status" aria-live="polite"></p>
+      <form id="formAuditoria" class="cartao filtros-relatorio" novalidate>
+        <h2 id="tituloRelAuditoria">Relatório de auditoria</h2>
+        <label>Mês <select id="audMes"></select></label>
+        <label id="audEmpresaRotulo" hidden>Empresa (sigla) <input id="audEmpresa" maxlength="10" autocomplete="off" placeholder="todas"></label>
+        <label>Pessoa (nome) <input id="audPessoa" maxlength="120" autocomplete="off" placeholder="todas"></label>
+        <label class="confirmar" for="audAcessos"><input type="checkbox" id="audAcessos"><span>Só acessos (entrar, sair, senha)</span></label>
+        <div class="acoes"><button type="button" data-aud="pdf">Baixar PDF</button><button type="button" data-aud="csv">Baixar CSV</button></div>
+      </form>
       <div id="listaRegistro" class="lista"></div>
     </section>
   </section>

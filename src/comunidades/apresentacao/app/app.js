@@ -35,12 +35,13 @@ const estado = {
   formulario: null,        // { data: '20/11', dataLonga: '20/11/2026', horario: '8h às 14h', idioma: 'pt-BR' }
   historico: [], usuarios: [], perfis: {}, empresas: [], registro: [],
   filtroHistorico: { busca: '', periodo: '' },
-  painel: null,            // /api/painel: números do histórico da empresa
+  painel: null,            // /api/painel: números do histórico da empresa (e o bloco do mês)
+  relatorio: null,         // /api/relatorios/mensal: o relatório do período com os filtros
 };
 
 const VISTAS = [  // vista, rótulo, ação exigida
   ['aviso', 'Novo aviso', 'gerar_aviso'], ['historico', 'Histórico', 'ver_historico'], ['painel', 'Dashboard', 'ver_historico'],
-  ['comparativo', 'Comparativo', 'ver_historico'],
+  ['relatorios', 'Relatórios', 'ver_historico'], ['comparativo', 'Comparativo', 'ver_historico'],
   ['usuarios', 'Usuários', 'gerenciar_usuarios'], ['empresas', 'Empresas', 'gerenciar_empresas'],
   ['registro', 'Auditoria', 'ver_registro'],
 ];
@@ -155,6 +156,18 @@ function previaEconomia({ cobranca, valor, segundosFarol, segundosHoje, custoAnt
     tipo: custoAntigo != null ? 'informada' : null, tempo };
 }
 const dinheiro = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+// os últimos 12 meses ("2026-10"), do mais recente ao mais antigo, para os filtros dos relatórios
+function ultimosMeses(hoje = new Date()) {
+  const saida = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    saida.push([`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })]);
+  }
+  return saida;
+}
+const filtrosRelatorio = () => Object.fromEntries([['mes', $('relMes').value], ['municipio', $('relMunicipio').value], ['tipo', $('relTipo').value],
+  ['radio', $('relRadio').value], ['pessoa', $('relPessoa').value]].filter(([, v]) => v));
+const consulta = f => new URLSearchParams(f).toString();
 const COBRANCA = { fechado: 'valor fechado pelo aviso', minuto: 'por minuto no ar' };
 const CANAL = { email: 'e-mail', whatsapp: 'WhatsApp', copia: 'cópia da mensagem' };
 const SITUACAO_ENVIO = { preparando: 'preparando', enviado: 'enviado', entregue: 'entregue ao servidor de e-mail', falhou: 'falhou',
@@ -499,6 +512,7 @@ function desenharSolicitado() {
   const partes = r ? [solicitadoTexto(r), r.desligamento ? `Tipo: ${r.desligamento.rotulo} (${r.desligamento.motivo})` : ''].filter(Boolean) : [];
   $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })),
     r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Desligamento cancelado' }) : '');
+  if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: 'Comprovante (PDF)' }));
   const lugar = $('acoesAviso');
   lugar.hidden = !(r && estado.origem === 'historico' && pode('gerar_aviso') && r.status !== 'cancelado');
   if (lugar.hidden) return lugar.replaceChildren();
@@ -595,6 +609,62 @@ function desenharComparativo() {
   }));
 }
 
+// ---- Relatório do período (mensal) ----
+function desenharFiltrosRelatorio() {
+  const r = estado.relatorio, op = r?.opcoes;
+  if (!$('relMes').options.length) $('relMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
+  if (!op) return;
+  const preencher = (id, todos, itens) => {
+    const atual = $(id).value;
+    $(id).replaceChildren(no('option', { value: '', texto: todos }), ...itens.map(([v, t]) => no('option', { value: String(v), texto: t, selected: String(v) === atual })));
+  };
+  preencher('relMunicipio', 'Todos', op.municipios);
+  preencher('relTipo', 'Todos', op.tipos.map(t => [t, op.rotulos_tipos[t] || t]));
+  preencher('relRadio', 'Todas', op.radios);
+  preencher('relPessoa', 'Todas', op.pessoas.map(p => [p, p]));
+}
+
+function desenharRelatorio() {
+  desenharFiltrosRelatorio();
+  const r = estado.relatorio;
+  if (!r) return $('relatorio').replaceChildren();
+  const s = r.resumo, tabela = (cab, linhas, vazio = 'Nada neste período.') => linhas.length
+    ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, cab.map(t => no('th', { texto: t })))),
+      no('tbody', {}, linhas.map(l => no('tr', {}, l.map(v => no('td', { texto: v == null ? '—' : String(v) })))))))
+    : no('p', { classe: 'ajuda', texto: vazio });
+  const bloco = (titulo, ...filhos) => no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: titulo }), ...filhos);
+  const kpi = (rotulo, valor, extra) => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: rotulo }),
+    no('strong', { classe: 'kpi-valor', texto: valor }), extra ? no('span', { classe: 'kpi-extra', texto: extra }) : null);
+  const comp = r.comparacao ? bloco(`Comparação com ${r.comparacao.periodo}`, tabela(['Número', 'Este período', 'Anterior', 'Diferença'],
+    Object.entries(r.comparacao.numeros).map(([k, v]) => [{ desligamentos: 'Desligamentos', avisos: 'Avisos', ucs: 'UCs', envios: 'Envios',
+      confirmados: 'Confirmados', segundos_no_ar: 'Segundos no ar', custo: 'Custo (R$)', economia_calculada: 'Economia calculada (R$)',
+      economia_informada: 'Economia informada (R$)', tempo_economizado: 'Segundos economizados', pct_no_prazo: '% no prazo' }[k], v.atual, v.anterior, v.diferenca]))) : null;
+  $('relatorio').replaceChildren(
+    no('h2', { classe: 'subtitulo', texto: `${r.periodo.rotulo[0].toUpperCase()}${r.periodo.rotulo.slice(1)}` + (Object.keys(r.filtros).length ? ' (com filtros)' : '') }),
+    no('div', { classe: 'kpis' },
+      kpi('Desligamentos', fmt(s.desligamentos), `${fmt(s.cancelados)} cancelado(s)`),
+      kpi('Avisos e comunidades', `${fmt(s.avisos)} · ${fmt(s.comunidades)}`, `${fmt(s.ucs)} UCs, ${fmt(s.equipamento_vital)} com equipamento vital`),
+      kpi('Envios às rádios', fmt(s.envios), `${fmt(s.confirmados)} confirmado(s), ${fmt(s.falharam)} falha(s)`),
+      kpi('Tempo no ar', tempoNoAr(s.segundos_no_ar), tempoArTexto(s.tempo_economizado)),
+      kpi('Custo', dinheiro(s.custo)),
+      kpi('Economia', dinheiro(Number(s.economia_calculada) + Number(s.economia_informada)),
+        `${dinheiro(s.economia_calculada)} calculada · ${dinheiro(s.economia_informada)} informada`),
+      kpi('No prazo', s.pct_no_prazo == null ? '—' : `${s.pct_no_prazo.toLocaleString('pt-BR')}%`, `${fmt(s.no_prazo)} de ${fmt(s.com_envio)} com envio`)),
+    comp,
+    bloco('Por tipo de desligamento', tabela(['Tipo', 'Desligamentos', 'UCs'], r.por_tipo.map(x => [x.rotulo, fmt(x.desligamentos), fmt(x.ucs)]))),
+    bloco('Por rádio', tabela(['Rádio', 'Envios', 'Confirmados', 'Tempo no ar', 'Custo', 'Economia'],
+      r.por_radio.map(x => [x.radio, fmt(x.envios), fmt(x.confirmados), tempoNoAr(x.segundos), dinheiro(x.custo), dinheiro(x.economia)]))),
+    bloco('Comunidades mais afetadas', tabela(['Comunidade', 'Distrito', 'Município', 'Avisos', 'UCs'],
+      r.por_comunidade.map(x => [semSufixo(x.comunidade), x.distrito, x.municipio, fmt(x.avisos), fmt(x.ucs)]))),
+    bloco('Avisos fora do prazo', tabela(['Aviso', 'Desligamento', 'Municípios', 'Regra', 'Atraso'],
+      r.fora_do_prazo.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.municipios, x.regra, `${x.atraso_horas} h`]), 'Nenhum aviso fora do prazo.'),
+      r.sem_envio.length ? no('p', { classe: 'ajuda', texto: `Sem envio registrado (fora da conta do prazo): ${r.sem_envio.map(x => `nº ${x.aviso}`).join(', ')}.` }) : null),
+    bloco('Como a economia foi calculada', no('ul', { classe: 'como' }, r.como_calculado.map(t => no('li', { texto: t })))),
+    bloco('Lista detalhada', tabela(['Aviso', 'Desligamento', 'Tipo', 'Municípios', 'UCs', 'Rádios', 'Envios', 'Custo', 'No prazo', 'Pedido por', 'Situação'],
+      r.lista.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.tipo, x.municipios, fmt(x.ucs), x.radios, `${x.confirmados}/${x.envios}`,
+        dinheiro(x.custo), x.no_prazo == null ? '—' : x.no_prazo ? 'sim' : 'não', x.por, x.status]))));
+}
+
 // ---- Dashboard: só números do histórico da empresa ----
 function desenharPainel() {
   const d = estado.painel;
@@ -602,6 +672,13 @@ function desenharPainel() {
   const t = d.totais;
   const kpi = (rotulo, valor, extra) => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: rotulo }),
     no('strong', { classe: 'kpi-valor', texto: valor }), extra ? no('span', { classe: 'kpi-extra', texto: extra }) : null);
+  const mesKpi = d.mes ? no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: `Este mês (${d.mes.mes})` }),
+    no('div', { classe: 'kpis' },
+      kpi('Gasto com rádio', dinheiro(d.mes.gasto), `${fmt(d.mes.envios)} envio(s), ${fmt(d.mes.confirmados)} confirmado(s)`),
+      kpi('Economizado', dinheiro(Number(d.mes.economia_calculada) + Number(d.mes.economia_informada)),
+        `${dinheiro(d.mes.economia_calculada)} calculada · ${dinheiro(d.mes.economia_informada)} informada`),
+      kpi('Desligamentos', fmt(d.mes.desligamentos), tempoArTexto(d.mes.tempo_economizado)),
+      kpi('No prazo', d.mes.pct_no_prazo == null ? '—' : `${d.mes.pct_no_prazo.toLocaleString('pt-BR')}%`, `${fmt(d.mes.com_envio)} com envio`))) : null;
   const kpis = no('div', { classe: 'kpis' },
     kpi('Avisos gerados', fmt(t.avisos), `${fmt(t.ultimos_30_dias)} nos últimos 30 dias`),
     kpi('UCs avisadas', fmt(t.ucs)),
@@ -630,7 +707,7 @@ function desenharPainel() {
       no('span', { classe: 'chip', texto: dataLonga(x.data) }),
       no('span', { texto: `${x.horario} · ${x.municipios.join(', ') || 'nenhum município'} · ${fmt(x.ucs)} UCs` }))))
       : no('p', { classe: 'ajuda', texto: 'Nenhum desligamento com data a partir de hoje.' }));
-  $('painelDash').replaceChildren(kpis, meses, proximos,
+  $('painelDash').replaceChildren(...[mesKpi].filter(Boolean), kpis, meses, proximos,
     ranking('Municípios com mais avisos', d.municipios, i => `${i.nome}/${i.uf}`, 'Nenhum aviso ainda.'),
     ranking('Comunidades mais citadas', d.comunidades, i => `${semSufixo(i.nome)} (${i.municipio})`, 'Nenhum aviso ainda.'));
 }
@@ -1105,9 +1182,9 @@ function limparTela() {
     conferi: false, justificativa: '', abas: [], aba: '',
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
-  Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {} });
+  Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
-    'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria'])
+    'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes'])
     $(id).replaceChildren();
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
@@ -1137,6 +1214,8 @@ async function irPara(vista) {
   try {
     if (vista === 'historico') { estado.historico = (await api('/api/historico')).avisos; desenharHistorico(); }
     if (vista === 'painel') { estado.painel = await api('/api/painel'); desenharPainel(); }
+    if (vista === 'relatorios') { desenharFiltrosRelatorio(); await carregarRelatorio(); }
+    if (vista === 'registro') prepararAuditoria();
     if (vista === 'comparativo') { desenharComparativo(); estado.painel = await api('/api/painel'); desenharComparativo(); }
     if (vista === 'usuarios') { const j = await api('/api/usuarios'); estado.usuarios = j.usuarios; estado.perfis = j.perfis; desenharUsuarios(); }
     if (vista === 'empresas') { estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas(); }
@@ -1461,6 +1540,68 @@ async function acaoAviso(evento) {
   }
 }
 
+async function carregarRelatorio(evento) {
+  evento?.preventDefault();
+  try {
+    estado.relatorio = await api(`/api/relatorios/mensal?${consulta(filtrosRelatorio())}`);
+    desenharRelatorio();
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
+async function exportarRelatorio(evento) {
+  const b = evento.target.closest('button[data-rel]');
+  if (!b) return;
+  b.disabled = true;
+  try {
+    await baixarDaApi(`/api/relatorios/mensal.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-relatorio.${b.dataset.rel}`);
+    avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    b.disabled = false;
+  }
+}
+
+// auditoria: o relatório da empresa (Admin da empresa) ou o geral de acessos (Admin do Farol)
+function prepararAuditoria() {
+  const geral = pode('auditoria_geral');
+  $('formAuditoria').hidden = !geral && !pode('relatorio_auditoria');
+  $('tituloRelAuditoria').textContent = geral ? 'Auditoria geral de acessos (todas as empresas)' : 'Relatório de auditoria da empresa';
+  $('audEmpresaRotulo').hidden = !geral;
+  $('audAcessos').checked = geral;
+  if (!$('audMes').options.length) $('audMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
+}
+
+async function exportarAuditoria(evento) {
+  const b = evento.target.closest('button[data-aud]');
+  if (!b) return;
+  const f = { mes: $('audMes').value, so_acessos: String($('audAcessos').checked) };
+  if ($('audPessoa').value.trim()) f.pessoa = $('audPessoa').value.trim();
+  if (pode('auditoria_geral') && $('audEmpresa').value.trim()) f.empresa = $('audEmpresa').value.trim().toUpperCase();
+  b.disabled = true;
+  try {
+    await baixarDaApi(`/api/relatorios/${pode('auditoria_geral') ? 'acessos' : 'auditoria'}.${b.dataset.aud}?${consulta(f)}`, { method: 'GET' },
+      `farol-auditoria.${b.dataset.aud}`);
+    mensagemEm('estadoAuditoria', `Relatório baixado em ${b.dataset.aud.toUpperCase()}, com o seu nome e o código de verificação.`);
+  } catch (e) {
+    if (e.status !== 401) mensagemEm('estadoAuditoria', e.message, true);
+  } finally {
+    b.disabled = false;
+  }
+}
+
+async function baixarComprovante(evento) {
+  if (evento.target.id !== 'baixarComprovante') return;
+  try {
+    await baixarDaApi(`/api/historico/${estado.resultado.id}/comprovante.pdf`, { method: 'GET' }, 'farol-comprovante.pdf');
+    avisar(`Comprovante do aviso nº ${estado.resultado.id} baixado (registrado na auditoria).`);
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
 async function verificarAuditoria() {
   try {
     const v = await api('/api/auditoria/verificar');
@@ -1540,6 +1681,10 @@ async function abrir() {
   $('tipo').addEventListener('change', e => { for (const id of ['tipoOutroRotulo', 'tipoOutroAjuda']) $(id).hidden = e.target.value !== 'outro'; });
   $('acoesAviso').addEventListener('click', acaoAviso);
   $('verificarAuditoria').addEventListener('click', verificarAuditoria);
+  $('formRelatorio').addEventListener('submit', carregarRelatorio);
+  $('formRelatorio').addEventListener('click', exportarRelatorio);
+  $('formAuditoria').addEventListener('click', exportarAuditoria);
+  $('solicitado').addEventListener('click', baixarComprovante);
   $('conferencia').addEventListener('change', editarConferencia);
   $('conferencia').addEventListener('input', editarConferencia);
   $('conferencia').addEventListener('click', acaoConferencia);

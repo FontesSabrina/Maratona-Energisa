@@ -100,7 +100,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const ini = await p.avaliar(`({ tela: estado.tela, abas: [...document.querySelectorAll('#abas button')].map(b => b.textContent).join(','),
     conta: $('contaNome').textContent, municipios: estado.concessao?.features.length, idiomas: [...$('idioma').options].map(o => o.value).join(',') })`);
   conferir('depois da troca: app do Operador (Novo aviso, Histórico, Dashboard e Comparativo), 66 municípios, 3 idiomas',
-    ini.tela === 'app' && ini.abas === 'Novo aviso,Histórico,Dashboard,Comparativo' && /Operador/.test(ini.conta) && ini.municipios === 66 && ini.idiomas === 'pt-BR,en,es', JSON.stringify(ini));
+    ini.tela === 'app' && ini.abas === 'Novo aviso,Histórico,Dashboard,Relatórios,Comparativo' && /Operador/.test(ini.conta) && ini.municipios === 66 && ini.idiomas === 'pt-BR,en,es', JSON.stringify(ini));
 
   // mapa inicial: de perto, o contorno e o nome das comunidades (antes de gerar aviso); de longe, só os municípios
   await p.avaliar(`(mapa.setView([-21.53, -42.64], 13), 0)`);
@@ -387,8 +387,29 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     leopoldina: camadaConcessao.getLayers().find(l => l.feature.properties.nome === 'Leopoldina').options.fillOpacity,
     top: document.querySelector('#painelDash .ranking-nome')?.textContent })`);
   conferir('dashboard: 2 avisos, 12 meses, Leopoldina no topo e pintada no mapa',
-    /^Avisos gerados2/.test(dash.kpis[0]) && dash.barras === 12 && dash.legenda && dash.leopoldina > .3 && dash.top === 'Leopoldina/MG', JSON.stringify(dash));
+    dash.kpis.some(k => /^Avisos gerados2/.test(k)) && dash.barras === 12 && dash.legenda && dash.leopoldina > .3 && dash.top === 'Leopoldina/MG', JSON.stringify(dash));
+  const mesDash = await p.avaliar(`document.querySelector('#painelDash .dash-bloco h2')?.textContent + ' | ' + document.querySelector('#painelDash .dash-bloco .kpis')?.textContent`);
+  conferir('dashboard: o bloco do mês (gasto, economizado, desligamentos, no prazo)', /^Este mês/.test(mesDash) && /Gasto com rádio/.test(mesDash)
+    && /Economizado/.test(mesDash) && /No prazo/.test(mesDash), mesDash.slice(0, 200));
   await captura(p, '6_dashboard.png');
+  // relatórios: o do mês, na tela e em PDF
+  await p.avaliar(`irPara('relatorios')`);
+  await ate(p, `document.querySelectorAll('#relatorio .kpi').length >= 7`);
+  const relTela = await p.avaliar(`({ titulo: document.querySelector('#relatorio .subtitulo')?.textContent, kpi: document.querySelector('#relatorio .kpi-valor')?.textContent,
+    blocos: [...document.querySelectorAll('#relatorio .dash-bloco h2')].map(h => h.textContent), radios: $('relRadio').options.length,
+    texto: $('relatorio').textContent })`);
+  conferir('relatórios: o do mês na tela (resumo, por tipo, por rádio, comunidades, prazo, como a economia foi calculada e a lista)',
+    relTela.kpi === '1' && /1 cancelado/.test(relTela.texto) && relTela.blocos.includes('Por rádio') && relTela.blocos.includes('Como a economia foi calculada') && relTela.blocos.includes('Lista detalhada')
+    && relTela.radios === 2 && /Rádio Leopoldina FM/.test(relTela.texto) && !/\b3\d{9}\b/.test(relTela.texto), JSON.stringify({ ...relTela, texto: relTela.texto.slice(0, 120) }));
+  let nomeRel = '';
+  p.navegador.on('Browser.downloadWillBegin', e => { if (/relatorio/.test(e.suggestedFilename)) nomeRel = e.suggestedFilename; });
+  await p.avaliar(`(document.querySelector('[data-rel=pdf]').click(), 0)`);
+  await ate(p, `/Relatório baixado em PDF/.test($('estado').textContent)`);
+  await espera(600);
+  const relPdf = nomeRel ? textoDoPdf(readFileSync(join(CAP, nomeRel))) : '';
+  conferir('relatório em PDF: gerado pelo Operador, com o código de verificação', /Gerado por Operador da EMG \(Operador\) .* código de verificação FRL-/.test(relPdf),
+    `${nomeRel} ${relPdf.slice(0, 160)}`);
+  await captura(p, '6b_relatorios.png');
   await p.avaliar(`irPara('historico')`);
   conferir('saindo do dashboard, o mapa volta ao normal', await p.avaliar(`document.querySelector('.legenda-painel').hidden`));
 
@@ -412,7 +433,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
 {
   const p = await abrir(`${BASE}/`, { largura: 1440, altura: 900 });
   const c = await entrarNaTela(p, 'consulta@emg.example', SENHAS['consulta@emg.example']);
-  conferir('Consulta: só Histórico, Dashboard e Comparativo', c.tela === 'app' && c.abas.join(',') === 'Histórico,Dashboard,Comparativo', JSON.stringify(c));
+  conferir('Consulta: só Histórico, Dashboard, Relatórios e Comparativo', c.tela === 'app' && c.abas.join(',') === 'Histórico,Dashboard,Relatórios,Comparativo', JSON.stringify(c));
   await ate(p, `document.querySelectorAll('#listaHistorico [data-historico]').length`);
   await p.avaliar(`(document.querySelector('#listaHistorico [data-historico]').click(), 0)`);
   await ate(p, `!$('resultado').hidden && document.querySelector('#municipios textarea')`);
@@ -424,6 +445,15 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `document.querySelectorAll('.envio-radio .envios li').length || document.querySelectorAll('[data-historico]').length > 1`);
   const envCon = await p.avaliar(`({ lista: document.querySelectorAll('.envio-radio .envios li').length, form: document.querySelectorAll('.envio-radio select, [data-envio-acao]').length })`);
   conferir('Consulta: vê os envios do aviso, sem o formulário de envio', envCon.form === 0, JSON.stringify(envCon));
+  await p.navegador.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: CAP, eventsEnabled: true });
+  let nomeComp = '';
+  p.navegador.on('Browser.downloadWillBegin', e => { if (/comprovante/.test(e.suggestedFilename)) nomeComp = e.suggestedFilename; });
+  await p.avaliar(`($('baixarComprovante').click(), 0)`);
+  await ate(p, `/Comprovante do aviso nº \\d+ baixado/.test($('estado').textContent)`);
+  await espera(600);
+  const comp = nomeComp ? textoDoPdf(readFileSync(join(CAP, nomeComp))) : '';
+  conferir('Consulta: baixa o comprovante do aviso (PDF com quem pediu, envios e o código)', /Comprovante do aviso nº \d+/.test(comp)
+    && /Solicitado por/.test(comp) && /Envios às rádios/.test(comp) && /Gerado por Consulta da EMG \(Consulta\)/.test(comp), `${nomeComp} ${comp.slice(0, 160)}`);
   conferir('Consulta: nenhum ponto de UC no mapa', await p.avaliar(`!camadaUcs && $('botaoUcs').closest('li').hidden`));
   conferir('Consulta: a API recusa gerar aviso (403)', await p.avaliar(`fetch('/api/avisos', { method: 'POST' }).then(r => r.status === 403)`));
   const semAudio = await p.avaliar(`(() => { desenharComparativo();
@@ -434,7 +464,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const a = await entrarNaTela(p, 'admin@emg.example', SENHAS['admin@emg.example']);
-  conferir('Admin da empresa: Novo aviso, Histórico, Dashboard, Comparativo, Usuários e Auditoria', a.abas.join(',') === 'Novo aviso,Histórico,Dashboard,Comparativo,Usuários,Auditoria', JSON.stringify(a.abas));
+  conferir('Admin da empresa: Novo aviso, Histórico, Dashboard, Relatórios, Comparativo, Usuários e Auditoria',
+    a.abas.join(',') === 'Novo aviso,Histórico,Dashboard,Relatórios,Comparativo,Usuários,Auditoria', JSON.stringify(a.abas));
   await p.avaliar(`irPara('usuarios')`);
   await ate(p, `document.querySelectorAll('#listaUsuarios [data-usuario]').length >= 3`);
   await p.avaliar(`($('novoNome').value = 'Maria Operadora', $('novoEmail').value = 'maria@emg.example', $('novoPerfil').value = 'operador', $('formUsuario').requestSubmit(), 0)`);
@@ -456,6 +487,15 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('verificarAuditoria').click(), 0)`);
   conferir('auditoria: "Conferir a integridade" diz que está íntegra', await ate(p, `/^Auditoria íntegra/.test($('estadoAuditoria').textContent)`));
   await captura(p, '5b_auditoria.png');
+  let nomeAud = '';
+  p.navegador.on('Browser.downloadWillBegin', e => { if (/auditoria/.test(e.suggestedFilename)) nomeAud = e.suggestedFilename; });
+  await p.navegador.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: CAP, eventsEnabled: true });
+  await p.avaliar(`(document.querySelector('[data-aud=csv]').click(), 0)`);
+  await ate(p, `/Relatório baixado em CSV/.test($('estadoAuditoria').textContent)`);
+  await espera(600);
+  const audCsv = nomeAud ? readFileSync(join(CAP, nomeAud), 'utf-8') : '';
+  conferir('relatório de auditoria em CSV (Admin da empresa): gerado por, código e as ações', /gerado_por;Admin da EMG \(Admin da empresa\)/.test(audCsv)
+    && /codigo_verificacao;FRL-/.test(audCsv) && /;gerou aviso;/.test(audCsv), audCsv.slice(0, 200));
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const f = await entrarNaTela(p, 'admin@farol.example', SENHAS['admin@farol.example']);

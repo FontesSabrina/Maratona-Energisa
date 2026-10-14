@@ -56,6 +56,8 @@ from . import pacote as pacote_
 from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, DIST, MAX_TEXTO, config_empresa, segundos
 from .comum import texto_do_aviso as _texto_do_aviso
 from .radio import rotas as radio_rotas
+from .relatorios import painel_do_mes
+from .relatorios import rotas as relatorio_rotas
 from .acesso import PRODUCAO, exigir, rotas, usuario_atual
 from .proxy import ProxyConfiavel
 
@@ -69,6 +71,7 @@ app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/a
               openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None)
 app.include_router(rotas)
 app.include_router(radio_rotas)
+app.include_router(relatorio_rotas)
 if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
     app.add_middleware(ProxyConfiavel)
 
@@ -576,7 +579,8 @@ def dashboard(u: dict = Depends(exigir("ver_historico"))) -> dict:
     """Dashboard da empresa: só agregados do histórico (nucleo/painel.py), no horário de Brasília."""
     avisos = [{**a, "criado_em": a["criado_em"].astimezone(BRASILIA)}
               for a in banco_acesso.avisos(u["empresa_id"], MAX_AVISOS_PAINEL)]
-    return painel.resumir(avisos, datetime.now(BRASILIA).date())
+    hoje = datetime.now(BRASILIA).date()
+    return {**painel.resumir(avisos, hoje), "mes": painel_do_mes(u["empresa_id"], hoje)}
 
 
 @app.put("/api/historico/{id_}/municipios/{codigo}/texto")

@@ -366,3 +366,14 @@ button.perigo:hover:not(:disabled) { background: color-mix(in srgb, var(--erro) 
 .chip.envio.entregue, .chip.envio.enviado { background: color-mix(in srgb, var(--info) 14%, var(--sup)); color: var(--info); }
 .chip.envio.confirmado { background: color-mix(in srgb, var(--ok) 18%, var(--sup)); color: var(--ok); font-weight: 600; }
 .chip.envio.falhou { background: color-mix(in srgb, var(--erro) 14%, var(--sup)); color: var(--erro); font-weight: 600; }
+
+/* ---------- Relatórios ---------- */
+.filtros-relatorio { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+.filtros-relatorio h2 { grid-column: 1 / -1; margin: 0; font-size: 16px; }
+.filtros-relatorio .acoes, .filtros-relatorio .confirmar { grid-column: 1 / -1; }
+.relatorio { display: grid; gap: 14px; }
+.relatorio:empty { display: none; }
+.rolagem { overflow-x: auto; }
+.rolagem .tabela { min-width: 560px; }
+.como { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
+#baixarComprovante { margin-left: auto; }

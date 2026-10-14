@@ -57,6 +57,12 @@ MATRIZ = {
     ("GET", "/api/historico/{id_}/radios"): GERA, ("POST", "/api/historico/{id_}/envios"): GERA,
     # envios e os arquivos enviados (comprovantes): os três perfis da empresa
     ("GET", "/api/historico/{id_}/envios"): EMPRESA, ("GET", "/api/envios/{id_}/arquivos/{tipo}"): EMPRESA,
+    # relatórios: o do período e o comprovante (os três perfis da empresa); auditoria da empresa (Admin da empresa);
+    # auditoria geral de acessos, de todas as empresas (Admin do Farol)
+    ("GET", "/api/relatorios/mensal"): EMPRESA, ("GET", "/api/relatorios/mensal.pdf"): EMPRESA, ("GET", "/api/relatorios/mensal.csv"): EMPRESA,
+    ("GET", "/api/historico/{id_}/comprovante"): EMPRESA, ("GET", "/api/historico/{id_}/comprovante.pdf"): EMPRESA,
+    ("GET", "/api/relatorios/auditoria"): {ADM}, ("GET", "/api/relatorios/auditoria.{formato}"): {ADM},
+    ("GET", "/api/relatorios/acessos"): {FAROL}, ("GET", "/api/relatorios/acessos.{formato}"): {FAROL},
     # a rádio confirma o recebimento pelo link do e-mail, sem login
     ("GET", "/confirmar/{token}"): PUBLICA, ("POST", "/confirmar/{token}"): PUBLICA,
 }
@@ -110,7 +116,7 @@ outra = pronto("admin@out.example", r.json()["senha_temporaria"])
 def caminho(path: str) -> str:
     ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1}
     p = path.replace("{id_}", str(next((v for k, v in ids.items() if path.startswith(k)), aviso["id"])))
-    p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43)
+    p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43).replace("{formato}", "csv")
     return p.replace("{codigo}", "FRL-0000-0000-0000" if "verificar" in p else "3138401")
 
 
