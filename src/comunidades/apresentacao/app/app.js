@@ -36,17 +36,74 @@ const estado = {
   historico: [], usuarios: [], perfis: {}, empresas: [], registro: [],
   filtroHistorico: { busca: '', periodo: '' },
   painel: null,            // /api/painel: números do histórico da empresa (e o bloco do mês)
+  radiosAdmin: [],         // rádios da empresa (Admin da empresa), com as inativas
+  radioEditando: null,     // a rádio no formulário (null: nova)
+  alcanceComunidades: [],  // comunidades escolhidas no formulário da rádio: { municipio, nome, distrito }
+  configuracao: null,      // /api/empresa/configuracao
   relatorio: null,         // /api/relatorios/mensal: o relatório do período com os filtros
 };
 
-const VISTAS = [  // vista, rótulo, ação exigida
-  ['aviso', 'Novo aviso', 'gerar_aviso'], ['historico', 'Histórico', 'ver_historico'], ['painel', 'Dashboard', 'ver_historico'],
-  ['relatorios', 'Relatórios', 'ver_historico'], ['comparativo', 'Comparativo', 'ver_historico'],
-  ['usuarios', 'Usuários', 'gerenciar_usuarios'], ['empresas', 'Empresas', 'gerenciar_empresas'],
-  ['registro', 'Auditoria', 'ver_registro'],
-];
+// o menu de cada perfil (a matriz de perfis do plano); quem decide o que pode é o servidor, a tela só mostra o que serve
+const MENUS = {
+  admin_farol: [['empresas', 'Empresas'], ['registro', 'Auditoria geral']],
+  admin_empresa: [['aviso', 'Novo aviso'], ['historico', 'Histórico'], ['relatorios', 'Relatórios'], ['usuarios', 'Usuários'],
+    ['radios', 'Rádios'], ['configuracoes', 'Configurações'], ['registro', 'Auditoria']],
+  operador: [['aviso', 'Novo aviso'], ['historico', 'Histórico'], ['relatorios', 'Relatórios']],
+  consulta: [['painel', 'Mapa'], ['historico', 'Histórico'], ['relatorios', 'Relatórios']],
+};
+const RELATORIOS = [['painel', 'Painel do mês'], ['relatorios', 'Do período'], ['comparativo', 'Comparativo']];
+const VISTAS = ['aviso', 'historico', 'painel', 'relatorios', 'comparativo', 'usuarios', 'radios', 'configuracoes', 'empresas', 'registro'];
 const pode = acao => !!estado.usuario?.acoes.includes(acao);
-const vistasDoPerfil = () => VISTAS.filter(([, , a]) => pode(a));
+const vistasDoPerfil = () => MENUS[estado.usuario?.perfil] || [];
+const menuAtual = v => vistasDoPerfil().some(([x]) => x === v) ? v : RELATORIOS.some(([x]) => x === v) ? 'relatorios' : v;
+
+// a ajuda de cada perfil: o caminho, na ordem em que se usa
+const AJUDA = {
+  operador: [
+    ['Novo aviso', 'Escolha a planilha das UCs afetadas (.xlsx ou .csv, até 10 MB) e, no passo 2, a data, o horário e o tipo do desligamento.'],
+    ['Conferir', 'O Farol lê a planilha, corrige o que é seguro corrigir (em roxo no mapa) e mostra os números. Vermelho bloqueia (equipamento vital com problema); amarelo pede atenção. Marque "Conferi os números e o mapa" e gere o aviso.'],
+    ['Avisos', 'Ajuste a mensagem da rádio, ouça, baixe o PDF e envie à rádio (e-mail com confirmação, WhatsApp ou cópia), informando o valor.'],
+    ['Histórico e relatórios', 'No histórico ficam os avisos, os envios e os comprovantes; mude a data ou cancele quando preciso. Os relatórios mostram custo, economia e prazo do mês.'],
+  ],
+  consulta: [
+    ['Mapa', 'Os municípios pintados pela quantidade de avisos e os próximos desligamentos.'],
+    ['Histórico', 'Abra um aviso para ver as comunidades, a mensagem, quem pediu e os envios; baixe o comprovante.'],
+    ['Relatórios', 'Os números do mês, por rádio e por comunidade, em PDF ou CSV com o código de verificação.'],
+  ],
+  admin_farol: [
+    ['Empresas', 'Cadastre a empresa com o primeiro admin (a senha temporária aparece uma vez) e suspenda ou reative quando preciso.'],
+    ['Auditoria geral', 'Os acessos de todas as empresas, com a conferência da integridade da corrente.'],
+  ],
+};
+AJUDA.admin_empresa = [...AJUDA.operador,
+  ['Usuários', 'Convide pessoas da empresa (só e-mail do domínio), escolha o perfil e os municípios; bloqueie quando sair. O último admin não pode ser bloqueado.'],
+  ['Rádios e configurações', 'Cadastre as rádios e o que cada uma alcança; ajuste o modelo da mensagem, o telefone, o limite de rejeição, o fuso UTM e a antecedência.'],
+  ['Auditoria', 'Tudo o que cada pessoa fez, com o nome e o perfil, sem nada apagado; baixe o relatório de auditoria.']];
+
+// os termos que confundem: um "?" ao lado mostra a explicação
+const DICAS = {
+  uc: 'UC (unidade consumidora): cada ligação de energia (uma casa, um sítio, um comércio). A planilha traz uma linha por UC; o número nunca aparece na tela.',
+  vital: 'Equipamento vital: alguém na UC depende de aparelho elétrico para viver. O aviso precisa de 5 dias úteis de antecedência (REN 1.000/2021, art. 436), e qualquer problema nessas linhas bloqueia o aviso.',
+  corrigida: 'Corrigida: latitude e longitude vieram trocadas ou sem o sinal; o Farol corrigiu só porque o ponto corrigido cai na área de concessão. Fica em roxo no mapa.',
+  rejeitada: 'Rejeitada: a linha não entra no aviso (sem UC, sem coordenada, fora da concessão, UC repetida…). O motivo aparece pela linha, sem a UC.',
+  limite: 'Limite de rejeição: se mais linhas que o limite da empresa (padrão 2%) forem rejeitadas, o aviso só sai com uma justificativa, que fica na auditoria.',
+  vizinha: 'Localidade vizinha: um pedaço pequeno de outra comunidade ficou na área; o aviso cita "localidades vizinhas" em vez de nomear uma por uma.',
+  codigo: 'Código de verificação (FRL-…): sai do registro da auditoria que guardou o aviso ou o relatório. Com ele, a empresa confere quem gerou e quando, e que nada foi mudado.',
+  economia: 'Economia calculada: pelo tempo no ar (aviso de hoje, fazenda a fazenda, menos a mensagem do Farol) vezes o valor por minuto. Informada: o custo antigo que quem enviou digitou. Sem um dos dois, o Farol não estima.',
+};
+
+// a mensagem pelo modelo (a mesma regra de nucleo/mensagem.py), para a prévia nas configurações
+function montarMensagem(modelo, v) {
+  const valor = c => String(v[c] ?? '').trim();
+  return modelo.replace(/\[([^\[\]]*)\]/g, (_, trecho) => [...trecho.matchAll(/\{([^{}]*)\}/g)].some(m => !valor(m[1])) ? '' : trecho)
+    .replace(/\{([^{}]*)\}/g, (_, c) => valor(c)).replace(/[ \t]+/g, ' ').replace(/ +([.,;:!?])/g, '$1').trim();
+}
+const FUSOS_UTM = [[31978, 'UTM 18S'], [31979, 'UTM 19S'], [31980, 'UTM 20S'], [31981, 'UTM 21S'], [31982, 'UTM 22S'], [31983, 'UTM 23S'],
+  [31984, 'UTM 24S'], [31985, 'UTM 25S']];
+const municipiosDaConcessao = () => (estado.concessao?.features || []).map(f => [f.properties.codigo_ibge, `${f.properties.nome}/${f.properties.uf}`])
+  .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+const nomeMunicipio = cod => municipiosDaConcessao().find(([c]) => c === cod)?.[1] || cod;
+const temaAtual = () => document.documentElement.dataset.tema || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
 
 const fmt = n => Number(n).toLocaleString('pt-BR');
 const dataHora = iso => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -229,6 +286,23 @@ function no(tag, props = {}, ...filhos) {
   return e;
 }
 
+function desenharTema() {
+  const escuro = temaAtual() === 'escuro';
+  $('botaoTema').textContent = escuro ? 'Tema claro' : 'Tema escuro';
+  $('botaoTema').setAttribute('aria-pressed', String(escuro));
+}
+
+function desenharAjuda() {
+  const passos = AJUDA[estado.usuario?.perfil] || [];
+  $('ajudaTitulo').textContent = `Ajuda · ${estado.usuario?.perfil_nome || ''}`;
+  $('ajudaCorpo').replaceChildren(no('ol', { classe: 'passos-ajuda' }, passos.map(([t, d]) => no('li', {}, no('strong', { texto: t }), no('span', { texto: ` ${d}` })))),
+    no('p', { classe: 'ajuda', texto: 'Os botões "?" ao lado dos termos explicam cada um. Tudo o que você faz fica na auditoria com o seu nome.' }),
+    no('p', { classe: 'ajuda', texto: estado.config?.aviso_ficticio || '' }));
+}
+
+// um "?" ao lado de um termo: o botão (alvo de 44 px) e a explicação em DICAS
+const dica = (chave, termo) => no('button', { type: 'button', classe: 'dica', 'data-dica': chave, 'aria-label': `O que é ${termo}?`, texto: '?' });
+
 function desenharTela() {
   $('telaEntrar').hidden = estado.tela !== 'entrar';
   $('telaSenha').hidden = estado.tela !== 'senha';
@@ -241,9 +315,14 @@ function desenharTela() {
 }
 
 function desenharAbas() {
+  const atual = menuAtual(estado.vista);
   $('abas').replaceChildren(...vistasDoPerfil().map(([v, rotulo]) =>
-    no('button', { type: 'button', 'data-vista': v, 'aria-current': estado.vista === v ? 'page' : null, texto: rotulo })));
-  for (const [v] of VISTAS) $(`vista-${v}`).hidden = estado.vista !== v;
+    no('button', { type: 'button', 'data-vista': v, 'aria-current': atual === v ? 'page' : null, texto: rotulo })));
+  const noGrupo = RELATORIOS.some(([v]) => v === estado.vista) && pode('ver_historico') && !(estado.usuario?.perfil === 'consulta' && estado.vista === 'painel');
+  $('subabas').hidden = !noGrupo;
+  $('subabas').replaceChildren(...(noGrupo ? RELATORIOS.map(([v, rotulo]) =>
+    no('button', { type: 'button', 'data-vista': v, 'aria-current': estado.vista === v ? 'page' : null, texto: rotulo })) : []));
+  for (const v of VISTAS) $(`vista-${v}`).hidden = estado.vista !== v;
   // o resultado aparece só na vista de onde veio (um aviso novo em "Novo aviso", um antigo no "Histórico");
   // no funil, o passo 3 mostra a conferência e o 4, os avisos
   const vistaDoResultado = { novo: 'aviso', historico: 'historico' }[estado.origem];
@@ -383,7 +462,7 @@ function desenharEnvio(m) {
       no('label', { texto: 'Cobrança' }, no('select', { 'data-envio': 'cobranca' },
         Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === e.cobranca })))),
       campo('Quanto custaria do jeito antigo (R$, opcional)', 'antigo', { inputmode: 'decimal', placeholder: 'opcional' })),
-    no('p', { classe: 'economia', id: `previa-${cod}`, 'aria-live': 'polite' }),
+    no('p', { classe: 'economia-linha' }, no('span', { classe: 'economia', id: `previa-${cod}`, 'aria-live': 'polite' }), dica('economia', 'economia calculada e informada')),
     no('div', { classe: 'acoes' },
       estado.config?.email !== false ? no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'email', texto: 'Enviar por e-mail' }) : null,
       no('button', { type: 'button', 'data-envio-acao': 'whatsapp', texto: 'Enviar por WhatsApp' }),
@@ -472,7 +551,11 @@ function desenharConferencia() {
   const arquivo = no('p', { classe: 'ajuda', texto: `Arquivo ${t.arquivo.nome}` + (t.arquivo.aba ? `, aba ${t.arquivo.aba}` : '')
     + ` · ${fmt(t.arquivo.linhas)} linhas · colunas reconhecidas: ${t.colunas.join(', ')} · ${fmt(t.arquivo.colunas_ignoradas)} coluna(s) ignorada(s)`
     + ` · tradutor ${t.versao}` });
-  const blocos = [no('h3', { texto: 'Conferência da planilha' }), arquivo, numeros];
+  const blocos = [no('h3', { texto: 'Conferência da planilha' }), arquivo, numeros,
+    no('p', { classe: 'dicas' }, no('span', { classe: 'ajuda', texto: 'O que é: ' }),
+      no('span', { texto: 'UC' }), dica('uc', 'UC'), no('span', { texto: 'equipamento vital' }), dica('vital', 'equipamento vital'),
+      no('span', { texto: 'corrigida' }), dica('corrigida', 'linha corrigida'), no('span', { texto: 'rejeitada' }), dica('rejeitada', 'linha rejeitada'),
+      no('span', { texto: 'limite de rejeição' }), dica('limite', 'limite de rejeição'))];
   if (n.vital_a_confirmar) blocos.push(no('p', { classe: 'ajuda', texto: `${fmt(n.vital_a_confirmar)} cliente(s) sem a informação de equipamento vital (a confirmar).` }));
   if (c.vital_bloqueio.length) blocos.push(no('div', { classe: 'alerta-vermelho', role: 'alert' },
     no('strong', { texto: `Bloqueado: ${fmt(c.vital_bloqueio.length)} linha(s) com equipamento vital rejeitada(s), corrigida(s) ou fora da concessão` }),
@@ -510,7 +593,7 @@ function desenharConferencia() {
 function desenharSolicitado() {
   const r = estado.resultado;
   const partes = r ? [solicitadoTexto(r), r.desligamento ? `Tipo: ${r.desligamento.rotulo} (${r.desligamento.motivo})` : ''].filter(Boolean) : [];
-  $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })),
+  $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })), r?.codigo ? dica('codigo', 'código de verificação') : '',
     r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Desligamento cancelado' }) : '');
   if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: 'Comprovante (PDF)' }));
   const lugar = $('acoesAviso');
@@ -659,7 +742,7 @@ function desenharRelatorio() {
     bloco('Avisos fora do prazo', tabela(['Aviso', 'Desligamento', 'Municípios', 'Regra', 'Atraso'],
       r.fora_do_prazo.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.municipios, x.regra, `${x.atraso_horas} h`]), 'Nenhum aviso fora do prazo.'),
       r.sem_envio.length ? no('p', { classe: 'ajuda', texto: `Sem envio registrado (fora da conta do prazo): ${r.sem_envio.map(x => `nº ${x.aviso}`).join(', ')}.` }) : null),
-    bloco('Como a economia foi calculada', no('ul', { classe: 'como' }, r.como_calculado.map(t => no('li', { texto: t })))),
+    bloco('Como a economia foi calculada', dica('economia', 'economia calculada e informada'), no('ul', { classe: 'como' }, r.como_calculado.map(t => no('li', { texto: t })))),
     bloco('Lista detalhada', tabela(['Aviso', 'Desligamento', 'Tipo', 'Municípios', 'UCs', 'Rádios', 'Envios', 'Custo', 'No prazo', 'Pedido por', 'Situação'],
       r.lista.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.tipo, x.municipios, fmt(x.ucs), x.radios, `${x.confirmados}/${x.envios}`,
         dinheiro(x.custo), x.no_prazo == null ? '—' : x.no_prazo ? 'sim' : 'não', x.por, x.status]))));
@@ -714,25 +797,96 @@ function desenharPainel() {
 
 function desenharUsuarios() {
   $('novoPerfil').replaceChildren(...Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === 'operador' })));
+  if (!$('novoMunicipios').options.length) $('novoMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
   $('listaUsuarios').replaceChildren(...estado.usuarios.map(x => no('div', { classe: 'item usuario-linha', 'data-usuario': x.id },
     no('div', {}, no('strong', { texto: x.nome }), no('br'),
       no('span', { classe: 'meta', texto: `${x.email} · ${x.ultimo_acesso ? 'último acesso ' + dataHora(x.ultimo_acesso) : 'nunca entrou'}`
-        + (x.trocar_senha ? ' · senha temporária' : '') })),
+        + (x.trocar_senha ? ' · senha temporária' : '') }), no('br'),
+      no('span', { classe: 'meta', texto: `Municípios: ${x.municipios.length ? x.municipios.map(nomeMunicipio).join(', ') : 'todos (nenhum escolhido)'}` })),
     no('div', { classe: 'controles' },
       no('select', { 'aria-label': `Perfil de ${x.nome}`, 'data-campo': 'perfil' },
         Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.perfil }))),
       no('select', { 'aria-label': `Situação de ${x.nome}`, 'data-campo': 'status' },
         [['ativo', 'Ativo'], ['bloqueado', 'Bloqueado']].map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.status }))),
+      no('select', { 'aria-label': `Municípios de ${x.nome}`, 'data-campo': 'municipios', multiple: true, size: '3' },
+        municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n, selected: x.municipios.includes(c) }))),
       no('button', { type: 'button', 'data-acao-usuario': 'salvar', texto: 'Salvar' }),
       no('button', { type: 'button', 'data-acao-usuario': 'senha', texto: 'Nova senha temporária' })))));
 }
 
 function desenharEmpresas() {
-  const linhas = estado.empresas.map(e => no('tr', {}, no('td', { texto: e.nome }), no('td', { texto: e.sigla }), no('td', { texto: e.dominio }),
-    no('td', { texto: e.status }), no('td', { texto: fmt(e.usuarios) }), no('td', { texto: fmt(e.avisos) })));
-  $('listaEmpresas').replaceChildren(no('table', { classe: 'tabela' },
-    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'Domínio', 'Situação', 'Usuários', 'Avisos'].map(t => no('th', { texto: t })))),
-    no('tbody', {}, linhas)));
+  const linhas = estado.empresas.map(e => no('tr', { 'data-empresa': e.id }, no('td', { texto: e.nome }), no('td', { texto: e.sigla }),
+    no('td', { classe: 'codigo', texto: e.cnpj || '—' }), no('td', { texto: e.dominio }),
+    no('td', {}, no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}`, texto: e.status === 'suspensa' ? 'Suspensa' : 'Ativa' })),
+    no('td', { texto: fmt(e.usuarios) }), no('td', { texto: fmt(e.avisos) }),
+    no('td', {}, no('button', { type: 'button', classe: e.status === 'ativa' ? 'perigo' : '', 'data-empresa-acao': e.status === 'ativa' ? 'suspensa' : 'ativa',
+      texto: e.status === 'ativa' ? 'Suspender' : 'Reativar' }))));
+  $('listaEmpresas').replaceChildren(no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
+    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Ações'].map(t => no('th', { texto: t })))),
+    no('tbody', {}, linhas))));
+}
+
+// ---- Rádios (Admin da empresa) ----
+function desenharRadios() {
+  const r = estado.radioEditando;
+  $('formRadioTitulo').textContent = r ? `Editar ${r.nome}` : 'Cadastrar rádio';
+  $('radSalvar').textContent = r ? 'Salvar alterações' : 'Cadastrar rádio';
+  $('radCancelar').hidden = !r;
+  if (!$('radMunicipios').options.length) {
+    $('radMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
+    $('radMunCom').replaceChildren(no('option', { value: '', texto: 'Escolha o município' }), ...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
+  }
+  desenharComunidadesRadio();
+  $('listaRadios').replaceChildren(...(estado.radiosAdmin.length ? estado.radiosAdmin.map(x => no('div', { classe: 'item', 'data-radio': x.id },
+    no('strong', { texto: x.nome + (x.ativa ? '' : ' (inativa)') }),
+    no('span', { classe: 'meta', texto: [x.email, x.whatsapp].filter(Boolean).join(' · ') }),
+    no('span', { classe: 'meta', texto: `${x.valor_padrao ? dinheiro(x.valor_padrao) : 'sem valor padrão'} (${COBRANCA[x.cobranca]}) · alcança `
+      + [x.alcance.municipios.map(nomeMunicipio).join(', '), x.alcance.comunidades.length ? `${x.alcance.comunidades.length} comunidade(s)` : '']
+        .filter(Boolean).join(' e ') || 'nada cadastrado' }),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-radio-acao': 'editar', texto: 'Editar' }))))
+    : [no('p', { classe: 'ajuda', texto: 'Nenhuma rádio cadastrada.' })]));
+}
+
+function desenharComunidadesRadio() {
+  const cod = $('radMunCom').value, terr = estado.territorios[cod];
+  const marcadas = new Set(estado.alcanceComunidades.map(c => `${c.municipio}|${c.nome}|${c.distrito}`));
+  const resumo = no('p', { classe: 'ajuda', id: 'radResumo', texto: resumoComunidades() });
+  if (!cod || !terr) return $('radComunidades').replaceChildren(resumo);
+  const vistas = new Set(), lista = [];
+  for (const f of terr.features) {
+    const nome = semSufixo(f.properties.nome), dist = f.properties.distrito, chave = `${cod}|${nome}|${dist}`;
+    if (vistas.has(chave)) continue;
+    vistas.add(chave);
+    lista.push([chave, nome, dist]);
+  }
+  lista.sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  $('radComunidades').replaceChildren(resumo, ...lista.map(([chave, nome, dist]) => no('label', { classe: 'check' },
+    no('input', { type: 'checkbox', 'data-comunidade': chave, checked: marcadas.has(chave) }),
+    no('span', { texto: `${nome} (${dist === nomeMunicipio(cod).split('/')[0] ? 'Sede' : dist})` }))));
+}
+
+const resumoComunidades = () => estado.alcanceComunidades.length ? `Comunidades escolhidas: ${estado.alcanceComunidades
+  .map(c => `${c.nome} (${c.distrito === nomeMunicipio(c.municipio).split('/')[0] ? 'Sede' : c.distrito})`).join(', ')}.` : '';
+
+// ---- Configurações da empresa (Admin da empresa) ----
+function desenharConfig() {
+  const c = estado.configuracao;
+  if (!c) return;
+  if (!$('cfgFuso').options.length) $('cfgFuso').replaceChildren(...FUSOS_UTM.map(([k, t]) => no('option', { value: String(k), texto: `${t} (EPSG:${k})` })));
+  $('cfgModelo').value = c.modelo_mensagem;
+  $('cfgNome').value = c.nome_mensagem;
+  $('cfgTelefone').value = c.telefone || '';
+  $('cfgLimite').value = String(Math.round(c.limite_rejeicao * 1000) / 10);
+  $('cfgFuso').value = String(c.epsg_utm);
+  $('cfgAntecedencia').value = String(c.antecedencia_dias);
+  $('cfgCampos').textContent = `Campos: ${c.campos.map(x => `{${x}}`).join(' ')}. Trecho entre [colchetes] some se algum campo dentro dele ficar vazio.`;
+  desenharPreviaConfig();
+}
+
+function desenharPreviaConfig() {
+  $('cfgPrevia').textContent = 'Exemplo: ' + montarMensagem($('cfgModelo').value, { distribuidora: $('cfgNome').value, municipio: 'Leopoldina', data: '20/11',
+    inicio: '8h', fim: '14h', motivo: 'manutenção preventiva na rede', comunidades: 'Graminha, Boa Sorte e São Pedro',
+    comunidades_parciais: 'Tomé Nogueira', telefone_atendimento: $('cfgTelefone').value, codigo: 'FRL-0000-0000-0000' });
 }
 
 function desenharRegistro() {
@@ -753,8 +907,8 @@ function mostrarSenhaTemporaria(texto, senha) {
 }
 
 // ---- Mapa ----
-const escuro = () => matchMedia('(prefers-color-scheme: dark)').matches;
-const COR = { ambar: '#F5B83D', ambarForte: '#B07800', cinza: '#93A1AF', info: '#1663C7', erro: '#B42318', verde: '#1B8A8A', corrigida: '#7A4FD1' };
+const escuro = () => temaAtual() === 'escuro';
+const COR = { ambar: '#F5B83D', ambarForte: '#B07800', cinza: '#93A1AF', info: '#1663C7', erro: '#B42318', verde: '#D99A16', corrigida: '#7A4FD1' };
 let mapa, camadaConcessao, camadaComunidades, camadaUcs, telaUcs, camadaBase, camadaNomes, camadaRede, telaRede, atribuicao;
 // a partir deste zoom, o contorno das comunidades dos municípios na tela; a partir do outro, os nomes escritos
 const ZOOM_COMUNIDADES = 11, ZOOM_NOMES = 13, ZOOM_TRAFOS = 14;
@@ -762,12 +916,20 @@ const CREDITO_REDE = 'Rede fictícia sobre as vias do © OpenStreetMap';
 const CORES_ALIMENTADOR = ['#1663C7', '#7A4FD1', '#0F8F86', '#C2410C', '#9D174D', '#4D7C0F', '#0E7490', '#A16207'];
 const buscando = new Set();   // municípios cujas comunidades estão sendo buscadas
 
+let fundoDoMapa;
+function trocarFundoDoMapa() {
+  if (!mapa) return;
+  fundoDoMapa?.remove();
+  fundoDoMapa = L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    { attribution: 'Fundo &copy; Esri', maxZoom: 16, noWrap: true }).addTo(mapa);
+  fundoDoMapa.bringToBack();
+}
+
 function iniciarMapa() {
   if (mapa) return;
   mapa = L.map('mapa', { zoomControl: true, attributionControl: false, minZoom: 5, maxZoom: 16 });
   atribuicao = L.control.attribution({ prefix: 'Concessão e comunidades: IBGE · Leaflet' }).addTo(mapa);
-  L.tileLayer(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_${escuro() ? 'Dark' : 'Light'}_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-    { attribution: 'Fundo &copy; Esri', maxZoom: 16, noWrap: true }).addTo(mapa);
+  trocarFundoDoMapa();
   mapa.setView([-21.0, -42.6], 8);
   mapa.on('moveend', aoMoverMapa);
 }
@@ -1115,6 +1277,7 @@ function avisar(mensagem, erro = false) {
 async function abrirApp() {
   estado.tela = 'app';
   estado.vista = vistasDoPerfil()[0]?.[0] || 'historico';
+  if (estado.vista === 'painel' && !pode('ver_historico')) estado.vista = 'historico';
   desenharTela(); desenharAbas();
   iniciarMapa();
   mapa.invalidateSize();
@@ -1184,8 +1347,12 @@ function limparTela() {
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
   Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
-    'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes'])
+    'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes',
+    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas'])
     $(id).replaceChildren();
+  Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null });
+  $('caixaAjuda').hidden = true;
+  $('dica').hidden = true;
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
   $('resultado').hidden = true;
@@ -1216,6 +1383,8 @@ async function irPara(vista) {
     if (vista === 'painel') { estado.painel = await api('/api/painel'); desenharPainel(); }
     if (vista === 'relatorios') { desenharFiltrosRelatorio(); await carregarRelatorio(); }
     if (vista === 'registro') prepararAuditoria();
+    if (vista === 'radios') { estado.radiosAdmin = (await api('/api/radios')).radios; desenharRadios(); }
+    if (vista === 'configuracoes') { estado.configuracao = await api('/api/empresa/configuracao'); desenharConfig(); }
     if (vista === 'comparativo') { desenharComparativo(); estado.painel = await api('/api/painel'); desenharComparativo(); }
     if (vista === 'usuarios') { const j = await api('/api/usuarios'); estado.usuarios = j.usuarios; estado.perfis = j.perfis; desenharUsuarios(); }
     if (vista === 'empresas') { estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas(); }
@@ -1614,10 +1783,14 @@ async function verificarAuditoria() {
   }
 }
 
+const selecionados = sel => [...sel.selectedOptions].map(o => o.value);
+
 async function cadastrarUsuario(evento) {
   evento.preventDefault();
   try {
-    const j = await api('/api/usuarios', { method: 'POST', json: { nome: $('novoNome').value, email: $('novoEmail').value, perfil: $('novoPerfil').value } });
+    const j = await api('/api/usuarios', { method: 'POST', json: { nome: $('novoNome').value, email: $('novoEmail').value, perfil: $('novoPerfil').value,
+      municipios: selecionados($('novoMunicipios')) } });
+    for (const o of $('novoMunicipios').options) o.selected = false;
     $('novoNome').value = ''; $('novoEmail').value = '';
     mensagemEm('estadoUsuario', `${j.usuario.nome} cadastrado.`);
     mostrarSenhaTemporaria(`Senha temporária de ${j.usuario.nome} (${j.usuario.email}):`, j.senha_temporaria);
@@ -1634,7 +1807,8 @@ async function acaoUsuario(evento) {
   try {
     if (b.dataset.acaoUsuario === 'salvar') {
       const campo = n => linha.querySelector(`[data-campo="${n}"]`).value;
-      await api(`/api/usuarios/${id}`, { method: 'PATCH', json: { perfil: campo('perfil'), status: campo('status') } });
+      await api(`/api/usuarios/${id}`, { method: 'PATCH', json: { perfil: campo('perfil'), status: campo('status'),
+        municipios: selecionados(linha.querySelector('[data-campo="municipios"]')) } });
       mensagemEm('estadoUsuario', `${x.nome}: alterações salvas.`);
     } else {
       const j = await api(`/api/usuarios/${id}/senha-temporaria`, { method: 'POST' });
@@ -1651,14 +1825,127 @@ async function cadastrarEmpresa(evento) {
   const v = id => $(id).value;
   try {
     const j = await api('/api/empresas', { method: 'POST', json: { nome: v('empNome'), sigla: v('empSigla'), dominio: v('empDominio'),
-      admin_nome: v('empAdminNome'), admin_email: v('empAdminEmail') } });
-    for (const id of ['empNome', 'empSigla', 'empDominio', 'empAdminNome', 'empAdminEmail']) $(id).value = '';
+      admin_nome: v('empAdminNome'), admin_email: v('empAdminEmail'), cnpj: v('empCnpj') || null } });
+    for (const id of ['empNome', 'empCnpj', 'empSigla', 'empDominio', 'empAdminNome', 'empAdminEmail']) $(id).value = '';
     mensagemEm('estadoEmpresa', `${j.empresa.nome} cadastrada.`);
     mostrarSenhaTemporaria(`Senha temporária do primeiro admin de ${j.empresa.nome}:`, j.senha_temporaria);
     await irPara('empresas');
   } catch (e) {
     if (e.status !== 401) mensagemEm('estadoEmpresa', e.message, true);
   }
+}
+
+async function acaoEmpresa(evento) {
+  const b = evento.target.closest('button[data-empresa-acao]');
+  if (!b) return;
+  const id = b.closest('[data-empresa]').dataset.empresa, e = estado.empresas.find(x => String(x.id) === id), status = b.dataset.empresaAcao;
+  if (status === 'suspensa' && !confirm(`Suspender ${e.nome}? Ninguém da empresa entra até ela ser reativada.`)) return;
+  try {
+    await api(`/api/empresas/${id}`, { method: 'PATCH', json: { status } });
+    await irPara('empresas');
+    mensagemEm('estadoEmpresa', `${e.nome} ${status === 'suspensa' ? 'suspensa' : 'reativada'} (registrado na auditoria).`);
+  } catch (x) {
+    if (x.status !== 401) mensagemEm('estadoEmpresa', x.message, true);
+  }
+}
+
+// ---- Rádios (Admin da empresa) ----
+function limparFormRadio() {
+  estado.radioEditando = null;
+  estado.alcanceComunidades = [];
+  for (const id of ['radNome', 'radEmail', 'radWhats', 'radValor']) $(id).value = '';
+  $('radCobranca').value = 'fechado';
+  $('radAtiva').checked = true;
+  for (const o of $('radMunicipios').options) o.selected = false;
+  $('radMunCom').value = '';
+}
+
+async function salvarRadio(evento) {
+  evento.preventDefault();
+  const r = estado.radioEditando;
+  const dados = { nome: $('radNome').value, email: $('radEmail').value || null, whatsapp: $('radWhats').value || null,
+    valor_padrao: $('radValor').value || null, cobranca: $('radCobranca').value, ativa: $('radAtiva').checked,
+    alcance: { municipios: selecionados($('radMunicipios')), comunidades: estado.alcanceComunidades } };
+  try {
+    const j = await api(r ? `/api/radios/${r.id}` : '/api/radios', { method: r ? 'PATCH' : 'POST', json: dados });
+    limparFormRadio();
+    await irPara('radios');
+    mensagemEm('estadoRadio', `${j.radio.nome} ${r ? 'alterada' : 'cadastrada'} (registrado na auditoria).`);
+  } catch (e) {
+    if (e.status !== 401) mensagemEm('estadoRadio', e.message, true);
+  }
+}
+
+async function editarRadio(evento) {
+  const b = evento.target.closest('button[data-radio-acao]');
+  if (!b) return;
+  const r = estado.radiosAdmin.find(x => String(x.id) === b.closest('[data-radio]').dataset.radio);
+  estado.radioEditando = r;
+  estado.alcanceComunidades = r.alcance.comunidades.map(c => ({ ...c }));
+  $('radNome').value = r.nome; $('radEmail').value = r.email || ''; $('radWhats').value = r.whatsapp || '';
+  $('radValor').value = r.valor_padrao ? Number(r.valor_padrao).toFixed(2).replace('.', ',') : '';
+  $('radCobranca').value = r.cobranca; $('radAtiva').checked = r.ativa;
+  for (const o of $('radMunicipios').options) o.selected = r.alcance.municipios.includes(o.value);
+  desenharRadios();
+  $('formRadio').scrollIntoView({ block: 'start' });
+}
+
+async function escolherMunicipioRadio() {
+  const cod = $('radMunCom').value;
+  if (cod && !estado.territorios[cod]) {
+    try { estado.territorios[cod] = await api(`/api/municipios/${cod}/comunidades`); } catch (e) { if (e.status !== 401) mensagemEm('estadoRadio', e.message, true); }
+  }
+  desenharComunidadesRadio();
+}
+
+function marcarComunidade(evento) {
+  const c = evento.target.dataset?.comunidade;
+  if (!c) return;
+  const [municipio, nome, distrito] = c.split('|');
+  estado.alcanceComunidades = estado.alcanceComunidades.filter(x => `${x.municipio}|${x.nome}|${x.distrito}` !== c);
+  if (evento.target.checked) estado.alcanceComunidades.push({ municipio, nome, distrito });
+  $('radResumo').textContent = resumoComunidades();   // só o resumo: a lista fica (e o foco também)
+}
+
+// ---- Configurações da empresa ----
+async function salvarConfig(evento) {
+  evento.preventDefault();
+  try {
+    estado.configuracao = await api('/api/empresa/configuracao', { method: 'PUT', json: { modelo_mensagem: $('cfgModelo').value, nome_mensagem: $('cfgNome').value,
+      telefone: $('cfgTelefone').value, limite_rejeicao: Number($('cfgLimite').value) / 100, epsg_utm: Number($('cfgFuso').value),
+      antecedencia_dias: Number($('cfgAntecedencia').value) } });
+    desenharConfig();
+    mensagemEm('estadoConfig', 'Configurações salvas (registrado na auditoria). Valem para os próximos avisos.');
+  } catch (e) {
+    if (e.status !== 401) mensagemEm('estadoConfig', e.message, true);
+  }
+}
+
+// ---- Tema, ajuda e dicas ----
+function alternarTema() {
+  const novo = temaAtual() === 'escuro' ? 'claro' : 'escuro';
+  document.documentElement.dataset.tema = novo;
+  try { localStorage.setItem('farol.tema', novo); } catch (e) { /* sem armazenamento: só nesta visita */ }
+  desenharTema();
+  trocarFundoDoMapa();
+}
+
+function abrirAjuda() {
+  desenharAjuda();
+  $('caixaAjuda').hidden = false;
+  $('ajudaFechar').focus();
+}
+
+function mostrarDica(evento) {
+  const b = evento.target.closest('button[data-dica]'), caixa = $('dica');
+  if (!b) return;
+  if (!caixa.hidden && caixa.dataset.de === b.dataset.dica) { caixa.hidden = true; return; }
+  caixa.textContent = DICAS[b.dataset.dica];
+  caixa.dataset.de = b.dataset.dica;
+  caixa.hidden = false;
+  const r = b.getBoundingClientRect(), largura = Math.min(320, innerWidth - 24);
+  Object.assign(caixa.style, { width: `${largura}px`, left: `${Math.max(12, Math.min(r.left + scrollX - largura / 2, innerWidth - largura - 12))}px`,
+    top: `${r.bottom + scrollY + 6}px` });
 }
 
 function arrastar() {
@@ -1669,6 +1956,8 @@ function arrastar() {
 }
 
 async function abrir() {
+  try { const t = localStorage.getItem('farol.tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch (e) { /* sem armazenamento */ }
+  desenharTema();
   // data padrão: daqui a 4 dias (acima das 72 h legais)
   const d = new Date(Date.now() + 4 * 864e5);
   $('data').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1711,6 +2000,21 @@ async function abrir() {
   $('municipios').addEventListener('input', editar);
   $('listaHistorico').addEventListener('click', abrirHistorico);
   $('formUsuario').addEventListener('submit', cadastrarUsuario);
+  $('listaEmpresas').addEventListener('click', acaoEmpresa);
+  $('formRadio').addEventListener('submit', salvarRadio);
+  $('radCancelar').addEventListener('click', () => { limparFormRadio(); desenharRadios(); });
+  $('listaRadios').addEventListener('click', editarRadio);
+  $('radMunCom').addEventListener('change', escolherMunicipioRadio);
+  $('radComunidades').addEventListener('change', marcarComunidade);
+  $('formConfig').addEventListener('submit', salvarConfig);
+  $('formConfig').addEventListener('input', desenharPreviaConfig);
+  $('cfgPadrao').addEventListener('click', () => { $('cfgModelo').value = estado.configuracao.modelo_padrao; desenharPreviaConfig(); });
+  $('subabas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
+  $('botaoTema').addEventListener('click', alternarTema);
+  $('botaoAjuda').addEventListener('click', abrirAjuda);
+  $('ajudaFechar').addEventListener('click', () => { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); });
+  document.addEventListener('click', mostrarDica);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('dica').hidden = true; if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); } } });
   $('listaUsuarios').addEventListener('click', acaoUsuario);
   $('formEmpresa').addEventListener('submit', cadastrarEmpresa);
   $('caixaFechar').addEventListener('click', () => { $('caixaSenha').hidden = true; $('caixaSenhaValor').textContent = ''; });

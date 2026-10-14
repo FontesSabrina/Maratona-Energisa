@@ -99,8 +99,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `estado.tela === 'app' && estado.concessao && document.documentElement.dataset.farol === 'pronto'`);
   const ini = await p.avaliar(`({ tela: estado.tela, abas: [...document.querySelectorAll('#abas button')].map(b => b.textContent).join(','),
     conta: $('contaNome').textContent, municipios: estado.concessao?.features.length, idiomas: [...$('idioma').options].map(o => o.value).join(',') })`);
-  conferir('depois da troca: app do Operador (Novo aviso, Histórico, Dashboard e Comparativo), 66 municípios, 3 idiomas',
-    ini.tela === 'app' && ini.abas === 'Novo aviso,Histórico,Dashboard,Relatórios,Comparativo' && /Operador/.test(ini.conta) && ini.municipios === 66 && ini.idiomas === 'pt-BR,en,es', JSON.stringify(ini));
+  conferir('depois da troca: app do Operador (Novo aviso, Histórico e Relatórios), 66 municípios, 3 idiomas',
+    ini.tela === 'app' && ini.abas === 'Novo aviso,Histórico,Relatórios' && /Operador/.test(ini.conta) && ini.municipios === 66 && ini.idiomas === 'pt-BR,en,es', JSON.stringify(ini));
 
   // mapa inicial: de perto, o contorno e o nome das comunidades (antes de gerar aviso); de longe, só os municípios
   await p.avaliar(`(mapa.setView([-21.53, -42.64], 13), 0)`);
@@ -433,7 +433,10 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
 {
   const p = await abrir(`${BASE}/`, { largura: 1440, altura: 900 });
   const c = await entrarNaTela(p, 'consulta@emg.example', SENHAS['consulta@emg.example']);
-  conferir('Consulta: só Histórico, Dashboard, Relatórios e Comparativo', c.tela === 'app' && c.abas.join(',') === 'Histórico,Dashboard,Relatórios,Comparativo', JSON.stringify(c));
+  await ate(p, `document.querySelectorAll('#painelDash .kpi').length > 0`);
+  conferir('Consulta: Mapa, Histórico e Relatórios; abre no Mapa', c.tela === 'app' && c.abas.join(',') === 'Mapa,Histórico,Relatórios'
+    && await p.avaliar(`estado.vista === 'painel' && !$('vista-painel').hidden`), JSON.stringify(c));
+  await p.avaliar(`irPara('historico')`);
   await ate(p, `document.querySelectorAll('#listaHistorico [data-historico]').length`);
   await p.avaliar(`(document.querySelector('#listaHistorico [data-historico]').click(), 0)`);
   await ate(p, `!$('resultado').hidden && document.querySelector('#municipios textarea')`);
@@ -464,8 +467,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const a = await entrarNaTela(p, 'admin@emg.example', SENHAS['admin@emg.example']);
-  conferir('Admin da empresa: Novo aviso, Histórico, Dashboard, Relatórios, Comparativo, Usuários e Auditoria',
-    a.abas.join(',') === 'Novo aviso,Histórico,Dashboard,Relatórios,Comparativo,Usuários,Auditoria', JSON.stringify(a.abas));
+  conferir('Admin da empresa: Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações e Auditoria',
+    a.abas.join(',') === 'Novo aviso,Histórico,Relatórios,Usuários,Rádios,Configurações,Auditoria', JSON.stringify(a.abas));
   await p.avaliar(`irPara('usuarios')`);
   await ate(p, `document.querySelectorAll('#listaUsuarios [data-usuario]').length >= 3`);
   await p.avaliar(`($('novoNome').value = 'Maria Operadora', $('novoEmail').value = 'maria@emg.example', $('novoPerfil').value = 'operador', $('formUsuario').requestSubmit(), 0)`);
@@ -496,12 +499,85 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const audCsv = nomeAud ? readFileSync(join(CAP, nomeAud), 'utf-8') : '';
   conferir('relatório de auditoria em CSV (Admin da empresa): gerado por, código e as ações', /gerado_por;Admin da EMG \(Admin da empresa\)/.test(audCsv)
     && /codigo_verificacao;FRL-/.test(audCsv) && /;gerou aviso;/.test(audCsv), audCsv.slice(0, 200));
+
+  // Rádios (Admin da empresa): cadastrar com um município inteiro e duas comunidades de outro, e editar
+  await p.avaliar(`irPara('radios')`);
+  await ate(p, `$('radMunicipios').options.length > 60`);
+  await p.avaliar(`(() => { $('radNome').value = 'Rádio Cataguases AM (demonstração)'; $('radEmail').value = 'cataguases@example.com';
+    $('radValor').value = '200,00'; $('radCobranca').value = 'fechado';
+    [...$('radMunicipios').options].find(o => o.textContent.startsWith('Cataguases')).selected = true;
+    const s = $('radMunCom'); s.value = '3138401'; s.dispatchEvent(new Event('change')); return 0; })()`);
+  await ate(p, `document.querySelectorAll('#radComunidades input[type=checkbox]').length > 50`);
+  await p.avaliar(`(() => { const cs = [...document.querySelectorAll('#radComunidades input[type=checkbox]')];
+    for (const n of ['Piacatuba (Piacatuba)', 'Graminha (Piacatuba)']) { const c = cs.find(x => x.nextSibling.textContent === n); c.checked = true;
+      c.dispatchEvent(new Event('change', { bubbles: true })); }
+    $('formRadio').requestSubmit(); return 0; })()`);
+  await ate(p, `/cadastrada/.test($('estadoRadio').textContent) && document.querySelectorAll('#listaRadios [data-radio]').length`);
+  const radioTela = await p.avaliar(`$('listaRadios').textContent`);
+  conferir('Rádios: cadastra com o município inteiro e as comunidades escolhidas (com o distrito)', /Rádio Cataguases AM/.test(radioTela)
+    && /Cataguases\/MG e 2 comunidade\(s\)/.test(radioTela), radioTela.slice(0, 200) + ' | ' + await p.avaliar(`$('estadoRadio').textContent`));
+  await p.avaliar(`(document.querySelector('#listaRadios [data-radio-acao=editar]').click(), 0)`);
+  await p.avaliar(`($('radAtiva').checked = false, $('formRadio').requestSubmit(), 0)`);
+  await ate(p, `/alterada/.test($('estadoRadio').textContent)`);
+  conferir('Rádios: editar e desativar', /\(inativa\)/.test(await p.avaliar(`$('listaRadios').textContent`)));
+  await captura(p, '5c_radios.png');
+  // Configurações: o modelo da mensagem com a prévia, e salvar
+  await p.avaliar(`irPara('configuracoes')`);
+  await ate(p, `$('cfgModelo').value.includes('{comunidades}')`);
+  await p.avaliar(`(() => { const t = $('cfgTelefone'); t.value = '0800 000 0000'; t.dispatchEvent(new Event('input', { bubbles: true })); return 0; })()`);
+  const previa = await p.avaliar(`$('cfgPrevia').textContent`);
+  conferir('Configurações: prévia da mensagem pelo modelo (com o telefone novo)', /^Exemplo: Atenção, ouvintes\./.test(previa) && /Dúvidas: 0800 000 0000\.$/.test(previa), previa);
+  await p.avaliar(`($('formConfig').requestSubmit(), 0)`);
+  await ate(p, `/Configurações salvas/.test($('estadoConfig').textContent)`);
+  await p.avaliar(`(() => { $('cfgModelo').value = 'no dia {data} {cliente}'; $('formConfig').requestSubmit(); return 0; })()`);
+  await ate(p, `$('estadoConfig').classList.contains('erro')`);
+  conferir('Configurações: modelo com campo desconhecido é recusado na tela', /desconhecido/.test(await p.avaliar(`$('estadoConfig').textContent`)));
+  await captura(p, '5d_configuracoes.png');
+  // Ajuda e dicas
+  await p.avaliar(`($('botaoAjuda').click(), 0)`);
+  const ajuda = await p.avaliar(`({ aberta: !$('caixaAjuda').hidden, texto: $('ajudaCorpo').textContent })`);
+  conferir('Ajuda: explica o caminho do perfil (Admin da empresa: aviso, rádios, usuários, auditoria)', ajuda.aberta && /Conferir/.test(ajuda.texto)
+    && /Rádios e configurações/.test(ajuda.texto) && /Auditoria/.test(ajuda.texto), ajuda.texto.slice(0, 120));
+  await p.avaliar(`(document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })), 0)`);
+  conferir('Ajuda: fecha com Esc', await p.avaliar(`$('caixaAjuda').hidden`));
+  await p.avaliar(`(document.querySelector('.legenda [data-dica=vizinha]').click(), 0)`);
+  conferir('dica "?": explica o termo (localidade vizinha)', await p.avaliar(`!$('dica').hidden && /Localidade vizinha/.test($('dica').textContent)`));
+  // tema escuro em todas as telas: cores do Farol, fundo do mapa escuro, alvos de 44 px
+  await p.avaliar(`(document.documentElement.dataset.tema = 'claro', desenharTema(), trocarFundoDoMapa(), 0)`);   // o navegador de teste prefere o escuro
+  const antes = await p.avaliar(`document.documentElement.dataset.tema + '/' + temaAtual()`);
+  await p.avaliar(`($('botaoTema').click(), 0)`);
+  const tema = await p.avaliar(`({ tema: document.documentElement.dataset.tema, fundo: getComputedStyle(document.body).backgroundColor,
+    botao: $('botaoTema').textContent, mapa: [...document.querySelectorAll('.leaflet-tile')].some(t => t.src.includes('Dark_Gray')) })`);
+  conferir('tema escuro: Noite no fundo, botão "Tema claro" e o fundo do mapa escuro', tema.tema === 'escuro' && tema.fundo === 'rgb(14, 22, 32)'
+    && tema.botao === 'Tema claro' && tema.mapa, JSON.stringify({ antes, ...tema }));
+  const pequenosTemas = [];
+  for (const v of ['aviso', 'historico', 'relatorios', 'usuarios', 'radios', 'configuracoes', 'registro']) {
+    await p.avaliar(`irPara('${v}')`);
+    await espera(300);
+    pequenosTemas.push(...(await p.avaliar(PEQUENOS)).map(x => `${v}:${x}`));
+  }
+  conferir('tema escuro: alvos de 44 px em todas as telas do Admin da empresa', !pequenosTemas.length, JSON.stringify(pequenosTemas.slice(0, 5)));
+  await p.avaliar(`irPara('radios')`);
+  await captura(p, '5e_tema_escuro.png');
+  await p.avaliar(`($('botaoTema').click(), 0)`);
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
+  await captura(p, '0b_entrar_farol.png');
 
   const f = await entrarNaTela(p, 'admin@farol.example', SENHAS['admin@farol.example']);
-  conferir('Admin do Farol: só Empresas e Auditoria', f.abas.join(',') === 'Empresas,Auditoria', JSON.stringify(f.abas));
+  conferir('Admin do Farol: só Empresas e Auditoria geral', f.abas.join(',') === 'Empresas,Auditoria geral', JSON.stringify(f.abas));
   await ate(p, `document.querySelectorAll('#listaEmpresas tbody tr').length`);
   conferir('Admin do Farol: a empresa EMG na lista', /EMG/.test(await p.avaliar(`$('listaEmpresas').textContent`)));
+  await p.avaliar(`($('empNome').value = 'Cooperativa Teste', $('empCnpj').value = '12.ABC.345/01DE-35', $('empSigla').value = 'CTT',
+    $('empDominio').value = 'ctt.example', $('empAdminNome').value = 'Admin CTT', $('empAdminEmail').value = 'admin@ctt.example', $('formEmpresa').requestSubmit(), 0)`);
+  await ate(p, `!$('caixaSenha').hidden`);
+  await p.avaliar(`($('caixaFechar').click(), 0)`);
+  await ate(p, `$('listaEmpresas').textContent.includes('12.ABC.345/01DE-35')`);
+  await p.avaliar(`(window.confirm = () => true, [...document.querySelectorAll('#listaEmpresas [data-empresa]')].find(t => t.textContent.includes('CTT'))
+    .querySelector('[data-empresa-acao]').click(), 0)`);
+  await ate(p, `/suspensa/.test($('estadoEmpresa').textContent)`);
+  conferir('Empresas: cadastra com CNPJ alfanumérico e suspende (situação na lista)', await p.avaliar(`[...document.querySelectorAll('#listaEmpresas [data-empresa]')]
+    .find(t => t.textContent.includes('CTT'))?.textContent.includes('Suspensa')`), await p.avaliar(`$('estadoEmpresa').textContent + ' | ' + $('listaEmpresas').textContent.slice(0, 300)`));
+  await captura(p, '5f_empresas.png');
   conferir('nenhuma exceção nem violação da CSP (perfis)', !p.excecoes.length && !(await p.avaliar('window.__csp')).length, JSON.stringify(p.excecoes));
   await p.fechar();
 }

@@ -48,7 +48,7 @@ MATRIZ = {
     ("GET", "/api/usuarios"): {ADM}, ("POST", "/api/usuarios"): {ADM}, ("PATCH", "/api/usuarios/{id_}"): {ADM},
     ("POST", "/api/usuarios/{id_}/senha-temporaria"): {ADM},
     # empresas: Admin do Farol; auditoria: Admin do Farol (todas) e Admin da empresa (a dela)
-    ("GET", "/api/empresas"): {FAROL}, ("POST", "/api/empresas"): {FAROL},
+    ("GET", "/api/empresas"): {FAROL}, ("POST", "/api/empresas"): {FAROL}, ("PATCH", "/api/empresas/{id_}"): {FAROL},
     ("GET", "/api/registro"): {FAROL, ADM}, ("GET", "/api/auditoria/verificar"): {FAROL, ADM},
     # configuração da empresa (modelo da mensagem etc.): Admin da empresa
     ("GET", "/api/empresa/configuracao"): {ADM}, ("PUT", "/api/empresa/configuracao"): {ADM},
@@ -114,7 +114,7 @@ outra = pronto("admin@out.example", r.json()["senha_temporaria"])
 
 
 def caminho(path: str) -> str:
-    ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1}
+    ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1, "/api/empresas": 999999}
     p = path.replace("{id_}", str(next((v for k, v in ids.items() if path.startswith(k)), aviso["id"])))
     p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43).replace("{formato}", "csv")
     return p.replace("{codigo}", "FRL-0000-0000-0000" if "verificar" in p else "3138401")

@@ -8,7 +8,7 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - [x] Fase B: tipo de desligamento e auditoria encadeada por hash
 - [x] Fase C: rádios, modelo de mensagem, envio por e-mail, confirmação, arquivos criptografados
 - [x] Fase D: comprovante, relatório mensal, relatórios de auditoria, painel do mês, semente de demonstração
-- [ ] Fase E: telas por perfil, visual único Farol, Ajuda
+- [x] Fase E: telas por perfil, visual único Farol, Ajuda
 - [ ] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito)
 - [ ] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
 
@@ -35,3 +35,7 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 ### Fase D (14/10/2026)
 - Feito: prazo do aviso (nucleo/prazo.py: 72 h ou 5 dias úteis com equipamento vital, até o primeiro envio à rádio); relatório do período (nucleo/relatorio.py: resumo, por tipo, por rádio, comunidades mais afetadas, fora do prazo, sem envio, como a economia foi calculada, lista detalhada, comparação com o mês anterior; filtros município, tipo, rádio e pessoa); comprovante do aviso; relatório de auditoria (Admin da empresa) e auditoria geral de acessos (Admin do Farol, filtro por empresa); PDF (apresentacao/pdf_relatorio.py) e CSV protegido contra fórmula, cada exportação na auditoria com quem gerou e o código FRL do relatório; painel do mês no dashboard; semente de demonstração (comunidades.semente_demo: 16 avisos, ~19 envios e 4 rádios fictícios, uma vez só); telas: aba Relatórios, comprovante no histórico, exportação da auditoria.
 - Testes: rodar_testes.ps1 21 de 21 (teste_relatorios 44/44; navegador 97/97; matriz com 46 rotas fechadas); --so-algoritmo igual ao passo 12.
+
+### Fase E (14/10/2026)
+- Feito: menu por perfil conforme a matriz (Admin do Farol: Empresas e Auditoria geral; Admin da empresa: Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações, Auditoria; Operador: Novo aviso, Histórico, Relatórios; Consulta: Mapa, Histórico, Relatórios; Relatórios com Painel do mês, Do período e Comparativo); telas de admin ligadas à API real: usuários com municípios (convite sem senha, senha temporária, último admin protegido), rádios (alcance por município e por comunidade com distrito, editar, desativar), configurações (modelo da mensagem com prévia, telefone, limite, fuso UTM, antecedência), empresas com CNPJ alfanumérico opcional (validação do protótipo do Lucas portada para Python) e suspender/reativar (sessões encerradas); visual único Farol (Âmbar, Noite, Maré, Névoa) em todas as telas, inclusive entrar e trocar a senha, tema claro e escuro (o fundo do mapa acompanha); botão Ajuda por perfil e "?" para UC, equipamento vital, corrigida, rejeitada, limite de rejeição, localidade vizinha, código de verificação e economia.
+- Testes: rodar_testes.ps1 21 de 21 (acesso 46/46 com CNPJ, municípios e suspensão; matriz com PATCH /api/empresas; navegador 107/107 com rádios, configurações, ajuda, dicas, tema escuro e 44 px nas telas do Admin); --so-algoritmo igual ao passo 12.

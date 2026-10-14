@@ -55,6 +55,31 @@ def problema_email(email: str, dominio: str | None = None) -> str | None:
     return None
 
 
+def normalizar_cnpj(cnpj: str) -> str:
+    return re.sub(r"[.\-/\s]", "", str(cnpj or "")).upper()
+
+
+def cnpj_valido(cnpj: str) -> bool:
+    """CNPJ numérico ou alfanumérico (Receita Federal, a partir de julho de 2026): 12 caracteres [0-9A-Z] e 2
+    dígitos verificadores; o valor de cada caractere é o código ASCII - 48 (o mesmo do protótipo, admin_modelo.js)."""
+    c = normalizar_cnpj(cnpj)
+    if not re.fullmatch(r"[0-9A-Z]{12}[0-9]{2}", c) or len(set(c)) == 1:
+        return False
+
+    def dv(base: str, pesos: list[int]) -> int:
+        r = sum((ord(ch) - 48) * p for ch, p in zip(base, pesos)) % 11
+        return 0 if r < 2 else 11 - r
+
+    d1 = dv(c[:12], [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    d2 = dv(c[:12] + str(d1), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    return c[12:] == f"{d1}{d2}"
+
+
+def formatar_cnpj(cnpj: str) -> str:
+    c = normalizar_cnpj(cnpj)
+    return f"{c[:2]}.{c[2:5]}.{c[5:8]}/{c[8:12]}-{c[12:]}" if len(c) == 14 else str(cnpj or "")
+
+
 def problema_senha(senha: str, email: str = "") -> str | None:
     """Regra da senha nova (NIST SP 800-63B: comprimento acima de complexidade)."""
     if len(senha) < SENHA_MIN:

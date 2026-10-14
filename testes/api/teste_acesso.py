@@ -209,6 +209,41 @@ r = c.post("/api/planilha", files={"arquivo": ("p.csv", planilha)}, data={"data"
            headers={"Origin": "https://malicioso.example"})
 conferir("envio de planilha de outra origem é recusado (403)", r.status_code == 403, r.text[:80])
 
+# ---------- 7b. Fase E: municípios do usuário, CNPJ e suspensão da empresa ----------
+from comunidades.nucleo.acesso import cnpj_valido  # noqa: E402
+
+conferir("CNPJ: numérico e alfanumérico (exemplo da Receita) válidos; dígito errado e repetido inválidos",
+         cnpj_valido("11.222.333/0001-81") and cnpj_valido("12.ABC.345/01DE-35") and not cnpj_valido("11.222.333/0001-82")
+         and not cnpj_valido("00.000.000/0000-00") and not cnpj_valido("abc"))
+adm, _ = entrar("admin@emg.example", NOVA)   # a seção 7 venceu as sessões abertas
+far, _ = entrar("admin@farol.example", NOVA)
+cte, _ = entrar("admin@cte.example", NOVA)
+r = adm.post("/api/usuarios", json={"nome": "Operadora Leopoldina", "email": "leo@emg.example", "perfil": "operador", "municipios": ["3138401"]})
+conferir("usuário com os municípios em que atua", r.status_code == 200 and r.json()["usuario"]["municipios"] == ["3138401"], r.text[:120])
+uid = r.json()["usuario"]["id"]
+r = adm.patch(f"/api/usuarios/{uid}", json={"perfil": "consulta", "status": "ativo", "municipios": ["3138401", "3115300"]})
+conferir("alterar os municípios do usuário (e o perfil)", r.status_code == 200 and r.json()["usuario"]["municipios"] == ["3115300", "3138401"]
+         and r.json()["usuario"]["perfil"] == "consulta", r.text[:120])
+conferir("município fora da concessão: 422", adm.post("/api/usuarios", json={"nome": "Fora", "email": "fora@emg.example", "perfil": "operador",
+                                                                         "municipios": ["3550308"]}).status_code == 422)
+r = far.post("/api/empresas", json={"nome": "Cooperativa CNPJ", "sigla": "CCJ", "dominio": "ccj.example", "admin_nome": "Admin CCJ",
+                                    "admin_email": "admin@ccj.example", "cnpj": "12.ABC.345/01DE-35"})
+conferir("empresa com CNPJ alfanumérico: cadastrada e listada formatada", r.status_code == 200
+         and any(e["cnpj"] == "12.ABC.345/01DE-35" for e in far.get("/api/empresas").json()["empresas"]), r.text[:120])
+conferir("CNPJ inválido ou repetido: 422 / 409", far.post("/api/empresas", json={"nome": "Empresa X", "sigla": "XX", "dominio": "xx.example",
+                                                       "admin_nome": "Admin X", "admin_email": "a@xx.example", "cnpj": "11.222.333/0001-82"}).status_code == 422
+         and far.post("/api/empresas", json={"nome": "Empresa Y", "sigla": "YY", "dominio": "yy.example", "admin_nome": "Admin Y",
+                                             "admin_email": "a@yy.example", "cnpj": "12ABC34501DE35"}).status_code == 409)
+cte_id = next(e["id"] for e in far.get("/api/empresas").json()["empresas"] if e["sigla"] == "CTE")
+r = far.patch(f"/api/empresas/{cte_id}", json={"status": "suspensa"})
+conferir("suspender empresa: a sessão aberta do admin dela acaba e o login é recusado (403)", r.status_code == 200
+         and cte.get("/api/eu").status_code == 401 and entrar("admin@cte.example", NOVA)[1].status_code == 403)
+far.patch(f"/api/empresas/{cte_id}", json={"status": "ativa"})
+conferir("reativar empresa: o admin dela entra de novo", entrar("admin@cte.example", NOVA)[1].status_code == 200)
+conferir("suspender e reativar ficam na auditoria", {"suspendeu empresa", "reativou empresa"}
+         <= {x["acao"] for x in far.get("/api/registro").json()["registro"]})
+conferir("Admin da empresa não suspende empresa (403)", adm.patch(f"/api/empresas/{cte_id}", json={"status": "suspensa"}).status_code == 403)
+
 # ---------- 8. Semente e o que fica no banco ----------
 antes = sql("SELECT count(*) FROM usuario")[0][0]
 conferir("semente de novo não cria nem altera nada", semear() == [] and sql("SELECT count(*) FROM usuario")[0][0] == antes)

@@ -18,15 +18,20 @@
     <div><p class="nome">Farol</p><p class="slogan">Cada comunidade avisada pelo nome</p></div>
   </div>
   <p class="faixa" id="faixa">Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
-  <div class="conta" id="conta" hidden>
-    <span id="contaNome"></span>
-    <button type="button" id="sair">Sair</button>
+  <div class="topo-acoes">
+    <button type="button" id="botaoTema" aria-pressed="false">Tema escuro</button>
+    <div class="conta" id="conta" hidden>
+      <span id="contaNome"></span>
+      <button type="button" id="botaoAjuda" aria-haspopup="dialog">Ajuda</button>
+      <button type="button" id="sair">Sair</button>
+    </div>
   </div>
 </header>
 
 <!-- Entrar e trocar a senha temporária: telas inteiras, antes do app -->
 <main id="telaEntrar" class="tela-acesso" hidden>
   <form id="formEntrar" class="cartao acesso" novalidate>
+    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
     <h1>Entrar no Farol</h1>
     <label>E-mail <input type="email" id="email" autocomplete="username" required></label>
     <label>Senha <input type="password" id="senha" autocomplete="current-password" required></label>
@@ -37,6 +42,7 @@
 
 <main id="telaSenha" class="tela-acesso" hidden>
   <form id="formSenha" class="cartao acesso" novalidate>
+    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
     <h1>Crie a sua senha</h1>
     <p class="ajuda" id="senhaMotivo">Você entrou com uma senha temporária. Crie a sua para continuar.</p>
     <label>Senha atual (a temporária) <input type="password" id="senhaAtual" autocomplete="current-password" required></label>
@@ -51,6 +57,7 @@
 <main id="telaApp" class="layout" hidden>
   <section class="painel" aria-label="Painel">
     <nav class="abas" id="abas" aria-label="Seções"></nav>
+    <nav class="subabas" id="subabas" aria-label="Relatórios" hidden></nav>
 
     <p id="estado" class="estado" role="status" aria-live="polite"></p>
 
@@ -177,14 +184,67 @@
     <section id="vista-usuarios" class="vista" hidden aria-labelledby="tituloUsuarios">
       <h1 id="tituloUsuarios">Usuários da empresa</h1>
       <form id="formUsuario" class="cartao formulario" novalidate>
-        <h2>Cadastrar usuário</h2>
+        <h2>Convidar usuário</h2>
+        <p class="ajuda">Sem senha: o Farol gera uma senha temporária, que aparece uma vez para você passar à pessoa; no primeiro acesso ela
+          cria a própria. Só nome, e-mail da empresa, perfil e municípios: nada de CPF, endereço ou telefone pessoal.</p>
         <label>Nome <input id="novoNome" required maxlength="120"></label>
-        <label>E-mail <input type="email" id="novoEmail" required></label>
+        <label>E-mail da empresa <input type="email" id="novoEmail" required></label>
         <label>Perfil <select id="novoPerfil"></select></label>
-        <button type="submit" class="prim">Cadastrar e gerar senha temporária</button>
+        <label>Municípios em que atua (Ctrl para escolher vários) <select id="novoMunicipios" multiple size="5"></select></label>
+        <button type="submit" class="prim">Convidar e gerar senha temporária</button>
         <p id="estadoUsuario" class="estado" role="status" aria-live="polite"></p>
       </form>
       <div id="listaUsuarios" class="lista"></div>
+    </section>
+
+    <!-- Rádios da empresa (Admin da empresa) -->
+    <section id="vista-radios" class="vista" hidden aria-labelledby="tituloRadios">
+      <h1 id="tituloRadios">Rádios</h1>
+      <p class="ajuda">As rádios que leem o aviso e o que cada uma alcança (municípios inteiros ou comunidades). O Farol sugere a rádio pelas
+        comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
+      <form id="formRadio" class="cartao formulario" novalidate>
+        <h2 id="formRadioTitulo">Cadastrar rádio</h2>
+        <label>Nome da rádio <input id="radNome" maxlength="80" autocomplete="off"></label>
+        <div class="campos campos-2">
+          <label>E-mail <input type="email" id="radEmail" autocomplete="off"></label>
+          <label>WhatsApp (com DDD) <input id="radWhats" inputmode="tel" autocomplete="off"></label>
+        </div>
+        <div class="campos campos-2">
+          <label>Valor padrão (R$) <input id="radValor" inputmode="decimal" autocomplete="off"></label>
+          <label>Cobrança <select id="radCobranca"><option value="fechado">valor fechado pelo aviso</option><option value="minuto">por minuto no ar</option></select></label>
+        </div>
+        <label>Municípios inteiros que alcança (Ctrl para escolher vários) <select id="radMunicipios" multiple size="5"></select></label>
+        <label>Comunidades de um município <select id="radMunCom"><option value="">Escolha o município</option></select></label>
+        <div id="radComunidades" class="checks" aria-label="Comunidades que a rádio alcança"></div>
+        <label class="confirmar" for="radAtiva"><input type="checkbox" id="radAtiva" checked><span>Rádio ativa (aparece no envio)</span></label>
+        <div class="acoes"><button type="submit" class="prim" id="radSalvar">Cadastrar rádio</button>
+          <button type="button" id="radCancelar" hidden>Cancelar a edição</button></div>
+        <p id="estadoRadio" class="estado" role="status" aria-live="polite"></p>
+      </form>
+      <div id="listaRadios" class="lista"></div>
+    </section>
+
+    <!-- Configurações da empresa (Admin da empresa) -->
+    <section id="vista-configuracoes" class="vista" hidden aria-labelledby="tituloConfig">
+      <h1 id="tituloConfig">Configurações da empresa</h1>
+      <form id="formConfig" class="cartao formulario" novalidate>
+        <h2>Mensagem da rádio</h2>
+        <label>Modelo da mensagem <textarea id="cfgModelo" rows="6" maxlength="1500"></textarea></label>
+        <p class="ajuda" id="cfgCampos"></p>
+        <p class="previa" id="cfgPrevia" aria-live="polite"></p>
+        <div class="campos campos-2">
+          <label>Nome da empresa na mensagem <input id="cfgNome" maxlength="120"></label>
+          <label>Telefone de atendimento <input id="cfgTelefone" maxlength="40"></label>
+        </div>
+        <h2>Planilha e prazos</h2>
+        <div class="campos">
+          <label>Limite de rejeição (%) <input type="number" id="cfgLimite" min="0" max="50" step="0.5"></label>
+          <label>Fuso UTM <select id="cfgFuso"></select></label>
+          <label>Antecedência interna (dias) <input type="number" id="cfgAntecedencia" min="1" max="90" step="1"></label>
+        </div>
+        <div class="acoes"><button type="submit" class="prim">Salvar</button><button type="button" id="cfgPadrao">Voltar ao modelo padrão</button></div>
+        <p id="estadoConfig" class="estado" role="status" aria-live="polite"></p>
+      </form>
     </section>
 
     <!-- Empresas (Admin do Farol) -->
@@ -193,6 +253,7 @@
       <form id="formEmpresa" class="cartao formulario" novalidate>
         <h2>Cadastrar empresa</h2>
         <label>Nome <input id="empNome" required maxlength="120"></label>
+        <label>CNPJ (opcional; aceita o alfanumérico) <input id="empCnpj" maxlength="18" autocomplete="off"></label>
         <div class="campos campos-2">
           <label>Sigla <input id="empSigla" required maxlength="10"></label>
           <label>Domínio dos e-mails <input id="empDominio" required placeholder="empresa.com.br"></label>
@@ -231,7 +292,7 @@
         <span aria-hidden="true" class="seta">▾</span> <span id="botaoLegendaTexto">Minimizar legenda</span></button></li>
       <li><span class="amostra inteira"></span>Comunidade inteira</li>
       <li><span class="amostra parte"></span>Parte da comunidade</li>
-      <li><span class="amostra vizinha"></span>Localidade vizinha</li>
+      <li><span class="amostra vizinha"></span>Localidade vizinha <button type="button" class="dica" data-dica="vizinha" aria-label="O que é localidade vizinha?">?</button></li>
       <li><span class="amostra municipio"></span>Município afetado</li>
       <li class="legenda-painel" hidden><span class="amostra painel-amostra"></span>Mais avisos (dashboard)</li>
       <li><span class="amostra outra"></span>Outras comunidades</li>
@@ -247,6 +308,17 @@
     </ul>
   </section>
 </main>
+
+<!-- Ajuda: o caminho do perfil que entrou -->
+<div id="caixaAjuda" class="caixa-senha" role="dialog" aria-modal="true" aria-labelledby="ajudaTitulo" hidden>
+  <div class="cartao ajuda-cartao">
+    <h2 id="ajudaTitulo">Ajuda</h2>
+    <div id="ajudaCorpo"></div>
+    <div class="acoes"><button type="button" class="prim" id="ajudaFechar">Fechar</button></div>
+  </div>
+</div>
+<!-- Explicação dos termos (botões "?") -->
+<div id="dica" class="dica-texto" role="status" aria-live="polite" hidden></div>
 
 <!-- Senha temporária: aparece uma vez, para o admin passar ao usuário -->
 <div id="caixaSenha" class="caixa-senha" role="alertdialog" aria-labelledby="caixaTitulo" hidden>

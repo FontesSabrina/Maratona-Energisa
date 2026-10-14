@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS aviso (
     resumo      jsonb NOT NULL,    -- linhas, válidas, problemas, fora da concessão, prazo
     municipios  jsonb NOT NULL     -- por município: comunidades, contagens, aviso gerado e texto final
 );
+-- municípios em que o usuário atua e o CNPJ da empresa (opcional), desde 14/10/2026
+ALTER TABLE usuario ADD COLUMN IF NOT EXISTS municipios jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE empresa ADD COLUMN IF NOT EXISTS cnpj text;
 -- auditoria encadeada (desde 14/10/2026): quem fez (cópia do login), perfil e os hashes
 ALTER TABLE registro ADD COLUMN IF NOT EXISTS usuario_nome text, ADD COLUMN IF NOT EXISTS perfil text,
     ADD COLUMN IF NOT EXISTS hash_anterior text, ADD COLUMN IF NOT EXISTS hash text;
@@ -157,7 +160,7 @@ def _executar(sql: str, args=()) -> dict | None:
 
 
 USUARIO = ("u.id, u.empresa_id, u.email, u.nome, u.perfil, u.trocar_senha, u.status, u.tentativas, u.bloqueado_ate,"
-           " u.ultimo_acesso, u.criado_em, e.nome AS empresa_nome, e.sigla AS empresa_sigla, e.status AS empresa_status")
+           " u.ultimo_acesso, u.criado_em, u.municipios, e.nome AS empresa_nome, e.sigla AS empresa_sigla, e.status AS empresa_status")
 
 
 # ---------- Empresas ----------
@@ -165,8 +168,19 @@ def empresa_por_sigla(sigla: str) -> dict | None:
     return _um("SELECT * FROM empresa WHERE sigla = %s", (sigla,))
 
 
-def criar_empresa(nome: str, sigla: str, dominio: str) -> dict:
-    return _executar("INSERT INTO empresa (nome, sigla, dominio) VALUES (%s, %s, %s) RETURNING *", (nome, sigla, dominio))
+def criar_empresa(nome: str, sigla: str, dominio: str, cnpj: str | None = None) -> dict:
+    return _executar("INSERT INTO empresa (nome, sigla, dominio, cnpj) VALUES (%s, %s, %s, %s) RETURNING *", (nome, sigla, dominio, cnpj))
+
+
+def empresa_por_cnpj(cnpj: str) -> dict | None:
+    return _um("SELECT * FROM empresa WHERE cnpj = %s", (cnpj,))
+
+
+def mudar_status_empresa(id_: int, status: str) -> None:
+    """Suspende ou reativa; suspensa, as sessões dos usuários dela acabam (e o login é recusado)."""
+    _executar("UPDATE empresa SET status = %s WHERE id = %s", (status, id_))
+    if status == "suspensa":
+        _executar("DELETE FROM sessao WHERE usuario_id IN (SELECT id FROM usuario WHERE empresa_id = %s)", (id_,))
 
 
 def empresa(id_: int) -> dict | None:
@@ -197,13 +211,16 @@ def admins_ativos(empresa_id: int) -> int:
                (empresa_id,))["n"]
 
 
-def criar_usuario(empresa_id: int | None, email: str, nome: str, perfil: str, senha_hash: str, trocar_senha: bool = True) -> dict:
-    return _executar("INSERT INTO usuario (empresa_id, email, nome, perfil, senha_hash, trocar_senha)"
-                     " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id", (empresa_id, email, nome, perfil, senha_hash, trocar_senha))
+def criar_usuario(empresa_id: int | None, email: str, nome: str, perfil: str, senha_hash: str, trocar_senha: bool = True,
+                  municipios: list[str] | None = None) -> dict:
+    return _executar("INSERT INTO usuario (empresa_id, email, nome, perfil, senha_hash, trocar_senha, municipios)"
+                     " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                     (empresa_id, email, nome, perfil, senha_hash, trocar_senha, json.dumps(municipios or [])))
 
 
-def alterar_usuario(id_: int, perfil: str, status: str) -> None:
-    _executar("UPDATE usuario SET perfil = %s, status = %s WHERE id = %s", (perfil, status, id_))
+def alterar_usuario(id_: int, perfil: str, status: str, municipios: list[str] | None = None) -> None:
+    _executar("UPDATE usuario SET perfil = %s, status = %s, municipios = COALESCE(%s, municipios) WHERE id = %s",
+              (perfil, status, json.dumps(municipios) if municipios is not None else None, id_))
     if status == "bloqueado":
         encerrar_sessoes(id_)
 

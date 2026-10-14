@@ -18,7 +18,7 @@ from collections import defaultdict, deque
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import senhas
 from ..banco import acesso as banco
@@ -170,16 +170,30 @@ class NovoUsuario(BaseModel):
     nome: str
     email: str
     perfil: str
+    municipios: list[str] = Field(default_factory=list, max_length=200)
 
 
 class AlteraUsuario(BaseModel):
     perfil: str
     status: str
+    municipios: list[str] | None = Field(None, max_length=200)
+
+
+def _municipios(codigos: list[str] | None) -> list[str] | None:
+    """Os municípios em que o usuário atua: códigos IBGE da concessão (sem repetir)."""
+    if codigos is None:
+        return None
+    from ..banco import base_territorial
+    validos = {c for c, _, _, _ in base_territorial.contornos("EPSG:4674")}
+    saida = sorted({str(c) for c in codigos})
+    if any(c not in validos for c in saida):
+        raise HTTPException(422, "Municípios: use códigos IBGE de municípios da concessão.")
+    return saida
 
 
 def _linha_usuario(x: dict) -> dict:
     return {"id": x["id"], "nome": x["nome"], "email": x["email"], "perfil": x["perfil"], "perfil_nome": regras.PERFIS[x["perfil"]],
-            "status": x["status"], "trocar_senha": x["trocar_senha"],
+            "status": x["status"], "trocar_senha": x["trocar_senha"], "municipios": x.get("municipios") or [],
             "ultimo_acesso": x["ultimo_acesso"].isoformat() if x["ultimo_acesso"] else None}
 
 
@@ -206,8 +220,9 @@ def criar_usuario(dados: NovoUsuario, u: dict = Depends(exigir("gerenciar_usuari
         raise HTTPException(422, "Perfil inválido.")
     if banco.usuario_por_email(email):
         raise HTTPException(409, "Já existe um usuário com este e-mail.")
+    municipios = _municipios(dados.municipios)
     temporaria = senha_temporaria()
-    novo = banco.criar_usuario(u["empresa_id"], email, nome, dados.perfil, hash_senha(temporaria))
+    novo = banco.criar_usuario(u["empresa_id"], email, nome, dados.perfil, hash_senha(temporaria), municipios=municipios)
     banco.registrar("cadastrou usuário", f"{nome} ({regras.PERFIS[dados.perfil]})", u["id"], u["empresa_id"])
     # a senha temporária aparece só nesta resposta, para o admin passar ao usuário
     return {"usuario": _linha_usuario(banco.usuario(novo["id"])), "senha_temporaria": temporaria}
@@ -229,8 +244,10 @@ def alterar_usuario(id_: int, dados: AlteraUsuario, u: dict = Depends(exigir("ge
     depois = dados.perfil == "admin_empresa" and dados.status == "ativo"
     if regras.deixa_sem_admin(banco.admins_ativos(u["empresa_id"]), antes, depois):
         raise HTTPException(409, "Este é o último admin ativo da empresa: cadastre outro admin antes de mudar o perfil ou bloquear.")
-    banco.alterar_usuario(id_, dados.perfil, dados.status)
-    banco.registrar("alterou usuário", f"{alvo['nome']}: {regras.PERFIS[dados.perfil]}, {dados.status}", u["id"], u["empresa_id"])
+    municipios = _municipios(dados.municipios)
+    banco.alterar_usuario(id_, dados.perfil, dados.status, municipios)
+    banco.registrar("alterou usuário", f"{alvo['nome']}: {regras.PERFIS[dados.perfil]}, {dados.status}"
+                    + (f", {len(municipios)} município(s)" if municipios is not None else ""), u["id"], u["empresa_id"])
     return {"usuario": _linha_usuario(banco.usuario(id_))}
 
 
@@ -251,12 +268,31 @@ class NovaEmpresa(BaseModel):
     dominio: str
     admin_nome: str
     admin_email: str
+    cnpj: str | None = Field(None, max_length=30)
+
+
+class SituacaoEmpresa(BaseModel):
+    status: str
 
 
 @rotas.get("/empresas")
 def listar_empresas(u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
     return {"empresas": [{"id": e["id"], "nome": e["nome"], "sigla": e["sigla"], "dominio": e["dominio"], "status": e["status"],
+                          "cnpj": regras.formatar_cnpj(e["cnpj"]) if e.get("cnpj") else None,
                           "usuarios": e["usuarios"], "avisos": e["avisos"]} for e in banco.empresas()]}
+
+
+@rotas.patch("/empresas/{id_}")
+def mudar_empresa(id_: int, dados: SituacaoEmpresa, u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
+    """Suspende ou reativa a empresa (suspensa: ninguém dela entra, e as sessões abertas acabam)."""
+    e = banco.empresa(id_)
+    if not e:
+        raise HTTPException(404, "Empresa não encontrada.")
+    if dados.status not in ("ativa", "suspensa"):
+        raise HTTPException(422, "Situação: ativa ou suspensa.")
+    banco.mudar_status_empresa(id_, dados.status)
+    banco.registrar("suspendeu empresa" if dados.status == "suspensa" else "reativou empresa", f"{e['nome']} ({e['sigla']})", u["id"], id_)
+    return {"empresa": {"id": id_, "status": dados.status}}
 
 
 @rotas.post("/empresas")
@@ -273,7 +309,12 @@ def criar_empresa(dados: NovaEmpresa, u: dict = Depends(exigir("gerenciar_empres
         raise HTTPException(409, "Já existe uma empresa com esta sigla.")
     if banco.usuario_por_email(email):
         raise HTTPException(409, "Já existe um usuário com este e-mail.")
-    e = banco.criar_empresa(nome, sigla, dominio)
+    cnpj = regras.normalizar_cnpj(dados.cnpj) or None
+    if cnpj and not regras.cnpj_valido(cnpj):
+        raise HTTPException(422, "CNPJ inválido: confira os dígitos verificadores (aceita o alfanumérico).")
+    if cnpj and banco.empresa_por_cnpj(cnpj):
+        raise HTTPException(409, "Já existe uma empresa com este CNPJ.")
+    e = banco.criar_empresa(nome, sigla, dominio, cnpj)
     temporaria = senha_temporaria()
     banco.criar_usuario(e["id"], email, _nome(dados.admin_nome), "admin_empresa", hash_senha(temporaria))
     banco.registrar("cadastrou empresa", f"{nome} ({sigla}) e o primeiro admin", u["id"], e["id"])
