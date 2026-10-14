@@ -42,7 +42,8 @@ from comunidades.validacao.minimizacao import numero_de_casa_ou_cep  # noqa: E40
 # entra como Operador (a semente cria os usuários; a senha temporária é trocada na hora)
 with conectar() as _c:
     _c.execute("DROP SCHEMA IF EXISTS teste_api CASCADE")
-_temp = {email: s for _, email, s in semear()}["operador@emg.example"]
+_temps = {email: s for _, email, s in semear()}
+_temp = _temps["operador@emg.example"]
 cli = TestClient(app, base_url="http://farol.teste")
 cli.post("/api/entrar", json={"email": "operador@emg.example", "senha": _temp})
 assert cli.post("/api/senha", json={"atual": _temp, "nova": "Lanterna-do-Farol-2026"}).status_code == 200
@@ -53,9 +54,26 @@ def conferir(nome, ok, extra=""):
     resultados.append(("OK  " if ok else "FALHA", nome, extra))
 
 
-def enviar(conteudo: bytes, nome="planilha.csv", data="12/11", horario="8h às 14h", **extra):
+def importar(conteudo: bytes, nome="planilha.csv", data="12/11", horario="8h às 14h", c=None, **extra):
+    """1º passo (Conferir): traduz e devolve a conferência com o pacote assinado; nada vai para o histórico."""
     app_mod._envios.clear()   # o limite de envios por hora tem teste próprio (seção 5)
-    return cli.post("/api/avisos", files={"arquivo": (nome, conteudo)}, data={"data": data, "horario": horario, **extra})
+    return (c or cli).post("/api/planilha", files={"arquivo": (nome, conteudo)}, data={"data": data, "horario": horario, **extra})
+
+
+def gerar(conferencia: dict, data="12/11", horario="8h às 14h", idioma="pt-BR", conferi=True, justificativa=None, c=None):
+    """2º passo (Gerar aviso): o pacote da conferência, a caixa "Conferi" e, se precisar, a justificativa."""
+    return (c or cli).post("/api/avisos", json={"pacote": conferencia["pacote"], "data": data, "horario": horario, "idioma": idioma,
+                                                "conferi": conferi, "justificativa": justificativa})
+
+
+def enviar(conteudo: bytes, nome="planilha.csv", data="12/11", horario="8h às 14h", **extra):
+    """Os dois passos, como a tela faz (com a justificativa quando a rejeição passa do limite)."""
+    r = importar(conteudo, nome, data, horario, **extra)
+    if r.status_code != 200:
+        return r
+    j = r.json()
+    just = "Teste: linhas rejeitadas conhecidas." if j["conferencia"]["rejeicao"]["acima"] else None
+    return gerar(j, data, horario, extra.get("idioma", "pt-BR"), justificativa=just)
 
 
 def csv_bytes(t: pd.DataFrame) -> bytes:
@@ -99,7 +117,8 @@ conferir("CF-0066: 758 UCs, 754 em Leopoldina e 4 além da divisa em São João 
          and j["planilha"]["validas"] == 758 and j["fora_da_concessao"]["ucs"] == 0,
          json.dumps([(mm["nome"], mm["ucs"]) for mm in j["municipios"]], ensure_ascii=False))
 # cada envio ganha um id no histórico; nome, formato e aba do arquivo mudam de .csv para .xlsx
-sem_id = lambda d: {k: ({**v, "arquivo": None} if k == "traducao" else v) for k, v in d.items() if k != "id"}
+sem_id = lambda d: {k: ({**v, "arquivo": None} if k == "traducao" else {**v, "arquivo": None, "sha256": None} if k == "conferencia" else v)
+                    for k, v in d.items() if k != "id"}
 conferir(".xlsx dá a mesma resposta que o .csv (fora o id do histórico)", rx.status_code == 200 and sem_id(rx.json()) == sem_id(j))
 from pyproj import Transformer
 x, y = Transformer.from_crs("EPSG:4674", BT.CRS_BASE, always_xy=True).transform(t["longitude"].to_numpy(), t["latitude"].to_numpy())
@@ -276,10 +295,25 @@ conferir("aba que não serve: 422", r.status_code == 422, f"{r.status_code} {r.t
 saida = rp.text
 conferir("aba Postes: nada de NOME, NUM_CASA, MEDIDOR ou NUM_CONTA na resposta",
          not any(c in saida for c in ("NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA")), "")
+# dupla conferência: se a releitura independente não bater, nada é gerado nem gravado
+from comunidades.api import conferencia  # noqa: E402
+
+contar_original = conferencia.contar
+conferencia.contar = lambda c, f, a: {**contar_original(c, f, a), "vital_sim": -1}   # sabotagem: um número diferente
+with conectar() as _c:
+    avisos_antes = _c.execute("SELECT count(*) FROM aviso").fetchone()[0]
+r = enviar(POSTES, "planilha_postes.xlsx", aba="Postes")
+conferencia.contar = contar_original
+with conectar() as _c:
+    avisos_depois = _c.execute("SELECT count(*) FROM aviso").fetchone()[0]
+    bloqueio = _c.execute("SELECT count(*) FROM registro WHERE acao = 'planilha bloqueada pela conferência independente'").fetchone()[0]
+conferir("conferência independente divergente: 422 'Nada foi gerado', nada no histórico, bloqueio na auditoria",
+         r.status_code == 422 and "Nada foi gerado" in r.json().get("detail", "") and avisos_depois == avisos_antes and bloqueio >= 1,
+         f"{r.status_code} {r.text[:120]} avisos {avisos_antes}->{avisos_depois} registro {bloqueio}")
 # limite de envios por usuário
 app_mod._envios.clear()
 pequena = "uc;latitude;longitude\n1;-21,53;-42,64\n".encode()
-codigos = [cli.post("/api/avisos", files={"arquivo": ("p.csv", pequena)}, data={"data": "12/11", "horario": "8h"}).status_code
+codigos = [cli.post("/api/planilha", files={"arquivo": ("p.csv", pequena)}, data={"data": "12/11", "horario": "8h"}).status_code
            for _ in range(app_mod.LIMITE_ENVIOS + 2)]
 conferir(f"limite de {app_mod.LIMITE_ENVIOS} planilhas por hora por usuário: depois, 429", set(codigos[:app_mod.LIMITE_ENVIOS]) == {200}
          and codigos[app_mod.LIMITE_ENVIOS:] == [429, 429], str(codigos))
@@ -294,6 +328,143 @@ casos = {
 }
 for nome, rr in casos.items():
     conferir(f"erro tratado ({nome}): 422 com mensagem", rr.status_code == 422 and "detail" in rr.json(), f"{rr.status_code} {rr.text[:120]}")
+
+# ---------- 6. Conferência humana e travas (dois passos: Conferir -> Gerar aviso) ----------
+import base64  # noqa: E402
+import gzip  # noqa: E402
+import time  # noqa: E402
+
+from comunidades.api import pacote as pacote_  # noqa: E402
+
+
+def contar(tabela: str) -> int:
+    with conectar() as _c:
+        return _c.execute(f"SELECT count(*) FROM {tabela}").fetchone()[0]
+
+
+def registros(acao: str) -> list[str]:
+    with conectar() as _c:
+        return [d for (d,) in _c.execute("SELECT detalhe FROM registro WHERE acao = %s ORDER BY id", (acao,)).fetchall()]
+
+
+antes = contar("aviso")
+ri = importar(csv_bytes(t))
+ji = ri.json()
+conferir("conferir (1º passo): 200, nada no histórico, importação na auditoria com o sha256",
+         ri.status_code == 200 and contar("aviso") == antes and any(ji["conferencia"]["sha256"] in d for d in registros("importou planilha")),
+         f"{ri.status_code} {contar('aviso')} x {antes}")
+conferir("conferir: números (clientes, municípios, comunidades, equipamento vital, corrigidas, rejeitadas)",
+         ji["conferencia"]["numeros"] == {"clientes": 758, "municipios": 2, "comunidades": sum(len(mm["comunidades"]) for mm in ji["municipios"]),
+                                          "equipamento_vital": sum(mm["equipamento_vital"]["sim"] for mm in ji["municipios"]),
+                                          "vital_a_confirmar": 0, "corrigidas": 0, "rejeitadas": 0, "fora_da_concessao": 0},
+         json.dumps(ji["conferencia"]["numeros"]))
+conferir("suspeito (amarelo): 4 UCs em São João Nepomuceno, município diferente da maioria",
+         [(x["tipo"], x["municipio"], x["ucs"]) for x in ji["conferencia"]["suspeitos"]] == [("municipio_diferente", "São João Nepomuceno/MG", 4)],
+         json.dumps(ji["conferencia"]["suspeitos"], ensure_ascii=False))
+# o pacote vai ao navegador: UCs trocadas por códigos opacos
+dentro = json.loads(gzip.decompress(base64.urlsafe_b64decode(ji["pacote"].split(".")[1] + "==")))
+conferir("pacote: nenhum número de UC (só códigos opacos u1, u2...)", not sem_dados_da_planilha(dentro["m"], sem_ucs)
+         and json.loads(dentro["m"])["pontos"][0]["uc"] == "u1", str(sem_dados_da_planilha(dentro["m"], sem_ucs)))
+sem_marcar = gerar(ji, conferi=False)
+conferir("sem marcar 'Conferi os números e o mapa': 422, nada no histórico",
+         sem_marcar.status_code == 422 and "Conferi" in sem_marcar.json()["detail"] and contar("aviso") == antes, sem_marcar.text[:120])
+corpo = ji["pacote"].split(".")
+adulterado = {**ji, "pacote": ".".join([corpo[0], corpo[1][:-3] + ("A" if corpo[1][-3] != "A" else "B") + corpo[1][-2:], corpo[2]])}
+ra = gerar(adulterado)
+conferir("pacote adulterado: 422 'alterado', nada no histórico", ra.status_code == 422 and "alterado" in ra.json()["detail"]
+         and contar("aviso") == antes, ra.text[:120])
+modelo_ok = pacote_.abrir(ji["pacote"], *[cli.get("/api/eu").json()["usuario"][k] for k in ("id", "empresa_id")])
+uid, eid = (cli.get("/api/eu").json()["usuario"][k] for k in ("id", "empresa_id"))
+vencido, _ = pacote_.assinar(modelo_ok, uid, eid, agora=time.time() - pacote_.VALIDADE - 5)
+rv = gerar({"pacote": vencido})
+conferir("pacote vencido (mais de 15 minutos): 422 'venceu'", rv.status_code == 422 and "venceu" in rv.json()["detail"], rv.text[:120])
+adm = TestClient(app, base_url="http://farol.teste")
+adm.post("/api/entrar", json={"email": "admin@emg.example", "senha": _temps["admin@emg.example"]})
+adm.post("/api/senha", json={"atual": _temps["admin@emg.example"], "nova": "Lanterna-do-Farol-2026"})
+ro = gerar(ji, c=adm)
+conferir("pacote de outro usuário (mesma empresa): 422 'outro usuário'", ro.status_code == 422 and "outro usuário" in ro.json()["detail"], ro.text[:120])
+falso = json.dumps({"u": uid, "e": eid, "vence": int(time.time()) + 600,
+                    "m": json.dumps({**json.loads(modelo_ok.model_dump_json()), "campo_extra": 1})})
+corpo_falso = base64.urlsafe_b64encode(gzip.compress(falso.encode(), mtime=0)).decode().rstrip("=")
+rf = gerar({"pacote": f"v1.{corpo_falso}.{pacote_._assinatura(corpo_falso)}"})
+conferir("pacote assinado mas fora do esquema (campo extra): 422 'esquema'", rf.status_code == 422 and "esquema" in rf.json()["detail"], rf.text[:120])
+rg = gerar(ji)
+conferir("com 'Conferi' marcado: 200, entra no histórico, conferência na auditoria com o sha256",
+         rg.status_code == 200 and contar("aviso") == antes + 1 and any(ji["conferencia"]["sha256"] in d for d in registros("conferiu os números e o mapa")),
+         rg.text[:120])
+conferir("gerar = conferir (mesmos municípios, comunidades e avisos)", rg.status_code == 200
+         and rg.json()["municipios"] == ji["municipios"], "")
+
+# equipamento vital: linha corrigida ou rejeitada com vital = sim bloqueia sempre (nem com justificativa)
+vit = t.head(30).copy()
+vit["equipamento_vital"] = "não"
+vit.loc[3, "equipamento_vital"] = "sim"
+vit.loc[3, "latitude"], vit.loc[3, "longitude"] = float(t.loc[3, "longitude"]), float(t.loc[3, "latitude"])   # trocadas: vira corrigida
+vit.loc[7, "equipamento_vital"] = "sim"
+vit.loc[7, ["latitude", "longitude"]] = [-23.55, -46.63]                                   # São Paulo: rejeitada
+rvi = importar(csv_bytes(vit))
+jv = rvi.json()
+conferir("vital corrigida (linha 5) e rejeitada (linha 9): alerta vermelho pela linha, sem a UC",
+         [(x["linha"], x["situacao"]) for x in jv["conferencia"]["vital_bloqueio"]] == [(5, "corrigida"), (9, "rejeitada")]
+         and not sem_dados_da_planilha(json.dumps(jv["conferencia"]), vit.assign(latitude=0.0, longitude=0.0)),
+         json.dumps(jv["conferencia"]["vital_bloqueio"], ensure_ascii=False))
+conferir("a corrigida aparece nos pontos corrigidos do mapa (cor própria)", len(jv["pontos_corrigidos"]) == 1, str(jv["pontos_corrigidos"]))
+antes = contar("aviso")
+rb = gerar(jv, justificativa="tentando passar por cima")
+conferir("vital bloqueia a geração: 422, nada no histórico, bloqueio na auditoria",
+         rb.status_code == 422 and "equipamento vital" in rb.json()["detail"] and contar("aviso") == antes
+         and registros("geração bloqueada (equipamento vital)"), rb.text[:160])
+
+# limite de rejeição (2%): sem justificativa não gera; com ela, gera e a justificativa vai para a auditoria
+rr = importar(ruins.to_csv(sep=";", index=False).encode("utf-8"))
+jr = rr.json()
+conferir("5 de 7 rejeitadas (71%): acima do limite de 2%", jr["conferencia"]["rejeicao"]["acima"] is True
+         and jr["conferencia"]["rejeicao"]["limite"] == 0.02, json.dumps(jr["conferencia"]["rejeicao"]))
+sem_just = gerar(jr)
+conferir("acima do limite sem justificativa: 422", sem_just.status_code == 422 and "justificativa" in sem_just.json()["detail"], sem_just.text[:120])
+longa = gerar(jr, justificativa="x" * 301)
+conferir("justificativa com mais de 300 caracteres: 422", longa.status_code == 422, longa.text[:120])
+com_just = gerar(jr, justificativa="Planilha de teste com\tlinhas ruins de propósito.")
+conferir("com justificativa: 200 e a justificativa (limpa) na auditoria com as contagens",
+         com_just.status_code == 200 and registros("justificou rejeições acima do limite")[-1]
+         == "5 de 7 linhas: Planilha de teste com linhas ruins de propósito.", str(registros("justificou rejeições acima do limite")[-1:]))
+
+# relatório (CSV) e JSON com as UCs
+rel = cli.post("/api/planilha/relatorio", json={"pacote": jr["pacote"]})
+linhas_rel = rel.content.decode("utf-8-sig").splitlines()
+conferir("relatório CSV: uma linha por linha da planilha, com situação e motivo, sem UC",
+         rel.status_code == 200 and len(linhas_rel) == 2 + 7 and linhas_rel[1] == "linha;situacao;motivo_ou_correcao;equipamento_vital;avisos"
+         and "1000000004" not in rel.text and "4;corrigida;latitude e longitude estavam trocadas" in rel.text, rel.text[:300])
+perigoso = importar(csv_bytes(t.head(5)), nome="=HYPERLINK(1).csv").json()
+rel2 = cli.post("/api/planilha/relatorio", json={"pacote": perigoso["pacote"]}).content.decode("utf-8-sig")
+conferir("relatório CSV: nome de arquivo com fórmula sai com apóstrofo", rel2.startswith("arquivo;'=HYPERLINK"), rel2[:60])
+app_mod._envios.clear()
+rj = cli.post("/api/planilha/json", files={"arquivo": ("planilha.csv", csv_bytes(t))})
+conferir("Baixar JSON (Operador): 200, com os números de UC, registrado na auditoria",
+         rj.status_code == 200 and rj.json()["pontos"][0]["uc"] == str(t["uc"].iloc[0])
+         and "attachment" in rj.headers.get("content-disposition", "") and registros("baixou o JSON da planilha (com números de UC)"),
+         rj.text[:100])
+conferir("Baixar JSON: o mesmo arquivo dá o mesmo conteúdo (reprodutível) e o sha256 da conferência",
+         rj.json()["arquivo"]["sha256"] == ji["conferencia"]["sha256"], "")
+
+# erro inesperado: nada é gerado, código ERR-xxxx, sem dados da planilha na mensagem
+sem_erro = TestClient(app, base_url="http://farol.teste", raise_server_exceptions=False)
+sem_erro.cookies = cli.cookies
+bases_original = app_mod._bases
+app_mod._bases = lambda xy: (_ for _ in ()).throw(RuntimeError(f"vazou {t['uc'].iloc[0]}"))
+import logging  # noqa: E402
+_logs = []
+_h = logging.Handler(); _h.emit = lambda rec: _logs.append(rec.getMessage())
+logging.getLogger("farol.api").addHandler(_h)
+antes = contar("aviso")
+re_ = sem_erro.post("/api/avisos", json={"pacote": ji["pacote"], "data": "12/11", "horario": "8h às 14h", "conferi": True})
+app_mod._bases = bases_original
+conferir("erro inesperado: 500 'nada foi gerado (código ERR-xxxx)', nada no histórico, nenhuma UC na resposta",
+         re_.status_code == 500 and re.fullmatch(r"Ocorreu um erro e nada foi gerado \(código ERR-[0-9A-F]{6}\)\.", re_.json()["detail"])
+         and contar("aviso") == antes and str(t["uc"].iloc[0]) not in re_.text, re_.text[:120])
+conferir("erro inesperado: o log tem o código e onde foi, sem a mensagem nem a UC",
+         len(_logs) == 1 and re_.json()["detail"][-12:-2] in _logs[0] and "RuntimeError" in _logs[0]
+         and str(t["uc"].iloc[0]) not in _logs[0] and "vazou" not in _logs[0], str(_logs))
 
 with conectar() as _c:
     _c.execute("DROP SCHEMA IF EXISTS teste_api CASCADE")

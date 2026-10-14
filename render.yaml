@@ -17,3 +17,5 @@ services:
         value: "1"
       - key: FAROL_AUDIO          # sem a voz: o plano gratuito tem 512 MB e a voz pede ~520 MB a mais
         value: "0"
+      - key: FAROL_CHAVE_PACOTE   # HMAC do pacote da conferência da planilha (o Render gera; nunca no git)
+        generateValue: true

@@ -182,6 +182,10 @@ def _como_texto(v) -> str:
     return str(v)
 
 
+def _longa(v) -> bool:
+    return isinstance(v, str) and len(v) > LIMITE_CELULA
+
+
 def _uc(v) -> tuple[str | None, Motivo | None]:
     if v is None or (isinstance(v, str) and not limpar(v)):
         return None, Motivo.UC_VAZIA
@@ -232,10 +236,13 @@ def _ponto(numero: int, valores: list, campos: dict, p: Parametros, endereco: bo
     pt = {"linha": numero, "uc": None, "lat": None, "lon": None, "equipamento_vital": None, "classe": None, "local": None,
           "transformador": None, "circuito": None, "status": K.REJEITADA, "motivo": None, "correcao": None,
           "original": None, "repete_linha": None, "avisos": []}
-    if any(isinstance(v, str) and len(v) > LIMITE_CELULA for v in valores):
+    pt["uc"], motivo_uc = _uc(cel("uc")) if not _longa(cel("uc")) else (None, Motivo.UC_INVALIDA)
+    if any(_longa(v) for v in valores):
+        # a UC e o equipamento vital ficam registrados (conferência independente e alerta de vital)
+        if "equipamento_vital" in campos and not _longa(cel("equipamento_vital")):
+            pt["equipamento_vital"] = _vital(cel("equipamento_vital"), [])
         pt["motivo"] = Motivo.CELULA_LONGA
         return pt
-    pt["uc"], motivo_uc = _uc(cel("uc"))
     c = K.interpretar(cel("latitude"), cel("longitude"), celula=cel("celula"), lat_gms=cel("lat_gms"),
                       lon_gms=cel("lon_gms"), x=cel("coord_x"), y=cel("coord_y"), epsg_utm=p.epsg_utm, dentro=p.dentro)
     redondo = lambda v: round(v, CASAS_PONTO)

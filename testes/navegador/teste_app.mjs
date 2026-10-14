@@ -48,8 +48,12 @@ async function entrarNaTela(p, email, senha) {
   if (await p.avaliar(`estado.tela === 'app'`)) await ate(p, `estado.concessao && document.documentElement.dataset.farol === 'pronto'`);
   return p.avaliar(`({ tela: estado.tela, mensagem: $('estadoEntrar').textContent, abas: [...document.querySelectorAll('#abas button')].map(b => b.textContent) })`);
 }
+// os dois passos pela tela: Conferir a planilha; marcar "Conferi os números e o mapa"; Gerar aviso
 async function gerar(p) {
   await p.avaliar(`(document.documentElement.dataset.farol = 'enviando', $('form').requestSubmit(), 0)`);
+  await ate(p, `document.documentElement.dataset.farol === 'conferencia' || $('estado').classList.contains('erro')`);
+  if (await p.avaliar(`document.documentElement.dataset.farol !== 'conferencia'`)) return p.avaliar(`$('estado').textContent`);
+  await p.avaliar(`($('conferi').click(), $('avancarResultado').click(), 0)`);
   await ate(p, `document.documentElement.dataset.farol === 'resultado' || $('estado').classList.contains('erro')`);
   return p.avaliar(`$('estado').textContent`);
 }
@@ -65,7 +69,9 @@ const cookie = login.headers.get('set-cookie').split(';')[0];
 const fd = new FormData();
 fd.append('arquivo', new Blob([readFileSync(PLANILHA)]), 'planilha_CF-0066.csv');
 fd.append('data', '20/11'); fd.append('horario', '8h às 14h'); fd.append('idioma', 'pt-BR');
-const esperado = await (await fetch(`${BASE}/api/avisos`, { method: 'POST', body: fd, headers: { cookie } })).json();
+const conf = await (await fetch(`${BASE}/api/planilha`, { method: 'POST', body: fd, headers: { cookie, origin: BASE } })).json();
+const esperado = await (await fetch(`${BASE}/api/avisos`, { method: 'POST', headers: { cookie, origin: BASE, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ pacote: conf.pacote, data: '20/11', horario: '8h às 14h', idioma: 'pt-BR', conferi: true }) })).json();
 const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boolean).map(l => l.split(';'));
 
 // ---------- 1. Operador: entrar, trocar a senha, gerar o aviso, PDF e histórico ----------
@@ -134,10 +140,30 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     && ${visivel('gerar')} && $('passo2Arquivo').textContent.includes('planilha_CF-0066.csv')`));
   await p.avaliar(`($('data').value = '2026-11-20', $('inicio').value = '08:00', $('fim').value = '14:00', 0)`);
   await p.avaliar(`(document.documentElement.dataset.farol = 'enviando', $('gerar').click(), 0)`);
-  await ate(p, `document.documentElement.dataset.farol === 'resultado' || $('estado').classList.contains('erro')`);
-  const msg = await p.avaliar(`$('estado').textContent`);
-  conferir('gerar aviso: pronto e guardado no histórico', /^Pronto.*aviso nº \d+/.test(msg), msg);
+  await ate(p, `document.documentElement.dataset.farol === 'conferencia' || $('estado').classList.contains('erro')`);
+  const msgConf = await p.avaliar(`$('estado').textContent`);
+  conferir('conferir a planilha: conferência pronta, nada no histórico ainda', /^Conferência pronta: 758 cliente/.test(msgConf)
+    && await p.avaliar(`fetch('/api/historico').then(r => r.json()).then(j => j.avisos.length === 1)`), msgConf);
   await espera(800);
+  const conf3 = await p.avaliar(`({ visivel: ${visivel('conferencia')}, numeros: [...document.querySelectorAll('#conferencia dd')].map(d => d.textContent),
+    amarelo: document.querySelector('#conferencia .alerta-amarelo')?.textContent || '', vermelho: !!document.querySelector('#conferencia .alerta-vermelho'),
+    botao: $('avancarResultado').textContent, travado: $('avancarResultado').disabled, motivo: $('motivoGerar').textContent,
+    json: !!document.querySelector('[data-conf=json]'), relatorio: !!document.querySelector('[data-conf=relatorio]') })`);
+  conferir('conferência: números, suspeito amarelo (São João Nepomuceno), sem bloqueio vermelho, JSON e relatório',
+    conf3.visivel && conf3.numeros[0] === '758' && conf3.numeros[1] === '2' && /São João Nepomuceno/.test(conf3.amarelo) && !conf3.vermelho
+    && conf3.json && conf3.relatorio, JSON.stringify(conf3));
+  conferir('conferência: "Gerar aviso" travado até marcar "Conferi os números e o mapa"', conf3.botao === 'Gerar aviso' && conf3.travado
+    && /Conferi/.test(conf3.motivo), JSON.stringify(conf3));
+  await captura(p, '2a_conferencia.png');
+  await p.navegador.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: CAP, eventsEnabled: true });
+  const nomesBaixados = [];
+  p.navegador.on('Browser.downloadWillBegin', e => nomesBaixados.push(e.suggestedFilename));
+  await p.avaliar(`(document.querySelector('[data-conf=relatorio]').click(), 0)`);
+  await ate(p, `/Relatório da planilha baixado/.test($('estado').textContent)`);
+  await espera(500);
+  const rel = nomesBaixados.includes('farol-relatorio-planilha.csv') ? readFileSync(join(CAP, 'farol-relatorio-planilha.csv'), 'utf-8') : '';
+  conferir('Baixar relatório (CSV): uma linha por linha, sem UC', rel.split(/\r?\n/).filter(Boolean).length === 2 + 758
+    && !ucs.slice(0, 50).some(([uc]) => rel.includes(uc)), `${nomesBaixados} ${rel.slice(0, 80)}`);
   const conferencia = await p.avaliar(`({ passo: estado.passo, resumo: ${visivel('resumo')}, form: ${visivel('form')},
     texto: !!document.querySelector('#municipios textarea')?.offsetParent, listas: !!document.querySelector('#municipios .listas')?.offsetParent,
     titulo: $('tituloResultado').textContent })`);
@@ -180,7 +206,12 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     && xss.texto.includes('<img src=x') && await p.avaliar(`window.__xss === undefined`), JSON.stringify(xss));
   conferir('resumo: 758 linhas e o prazo de 5 dias úteis', /758/.test(tela.resumo) && /5 dias úteis/.test(tela.resumo), tela.resumo);
   await captura(p, '2_resultado.png');
+  await p.avaliar(`($('conferi').click(), 0)`);
+  conferir('marcar "Conferi" libera o "Gerar aviso"', await p.avaliar(`!$('avancarResultado').disabled && estado.conferi`));
   await p.avaliar(`($('avancarResultado').click(), 0)`);
+  await ate(p, `document.documentElement.dataset.farol === 'resultado' || $('estado').classList.contains('erro')`);
+  const msg = await p.avaliar(`$('estado').textContent`);
+  conferir('gerar aviso: pronto e guardado no histórico', /^Pronto.*aviso nº \d+/.test(msg), msg);
   const avisos = await p.avaliar(`({ passo: estado.passo, resumo: ${visivel('resumo')}, texto: !!document.querySelector('#municipios textarea')?.offsetParent,
     novo: ${visivel('novoAviso')}, titulo: $('tituloResultado').textContent })`);
   conferir('funil: passo 4 (avisos) mostra o texto para a rádio e o "Novo desligamento"',
@@ -245,6 +276,21 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('novoAviso').click(), 0)`);
   conferir('Novo desligamento: volta ao passo 1, sem o resultado anterior na tela nem no mapa', await p.avaliar(`estado.passo === 1
     && !estado.resultado && $('resultado').hidden && !camadaUcs && !camadaComunidades && !$('municipios').children.length && !estado.arquivo`));
+
+  // planilha de demonstração com equipamento vital rejeitado: alerta vermelho e nada é gerado
+  await escolherArquivo(p, join(RAIZ, 'testes', 'planilha', 'exemplos', 'demo', '3_vital_rejeitado.xlsx'));
+  await p.avaliar(`($('avancar').click(), 0)`);
+  await p.avaliar(`(document.documentElement.dataset.farol = 'enviando', $('gerar').click(), 0)`);
+  await ate(p, `document.documentElement.dataset.farol === 'conferencia' || $('estado').classList.contains('erro')`);
+  await espera(500);
+  const vit = await p.avaliar(`({ vermelho: document.querySelector('#conferencia .alerta-vermelho')?.textContent || '', caixa: $('conferi').disabled,
+    botao: $('avancarResultado').disabled, erro: $('estado').classList.contains('erro'), roxo: estado.resultado.pontos_corrigidos.length })`);
+  conferir('demo 3 (vital rejeitado): alerta vermelho com as 2 linhas, "Conferi" e "Gerar aviso" travados',
+    /Bloqueado: 2 linha/.test(vit.vermelho) && /Linha \d+: rejeitada/.test(vit.vermelho) && vit.caixa && vit.botao && vit.erro, JSON.stringify(vit));
+  const peqConf = await p.avaliar(PEQUENOS);
+  conferir('conferência: alvos de toque de pelo menos 44 x 44 px', !peqConf.length, JSON.stringify(peqConf));
+  await captura(p, '2d_vital_bloqueado.png');
+  await p.avaliar(`(novoAviso(), 0)`);
 
   // histórico: o aviso aparece e abre com o texto final
   await p.avaliar(`irPara('historico')`);
@@ -335,6 +381,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `document.querySelectorAll('#listaRegistro tbody tr').length`);
   const reg = await p.avaliar(`[...document.querySelectorAll('#listaRegistro tbody tr')].map(t => t.textContent).join(' | ')`);
   conferir('registro da empresa: cadastro de usuário, aviso gerado e texto final', /cadastrou usuário/.test(reg) && /gerou aviso/.test(reg) && /guardou o texto final/.test(reg), reg.slice(0, 200));
+  conferir('registro da empresa: importou a planilha e conferiu os números (com o nome de quem fez)',
+    /Operador.*importou planilha|importou planilha/.test(reg) && /conferiu os números e o mapa/.test(reg), reg.slice(0, 300));
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const f = await entrarNaTela(p, 'admin@farol.example', SENHAS['admin@farol.example']);

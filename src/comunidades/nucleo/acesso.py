@@ -17,6 +17,7 @@ PERMISSOES = {
     "gerenciar_usuarios": {"admin_empresa"},
     "gerenciar_empresas": {"admin_farol"},
     "ver_registro": {"admin_farol", "admin_empresa"},
+    "baixar_json": {"admin_empresa", "operador"},   # o JSON da planilha com os números de UC (auditado)
 }
 
 SENHA_MIN, SENHA_MAX = 12, 128

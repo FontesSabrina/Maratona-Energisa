@@ -73,7 +73,8 @@
           </label>
           <p class="ajuda">Colunas: <code>uc</code>, <code>latitude</code>, <code>longitude</code> e, se tiver, <code>equipamento_vital</code> e <code>classe</code>.
             <a href="/api/modelo-planilha" download>Baixar o modelo</a></p>
-          <p class="ajuda">A planilha é lida no servidor e descartada: nenhuma UC ou coordenada é guardada. Os pontos das UCs aparecem no mapa só nesta tela, sem o número.</p>
+          <p class="ajuda">A planilha é lida no servidor e descartada: nenhuma UC ou coordenada é guardada. Os pontos das UCs aparecem no mapa só nesta tela, sem o número.
+            Antes de gerar o aviso, você confere os números e o mapa.</p>
         </fieldset>
         <fieldset id="passo-2" hidden>
           <legend>Data e horário do desligamento</legend>
@@ -83,18 +84,19 @@
             <label>Fim <input type="time" id="fim" value="14:00" step="900" required></label>
           </div>
           <label class="idioma">Idioma do aviso <select id="idioma"></select></label>
+          <label id="abaRotulo" hidden>Aba da planilha (mais de uma tem as colunas) <select id="aba"></select></label>
           <p class="ajuda" id="passo2Arquivo"></p>
         </fieldset>
         <div class="nav-funil">
           <button type="button" id="voltar" hidden>Voltar</button>
           <button type="button" class="prim" id="avancar">Avançar</button>
-          <button type="submit" class="prim" id="gerar" hidden>Gerar aviso</button>
+          <button type="submit" class="prim" id="gerar" hidden>Conferir a planilha</button>
         </div>
       </form>
       <div id="lugar-aviso" class="lugar-resultado"></div>
       <div class="nav-funil" id="navResultado" hidden>
         <button type="button" id="voltarResultado">Voltar</button>
-        <button type="button" class="prim" id="avancarResultado">Avançar para os avisos</button>
+        <button type="button" class="prim" id="avancarResultado">Gerar aviso</button>
         <button type="button" id="verComparativo" hidden>Ver comparativo</button>
         <button type="button" class="prim" id="novoAviso" hidden>Novo desligamento</button>
       </div>
@@ -134,6 +136,8 @@
     <!-- Resultado (de um aviso novo ou do histórico): a tela o põe no lugar da vista de onde veio -->
     <section id="resultado" class="resultado" hidden aria-labelledby="tituloResultado">
       <h2 id="tituloResultado" class="subtitulo"></h2>
+      <!-- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" -->
+      <div id="conferencia" class="cartao conferencia" hidden></div>
       <div id="resumo" class="cartao resumo"></div>
       <details id="problemas" class="cartao problemas" hidden>
         <summary id="problemasTitulo"></summary>
@@ -198,6 +202,7 @@
         <button type="button" id="botaoRede" aria-pressed="true">Esconder rede fictícia</button></li>
       <li class="legenda-ucs" hidden>
         <span><span class="amostra uc"></span>UC da planilha</span>
+        <span><span class="amostra uc corrigida"></span>UC com coordenada corrigida</span>
         <span><span class="amostra uc fora"></span>UC fora da concessão</span>
         <button type="button" id="botaoUcs" aria-pressed="true">Esconder UCs</button></li>
     </ul>

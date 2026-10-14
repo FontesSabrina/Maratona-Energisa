@@ -336,3 +336,28 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
 .comp-lado button { justify-self: start; }
 .texto-longo { max-height: 220px; overflow-y: auto; padding: 10px 12px; border-radius: 10px; background: var(--sup); border: 1px solid var(--linha);
   font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+
+/* ---------- Conferência da planilha (passo 3): travas em vermelho, suspeitos em amarelo, a caixa "Conferi" ---------- */
+.conferencia { display: grid; gap: 12px; }
+.conferencia h3 { margin: 0; font-size: 17px; }
+.conferencia ul { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 2px; font-size: 14px; }
+.alerta-vermelho, .alerta-amarelo { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; font-size: 14px; }
+.alerta-vermelho { background: color-mix(in srgb, var(--erro) 9%, var(--sup)); border: 1.5px solid var(--erro); color: var(--texto); }
+.alerta-vermelho strong { color: var(--erro); }
+.alerta-vermelho p { margin: 0; }
+.alerta-amarelo { background: color-mix(in srgb, var(--ambar) 16%, var(--sup)); border: 1.5px solid var(--ambar-forte); }
+.alerta-amarelo textarea { min-height: 80px; padding: 8px 10px; }
+.conferencia .corrigidas summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 14px; }
+/* a caixa nativa cobre o rótulo inteiro (alvo de 44 px), invisível; o quadrado é desenhado no span */
+.confirmar { position: relative; display: flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 10px;
+  border: 1.5px solid var(--teal); background: var(--teal-claro); color: var(--texto); font-size: 15px; font-weight: 600; cursor: pointer; }
+.confirmar input { position: absolute; inset: -1.5px; width: calc(100% + 3px); height: calc(100% + 3px); margin: 0; opacity: 0; cursor: pointer; }
+.confirmar span::before { content: ""; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 10px; vertical-align: -5px;
+  border: 2px solid var(--teal); border-radius: 6px; background: var(--sup); color: #FFFFFF; font-size: 15px; line-height: 1; }
+.confirmar input:checked + span::before { content: "✓"; background: var(--teal); }
+.confirmar:has(input:focus-visible) { outline: 2px solid var(--teal); outline-offset: 2px; }
+.confirmar:has(input:disabled) { opacity: .6; cursor: not-allowed; }
+.confirmar:has(input:disabled) input { cursor: not-allowed; }
+.resultado[data-modo="passo4"] .conferencia { display: none; }
+#motivoGerar:empty { display: none; }
+.amostra.uc.corrigida { background: #7A4FD1; }

@@ -14,7 +14,10 @@ const estado = {
   config: null, concessao: null,
   arquivo: null, enviando: false,
   mensagem: '', erro: false,
-  resultado: null,         // resposta de /api/avisos ou um aviso do histórico (no mesmo formato)
+  resultado: null,         // resposta de /api/planilha (conferência), de /api/avisos (gerado) ou um aviso do histórico
+  conferi: false,          // a caixa "Conferi os números e o mapa" do passo 3
+  justificativa: '',       // obrigatória quando as rejeitadas passam do limite da empresa
+  abas: [], aba: '',       // quando mais de uma aba da planilha serve, a escolhida
   origem: null,            // 'novo' | 'historico'
   avisos: {},              // codigo_ibge -> texto do aviso (editável)
   finais: {},              // codigo_ibge -> texto final já guardado no histórico
@@ -97,9 +100,24 @@ const distritoTexto = (c, m) => c.distrito === m.nome ? 'Sede' : c.distrito;
 const nomeComDistrito = (c, m) => `${semSufixo(c.nome)} (${distritoTexto(c, m)})`;
 const homonimo = c => / \(.*\)$/.test(c.nome);
 
-// funil: até onde dá para ir (o 2 pede a planilha; o 3 e o 4, o resultado do envio)
+// funil: até onde dá para ir (o 2 pede a planilha; o 3, a conferência; o 4, o aviso já gerado)
 const temResultadoNovo = () => !!estado.resultado && estado.origem === 'novo';
-const passoMaximo = () => temResultadoNovo() ? 4 : estado.arquivo && !validarArquivo(estado.arquivo) ? 2 : 1;
+const gerado = () => temResultadoNovo() && !!estado.resultado.id;
+const passoMaximo = () => gerado() ? 4 : temResultadoNovo() ? 3 : estado.arquivo && !validarArquivo(estado.arquivo) ? 2 : 1;
+
+// o mesmo que o servidor confere antes de gerar (nucleo/travas.problema_para_gerar); a tela só antecipa
+const MAX_JUSTIFICATIVA = 300;
+function problemaParaGerar() {
+  const c = estado.resultado?.conferencia;
+  if (!c || !estado.resultado.pacote) return 'Confira a planilha primeiro.';
+  if (c.vital_bloqueio.length) return 'Bloqueado: há equipamento vital com problema. Corrija a planilha e importe de novo.';
+  const j = estado.justificativa.trim();
+  if (c.rejeicao.acima && !j) return `Mais de ${pct(c.rejeicao.limite)} das linhas foram rejeitadas: escreva a justificativa.`;
+  if (j.length > MAX_JUSTIFICATIVA) return `A justificativa pode ter no máximo ${MAX_JUSTIFICATIVA} caracteres.`;
+  if (!estado.conferi) return 'Marque "Conferi os números e o mapa" para gerar o aviso.';
+  return null;
+}
+const pct = f => `${(f * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 
 // histórico: busca por município ou comunidade (sem acento) e período pela data em que foi gerado
 const normalizar = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -195,6 +213,12 @@ function desenharFunil() {
   $('gerar').hidden = n !== 2;
   $('navResultado').hidden = n < 3 || !temResultadoNovo();
   $('avancarResultado').hidden = n !== 3;
+  // passo 3: antes de gerar, o botão gera (se as travas deixarem); depois, só leva aos avisos
+  $('avancarResultado').textContent = gerado() ? 'Avançar para os avisos' : estado.enviando ? 'Gerando…' : 'Gerar aviso';
+  $('avancarResultado').disabled = !gerado() && (estado.enviando || !!problemaParaGerar());
+  const motivo = $('motivoGerar');
+  if (motivo) motivo.textContent = n === 3 && !gerado() ? (problemaParaGerar() || 'Tudo conferido: pode gerar o aviso.') : '';
+  $('abaRotulo').hidden = !estado.abas.length;
   $('novoAviso').hidden = n !== 4;
   $('verComparativo').hidden = n !== 4 || !pode('ver_historico');
   $('passo2Arquivo').textContent = estado.arquivo ? `Planilha: ${estado.arquivo.name}` : '';
@@ -304,8 +328,55 @@ function desenharProblemas() {
     p.total_problemas > p.problemas.length ? no('p', { classe: 'ajuda', texto: `Mostrando as primeiras ${fmt(p.problemas.length)}.` }) : '');
 }
 
+// ---- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" ----
+function desenharConferencia() {
+  const r = estado.resultado, c = r?.conferencia, lugar = $('conferencia');
+  lugar.hidden = !c || estado.origem !== 'novo';
+  if (lugar.hidden) return lugar.replaceChildren();
+  const t = r.traducao, n = c.numeros, ja = gerado();
+  const numeros = no('dl', { classe: 'numeros' }, [['clientes no aviso', n.clientes], ['municípios', n.municipios], ['comunidades', n.comunidades],
+    ['com equipamento vital', n.equipamento_vital], ['corrigidas', n.corrigidas], ['rejeitadas', n.rejeitadas]]
+    .map(([rot, v]) => no('div', {}, no('dt', { texto: rot }), no('dd', { texto: fmt(v) }))));
+  const arquivo = no('p', { classe: 'ajuda', texto: `Arquivo ${t.arquivo.nome}` + (t.arquivo.aba ? `, aba ${t.arquivo.aba}` : '')
+    + ` · ${fmt(t.arquivo.linhas)} linhas · colunas reconhecidas: ${t.colunas.join(', ')} · ${fmt(t.arquivo.colunas_ignoradas)} coluna(s) ignorada(s)`
+    + ` · tradutor ${t.versao}` });
+  const blocos = [no('h3', { texto: 'Conferência da planilha' }), arquivo, numeros];
+  if (n.vital_a_confirmar) blocos.push(no('p', { classe: 'ajuda', texto: `${fmt(n.vital_a_confirmar)} cliente(s) sem a informação de equipamento vital (a confirmar).` }));
+  if (c.vital_bloqueio.length) blocos.push(no('div', { classe: 'alerta-vermelho', role: 'alert' },
+    no('strong', { texto: `Bloqueado: ${fmt(c.vital_bloqueio.length)} linha(s) com equipamento vital rejeitada(s), corrigida(s) ou fora da concessão` }),
+    no('ul', {}, c.vital_bloqueio.map(x => no('li', { texto: `Linha ${x.linha}: ${x.texto}${x.motivo ? ` (${x.motivo})` : ''}` }))),
+    no('p', { texto: 'Quem usa equipamento vital tem de ser avisado com certeza. Corrija essas linhas na planilha e importe de novo.' })));
+  if (c.suspeitos.length) blocos.push(no('div', { classe: 'alerta-amarelo' },
+    no('strong', { texto: 'Pontos suspeitos: confira no mapa antes de marcar "Conferi"' }),
+    no('ul', {}, c.suspeitos.map(x => no('li', { texto: `${x.texto}${x.municipio ? ` · ${x.municipio} (a maioria em ${x.maioria})` : ''}: `
+      + `${fmt(x.ucs)} UC(s), linha(s) ${x.linhas.slice(0, 30).join(', ')}${x.linhas.length > 30 ? '…' : ''}` })))));
+  if (t.corrigidas.length) blocos.push(no('details', { classe: 'corrigidas' },
+    no('summary', { texto: `${fmt(n.corrigidas)} linha(s) com a coordenada corrigida (em roxo no mapa)` }),
+    no('ul', {}, t.corrigidas.map(x => no('li', { texto: `Linha ${x.linha}: ${x.correcao}` })))));
+  if (c.rejeicao.acima) {
+    const area = no('textarea', { id: 'justificativa', maxlength: String(MAX_JUSTIFICATIVA), rows: '3', readonly: ja,
+      'aria-describedby': 'contaJustificativa' });
+    area.value = estado.justificativa;
+    blocos.push(no('div', { classe: 'alerta-amarelo' },
+      no('strong', { texto: `${fmt(c.rejeicao.rejeitadas)} de ${fmt(c.rejeicao.total)} linhas rejeitadas (${pct(c.rejeicao.fracao)}), acima do limite de ${pct(c.rejeicao.limite)}` }),
+      no('label', { for: 'justificativa', texto: 'Justificativa para continuar (fica na auditoria com o seu nome)' }), area,
+      no('p', { classe: 'ajuda', id: 'contaJustificativa', texto: `${estado.justificativa.length} de ${MAX_JUSTIFICATIVA} caracteres` })));
+  }
+  const caixa = no('input', { type: 'checkbox', id: 'conferi', disabled: ja || !!c.vital_bloqueio.length });
+  caixa.checked = estado.conferi || ja;
+  blocos.push(no('label', { classe: 'confirmar', for: 'conferi' }, caixa, no('span', { texto: 'Conferi os números e o mapa' })));
+  blocos.push(no('p', { classe: 'ajuda', id: 'motivoGerar', 'aria-live': 'polite' }));
+  blocos.push(no('div', { classe: 'acoes' },
+    ja ? null : no('button', { type: 'button', 'data-conf': 'relatorio', texto: 'Baixar relatório (CSV)' }),
+    pode('baixar_json') ? no('button', { type: 'button', 'data-conf': 'json', texto: 'Baixar JSON (com as UCs)' }) : null));
+  if (!ja && r.pacote_vence) blocos.push(no('p', { classe: 'ajuda', texto: `A conferência vale até ${new Date(r.pacote_vence).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}; depois, importe a planilha de novo.` }));
+  lugar.replaceChildren(...blocos);
+  desenharFunil();
+}
+
 function desenharResultado() {
   desenharAbas();
+  desenharConferencia();
   if (!estado.resultado) return;
   const r = estado.resultado, f = estado.formulario;
   $('tituloResultado').textContent = estado.origem === 'historico'
@@ -316,7 +387,8 @@ function desenharResultado() {
 
 function tituloResultado() {
   const f = estado.formulario;
-  return `${estado.passo === 4 ? 'Avisos para a rádio' : 'Conferir o resultado'} · ${f.data}, ${f.horario}`;
+  return `${estado.passo === 4 ? 'Avisos para a rádio' : 'Conferir o resultado'} · ${f.data}, ${f.horario}`
+    + (estado.resultado?.id ? ` · aviso nº ${estado.resultado.id}` : '');
 }
 
 function desenharHistorico() {
@@ -461,7 +533,7 @@ function mostrarSenhaTemporaria(texto, senha) {
 
 // ---- Mapa ----
 const escuro = () => matchMedia('(prefers-color-scheme: dark)').matches;
-const COR = { ambar: '#F5B83D', ambarForte: '#B07800', cinza: '#93A1AF', info: '#1663C7', erro: '#B42318', verde: '#1B8A8A' };
+const COR = { ambar: '#F5B83D', ambarForte: '#B07800', cinza: '#93A1AF', info: '#1663C7', erro: '#B42318', verde: '#1B8A8A', corrigida: '#7A4FD1' };
 let mapa, camadaConcessao, camadaComunidades, camadaUcs, telaUcs, camadaBase, camadaNomes, camadaRede, telaRede, atribuicao;
 // a partir deste zoom, o contorno das comunidades dos municípios na tela; a partir do outro, os nomes escritos
 const ZOOM_COMUNIDADES = 11, ZOOM_NOMES = 13, ZOOM_TRAFOS = 14;
@@ -665,7 +737,8 @@ function desenharComunidades() {
 
 // pontos das UCs da planilha: só os do envio atual, desenhados num canvas (nada no HTML) e sem o
 // número da UC; a dica mostra só a comunidade
-const temPontos = () => !!estado.resultado && (estado.resultado.municipios.some(m => m.pontos?.length) || !!estado.resultado.pontos_fora?.length);
+const temPontos = () => !!estado.resultado && (estado.resultado.municipios.some(m => m.pontos?.length) || !!estado.resultado.pontos_fora?.length
+  || !!estado.resultado.pontos_corrigidos?.length);
 
 function desenharUcs() {
   camadaUcs?.remove();
@@ -687,6 +760,8 @@ function desenharUcs() {
     }
   }
   for (const [lat, lon] of r.pontos_fora || []) marcas.push(ponto(lat, lon, COR.erro, 'UC fora da concessão'));
+  // as corrigidas por último (por cima), com a cor própria
+  for (const [lat, lon] of r.pontos_corrigidos || []) marcas.push(ponto(lat, lon, COR.corrigida, 'UC com coordenada corrigida (confira)'));
   camadaUcs = L.layerGroup(marcas).addTo(mapa);
   if (!camadaComunidades && marcas.length) mapa.fitBounds(L.featureGroup(marcas).getBounds(), { padding: [30, 30], maxZoom: 13 });
 }
@@ -720,7 +795,7 @@ async function desenharRoteiro(codigo) {
 
 // ======================= Controller: eventos e chamadas à API (atualiza o estado e redesenha) =======================
 class ErroApi extends Error {
-  constructor(status, mensagem) { super(mensagem); this.status = status; }
+  constructor(status, mensagem, dados = {}) { super(mensagem); this.status = status; this.dados = dados; }
 }
 
 async function api(url, opcoes = {}) {
@@ -729,8 +804,19 @@ async function api(url, opcoes = {}) {
     body: opcoes.json ? JSON.stringify(opcoes.json) : opcoes.body });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && estado.tela === 'app') { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou. Entre de novo.'); }
-  if (!r.ok) throw new ErroApi(r.status, typeof j.detail === 'string' ? j.detail : 'Não foi possível concluir. Tente de novo.');
+  if (!r.ok) throw new ErroApi(r.status, typeof j.detail === 'string' ? j.detail : 'Não foi possível concluir. Tente de novo.', j);
   return j;
+}
+
+// pedido que devolve um arquivo (CSV, JSON): baixa com o nome que o servidor sugere; nada fica na página
+async function baixarDaApi(url, opcoes, nomePadrao) {
+  const r = await fetch(url, { method: 'POST', credentials: 'same-origin', ...opcoes });
+  if (r.status === 401) { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou.'); }
+  if (!r.ok) throw new ErroApi(r.status, (await r.json().catch(() => ({}))).detail || 'Não foi possível baixar.');
+  const nome = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '')?.[1] || nomePadrao;
+  const href = URL.createObjectURL(await r.blob()), link = no('a', { href, download: nome });
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
 function sessaoAcabou() {
@@ -809,10 +895,11 @@ async function trocarSenha(evento) {
 // compartilhado, quem entra depois não vê resultados, listas nem o roteiro escondidos
 function limparTela() {
   Object.assign(estado, { usuario: null, resultado: null, origem: null, avisos: {}, finais: {}, formulario: null, arquivo: null,
+    conferi: false, justificativa: '', abas: [], aba: '',
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro', 'roteiro',
-    'painelDash', 'contagemHistorico'])
+    'painelDash', 'contagemHistorico', 'conferencia', 'aba'])
     $(id).replaceChildren();
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
@@ -865,6 +952,18 @@ function irParaPasso(n) {
 
 // começa outro desligamento: tira o resultado do envio anterior da tela e do mapa (o histórico já o guardou)
 function novoAviso() {
+  descartarNovo();
+  estado.arquivo = null;
+  $('arquivo').value = '';
+  estado.passo = 1;
+  avisar('');
+  desenharAbas();
+}
+
+// tira da tela e do mapa a conferência ou o aviso novo (a planilha escolhida fica)
+function descartarNovo() {
+  Object.assign(estado, { conferi: false, justificativa: '', abas: [], aba: '' });
+  $('aba').replaceChildren();
   if (estado.origem === 'novo') {
     Object.assign(estado, { resultado: null, origem: null, avisos: {}, finais: {}, formulario: null });
     for (const a of [...Object.values(estado.audios), ...Object.values(estado.audiosHoje)]) URL.revokeObjectURL(a.url);
@@ -872,13 +971,16 @@ function novoAviso() {
     for (const id of ['resumo', 'municipios', 'problemasCorpo']) $(id).replaceChildren();
     desenharComparativo();
     camadaComunidades?.remove(); camadaComunidades = null;
-    desenharUcs(); desenharConcessao(); desenharBase(); desenharNomes();
+    desenharConferencia(); desenharUcs(); desenharConcessao(); desenharBase(); desenharNomes();
   }
-  estado.arquivo = null;
-  $('arquivo').value = '';
-  estado.passo = 1;
+}
+
+// outra planilha escolhida: a conferência da anterior não vale mais
+function escolherPlanilha(arquivo) {
+  if (temResultadoNovo() && !gerado()) descartarNovo();
+  else Object.assign(estado, { abas: [], aba: '' });
+  estado.arquivo = arquivo || null;
   avisar('');
-  desenharAbas();
 }
 
 async function mostrarResultado(resultado, origem, formulario) {
@@ -892,6 +994,8 @@ async function mostrarResultado(resultado, origem, formulario) {
   desenharComunidades(); desenharUcs(); desenharBase(); desenharNomes();
 }
 
+// 1º passo (Conferir): a planilha vai ao servidor, que devolve a conferência e o pacote assinado (15 min).
+// Nada vai para o histórico ainda.
 async function enviar(evento) {
   evento.preventDefault();
   const form = { arquivo: estado.arquivo, data: $('data').value, inicio: $('inicio').value, fim: $('fim').value, idioma: $('idioma').value };
@@ -900,27 +1004,96 @@ async function enviar(evento) {
     if (validarArquivo(form.arquivo)) { estado.passo = 1; desenharAbas(); }
     return avisar(problema, true);
   }
+  if (temResultadoNovo() && !gerado()) descartarNovo();
   estado.enviando = true;
-  avisar('Lendo a planilha e localizando as comunidades…');
+  avisar('Lendo a planilha, conferindo as linhas e localizando as comunidades…');
   const horario = `${horaTexto(form.inicio)} às ${horaTexto(form.fim)}`;
   const dados = new FormData();
   dados.append('arquivo', form.arquivo);
   dados.append('data', dataTexto(form.data));
   dados.append('horario', horario);
   dados.append('idioma', form.idioma);
+  if (estado.aba) dados.append('aba', estado.aba);
   try {
-    const j = await api('/api/avisos', { method: 'POST', body: dados });
-    const n = j.municipios.length;
-    avisar(n ? `Pronto: ${n} município(s), ${fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0))} comunidade(s). Guardado no histórico (aviso nº ${j.id}).`
-      : 'Nenhuma UC na área de concessão.', !n);
+    const j = await api('/api/planilha', { method: 'POST', body: dados });
+    const c = j.conferencia;
+    avisar(c.vital_bloqueio.length ? 'Conferência pronta, com bloqueio: há equipamento vital com problema (veja em vermelho).'
+      : `Conferência pronta: ${fmt(c.numeros.clientes)} cliente(s), ${fmt(c.numeros.comunidades)} comunidade(s). Confira os números e o mapa para gerar o aviso.`,
+      !!c.vital_bloqueio.length || !j.municipios.length);
     estado.passo = 3;
     await mostrarResultado(j, 'novo', { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma });
+    document.documentElement.dataset.farol = 'conferencia';
+  } catch (e) {
+    if (e.status === 409 && e.dados.abas) {   // mais de uma aba serve: a pessoa escolhe e confere de novo
+      estado.abas = e.dados.abas;
+      estado.aba = estado.abas[0];
+      $('aba').replaceChildren(...estado.abas.map(a => no('option', { value: a, texto: a })));
+      avisar(`${e.message} Escolha a aba e clique em "Conferir a planilha" de novo.`, true);
+    } else if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    estado.enviando = false;
+    desenharEstado();
+  }
+}
+
+// 2º passo (Gerar aviso): o pacote da conferência, a caixa "Conferi" e a justificativa; o servidor confere tudo de novo
+async function gerarAviso() {
+  const problema = problemaParaGerar();
+  if (problema) return avisar(problema, true);
+  const f = estado.formulario;
+  estado.enviando = true;
+  desenharFunil();
+  avisar('Gerando o aviso…');
+  try {
+    const j = await api('/api/avisos', { method: 'POST', json: { pacote: estado.resultado.pacote, data: f.data, horario: f.horario, idioma: f.idioma,
+      conferi: estado.conferi, justificativa: estado.justificativa.trim() || null } });
+    const n = j.municipios.length;
+    avisar(n ? `Pronto: ${n} município(s), ${fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0))} comunidade(s). Guardado no histórico (aviso nº ${j.id}).`
+      : `Nenhuma UC na área de concessão. Guardado no histórico (aviso nº ${j.id}).`, !n);
+    estado.passo = 4;
+    await mostrarResultado(j, 'novo', f);
     document.documentElement.dataset.farol = 'resultado';
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   } finally {
     estado.enviando = false;
-    desenharEstado();
+    desenharFunil();
+  }
+}
+
+// conferência: caixa "Conferi", justificativa e os downloads (relatório sem UC; JSON com as UCs, registrado na auditoria)
+function editarConferencia(evento) {
+  const alvo = evento.target;
+  if (alvo.id === 'conferi') estado.conferi = alvo.checked;
+  else if (alvo.id === 'justificativa') {
+    estado.justificativa = alvo.value;
+    $('contaJustificativa').textContent = `${alvo.value.length} de ${MAX_JUSTIFICATIVA} caracteres`;
+  } else return;
+  desenharFunil();
+}
+
+async function acaoConferencia(evento) {
+  const b = evento.target.closest('button[data-conf]');
+  if (!b) return;
+  b.disabled = true;
+  try {
+    if (b.dataset.conf === 'relatorio') {
+      await baixarDaApi('/api/planilha/relatorio', { headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pacote: estado.resultado.pacote }) }, 'farol-relatorio-planilha.csv');
+      avisar('Relatório da planilha baixado (só linha, situação e motivo; sem UC).');
+    } else {
+      if (!estado.arquivo) return avisar('Escolha a planilha de novo para baixar o JSON.', true);
+      if (!confirm('O JSON tem os números de UC (dado pessoal). O download fica registrado na auditoria com o seu nome. Baixar?')) return;
+      const dados = new FormData();
+      dados.append('arquivo', estado.arquivo);
+      if (estado.aba) dados.append('aba', estado.aba);
+      await baixarDaApi('/api/planilha/json', { body: dados }, 'farol-planilha.json');
+      avisar('JSON da planilha baixado (registrado na auditoria).');
+    }
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    b.disabled = false;
   }
 }
 
@@ -1091,7 +1264,7 @@ function arrastar() {
   const z = $('zona');
   for (const ev of ['dragenter', 'dragover']) z.addEventListener(ev, e => { e.preventDefault(); z.classList.add('arrastando'); });
   for (const ev of ['dragleave', 'drop']) z.addEventListener(ev, () => z.classList.remove('arrastando'));
-  z.addEventListener('drop', e => { e.preventDefault(); estado.arquivo = e.dataTransfer.files[0] || null; avisar(''); });
+  z.addEventListener('drop', e => { e.preventDefault(); escolherPlanilha(e.dataTransfer.files[0]); });
 }
 
 async function abrir() {
@@ -1102,7 +1275,11 @@ async function abrir() {
   $('formSenha').addEventListener('submit', trocarSenha);
   $('sair').addEventListener('click', sair);
   $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
-  $('arquivo').addEventListener('change', e => { estado.arquivo = e.target.files[0] || null; avisar(''); });
+  $('arquivo').addEventListener('change', e => escolherPlanilha(e.target.files[0]));
+  $('aba').addEventListener('change', e => { estado.aba = e.target.value; });
+  $('conferencia').addEventListener('change', editarConferencia);
+  $('conferencia').addEventListener('input', editarConferencia);
+  $('conferencia').addEventListener('click', acaoConferencia);
   $('form').addEventListener('submit', enviar);
   $('botaoUcs').addEventListener('click', () => { estado.verUcs = !estado.verUcs; desenharUcs(); });
   $('botaoRede').addEventListener('click', alternarRede);
@@ -1113,7 +1290,7 @@ async function abrir() {
   $('avancar').addEventListener('click', () => irParaPasso(2));
   $('voltar').addEventListener('click', () => irParaPasso(1));
   $('voltarResultado').addEventListener('click', () => irParaPasso(estado.passo - 1));
-  $('avancarResultado').addEventListener('click', () => irParaPasso(4));
+  $('avancarResultado').addEventListener('click', () => gerado() ? irParaPasso(4) : gerarAviso());
   $('novoAviso').addEventListener('click', novoAviso);
   $('verComparativo').addEventListener('click', () => irPara('comparativo'));
   $('comparativo').addEventListener('click', acaoComparativo);

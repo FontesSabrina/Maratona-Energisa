@@ -1,11 +1,15 @@
 """API do Farol (FastAPI): recebe a planilha de UCs afetadas e devolve municípios, comunidades e aviso.
 
-Controller: lê o arquivo (api/leitura.py), valida as linhas (nucleo/planilha.py), busca no banco
-a base territorial dos municípios que as coordenadas tocam (banco/base_territorial.py) e chama o
-núcleo (nucleo/afetados.py). A planilha fica só em memória e é descartada: nada de número de UC
-na resposta, no banco ou no log, e nada de coordenada no banco ou no log. Os problemas citam só o
-número da linha. A resposta do envio traz os pontos das UCs (só latitude, longitude e comunidade,
-sem o número) para o mapa de quem enviou; eles não entram no histórico.
+Controller: lê o arquivo (api/leitura.py), traduz as linhas para o JSON validado (nucleo/planilha.py),
+confere de novo por uma rotina independente (api/conferencia.py), busca no banco a base territorial
+dos municípios que as coordenadas tocam (banco/base_territorial.py) e chama o núcleo
+(nucleo/afetados.py). A planilha fica só em memória e é descartada: nada de número de UC na resposta,
+no banco ou no log, e nada de coordenada no banco ou no log. Os problemas citam só o número da linha.
+A resposta traz os pontos das UCs (só latitude, longitude e comunidade, sem o número) para o mapa de
+quem enviou; eles não entram no histórico.
+
+Dois passos: /api/planilha (Conferir) devolve a conferência, as travas (nucleo/travas.py) e o pacote
+assinado (api/pacote.py); /api/avisos (Gerar) só aceita esse pacote, com a confirmação humana, e grava.
 
 Toda rota, menos /api/saude e /api/entrar, exige login (api/acesso.py), e a permissão é conferida
 no servidor. Cada planilha processada fica no histórico da empresa só como agregado.
@@ -14,8 +18,11 @@ Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-pr
 
 import functools
 import hashlib
+import logging
 import os
+import secrets
 import time
+import traceback
 from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,7 +43,7 @@ from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
 from ..fontes.base_territorial import CRS_BASE
-from ..nucleo import idiomas, painel
+from ..nucleo import esquema_planilha, idiomas, painel, travas
 from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
 from ..nucleo import planilha
@@ -44,7 +51,8 @@ from ..nucleo.acesso import PERFIS
 from ..nucleo.coordenadas import Area
 from ..nucleo.motivos import TEXTOS, Motivo
 from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv
-from . import leitura
+from . import conferencia, leitura
+from . import pacote as pacote_
 from .acesso import PRODUCAO, exigir, rotas, usuario_atual
 from .proxy import ProxyConfiavel
 
@@ -66,6 +74,20 @@ DIST = dist_.carregar()
 app.include_router(rotas)
 if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
     app.add_middleware(ProxyConfiavel)
+
+
+_log = logging.getLogger("farol.api")
+
+
+@app.exception_handler(Exception)
+def _erro_inesperado(request, erro: Exception) -> JSONResponse:
+    """Erro não previsto: nada é gerado nem gravado (o histórico só é gravado no fim de tudo) e a
+    pessoa recebe um código para o suporte. O log técnico leva só o tipo do erro e onde ele ocorreu
+    (arquivo e linha), nunca a mensagem nem valores: assim nenhum dado da planilha vai para o log."""
+    codigo = f"ERR-{secrets.token_hex(3).upper()}"
+    onde = " <- ".join(f"{Path(q.filename).name}:{q.lineno}" for q in traceback.extract_tb(erro.__traceback__)[-4:][::-1])
+    _log.error("%s %s %s em %s", codigo, request.url.path, type(erro).__name__, onde)
+    return JSONResponse({"detail": f"Ocorreu um erro e nada foi gerado (código {codigo})."}, status_code=500)
 
 
 @app.exception_handler(senhas.Ocupado)
@@ -233,12 +255,18 @@ def _traduzir(conteudo: bytes, nome: str | None, aba: str | None, u: dict):
     tabela = leitura.ler_tabela(conteudo, aba)
     if not tabela.linhas:
         raise PlanilhaInvalida("A planilha não tem nenhuma linha de dados.")
-    return planilha.montar(
+    modelo = planilha.montar(
         tabela.campos, tabela.cabecalho, tabela.linhas, _parametros(),
         arquivo={"nome": _nome_arquivo(nome), "sha256": hashlib.sha256(conteudo).hexdigest(), "formato": tabela.formato,
                  "aba": tabela.aba, "colunas_ignoradas": tabela.colunas_ignoradas},
         empresa=(u.get("empresa_nome") or "")[:120], gerado_em=datetime.now(BRASILIA).strftime("%Y-%m-%dT%H:%M"),
         gerado_por=f"{u['nome']} ({PERFIS[u['perfil']]})"[:160])
+    try:   # dupla conferência: rotina independente relê o arquivo (api/conferencia.py)
+        conferencia.conferir(conteudo, modelo)
+    except conferencia.Divergencia as e:
+        banco_acesso.registrar("planilha bloqueada pela conferência independente", str(e)[:200], u["id"], u["empresa_id"])
+        raise PlanilhaInvalida(f"Nada foi gerado: {e}. Confira a planilha e envie de novo.") from None
+    return modelo
 
 
 def _traducao(m) -> dict:
@@ -266,24 +294,51 @@ def _limite_envios(usuario_id: int) -> None:
     fila.append(agora)
 
 
-@app.post("/api/avisos")
-async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario: str = Form(...),
-                 idioma: str = Form(idiomas.PADRAO), aba: str | None = Form(None, max_length=leitura.MAX_NOME_ABA),
-                 u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
+class PedidoAviso(BaseModel):
+    """2º passo: o pacote assinado da conferência, a data e o horário, a confirmação e a justificativa."""
+    pacote: str = Field(max_length=pacote_.MAX_PACOTE)
+    data: str = Field(max_length=200)
+    horario: str = Field(max_length=200)
+    idioma: str = Field(idiomas.PADRAO, max_length=10)
+    conferi: bool = False
+    justificativa: str | None = Field(None, max_length=2000)
+
+
+def _formulario(data: str, horario: str, idioma: str) -> tuple[str, str, str]:
     data, horario = _texto_do_aviso("data", data), _texto_do_aviso("horário", horario)
     if idioma not in idiomas.IDIOMAS:
         raise HTTPException(422, f"idioma: use um de {', '.join(idiomas.IDIOMAS)}.")
+    return data, horario, idioma
+
+
+class _PedeAba(Exception):
+    def __init__(self, mensagem: str, abas: list[str]):
+        super().__init__(mensagem)
+        self.abas = abas
+
+
+@app.exception_handler(_PedeAba)
+def _pede_aba(request, e: _PedeAba) -> JSONResponse:
+    """Mais de uma aba serve: 409 com a lista, para a pessoa escolher."""
+    return JSONResponse({"detail": str(e), "abas": e.abas}, status_code=409)
+
+
+async def _ler_e_traduzir(arquivo: UploadFile, aba: str | None, u: dict):
+    """O arquivo enviado -> JSON validado; o arquivo sai da memória aqui. 409 pede a aba; 422 recusa."""
     _limite_envios(u["id"])
     conteudo = await arquivo.read(leitura.MAX_BYTES + 1)
     try:
-        modelo = _traduzir(conteudo, arquivo.filename, aba or None, u)
+        return _traduzir(conteudo, arquivo.filename, aba or None, u)
     except leitura.EscolhaDeAba as e:
-        return JSONResponse({"detail": str(e), "abas": e.abas}, status_code=409)
+        raise _PedeAba(str(e), e.abas) from None
     except PlanilhaInvalida as e:
         raise HTTPException(422, str(e)) from None
     finally:
         del conteudo
-    # daqui em diante só o JSON validado (o arquivo já saiu da memória)
+
+
+def _resultado(modelo, data: str, horario: str, idioma: str) -> dict:
+    """Do JSON validado (nunca da planilha bruta): municípios, comunidades, avisos, pontos e as travas."""
     v = planilha.validas(modelo)
     rejeitadas = [pt for pt in modelo.pontos if pt.status == "rejeitada"]
     fora_planilha = [pt for pt in rejeitadas if pt.motivo == Motivo.FORA_DA_CONCESSAO]
@@ -295,40 +350,126 @@ async def avisos(arquivo: UploadFile = File(...), data: str = Form(...), horario
                 "traducao": _traducao(modelo),
                 "fora_da_concessao": {"ucs": len(fora_planilha), "linhas": [pt.linha for pt in fora_planilha[:MAX_PROBLEMAS]]},
                 "municipios": [], "prazo": _prazo(Counter()),
-                "pontos_fora": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)] for pt in fora_planilha]}
-    if v.empty:
-        return JSONResponse(_guardar(resposta, u, data, horario, idioma))
-    x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
-    xy = np.c_[x, y]
-    bases = _bases(xy)
-    r = afetados(xy, bases, DIST.regras, data, horario, idioma) if bases else None
-    fora = r.fora if r else np.arange(len(v))
-    if len(fora):   # dentro da área com a margem, mas fora dos contornos dos municípios (na divisa da concessão)
-        resposta["fora_da_concessao"]["ucs"] += int(len(fora))
-        resposta["fora_da_concessao"]["linhas"] = sorted(resposta["fora_da_concessao"]["linhas"]
-                                                         + [int(l) for l in v["LINHA"].iloc[fora]])[:MAX_PROBLEMAS]
-        resposta["pontos_fora"] += _pontos(v.iloc[fora])
-    vital_total = Counter()
-    for m in (r.municipios if r else []):
-        ucs = v.iloc[m.ucs.index]
-        vital = Counter("a_confirmar" if f is None else "sim" if bool(f) else "nao" for f in ucs["VITAL"])
-        vital_total += vital
-        resposta["municipios"].append({
-            "codigo_ibge": m.codigo, "nome": m.nome, "uf": m.uf, "ucs": len(m.ucs),
-            "comunidades": [{"nome": c.COMUNIDADE_PREVISTA, "distrito": c.DISTRITO, "afetadas": int(c.UC_AFETADAS),
-                             "total": int(c.UC_TOTAL), "parcial": bool(c.PARCIAL), "fragmento": bool(c.FRAGMENTO),
-                             "confianca": round(float(c.CONFIANCA), 2)} for c in m.comunidades.itertuples()],
-            "aviso": m.aviso, "segundos": m.segundos,
-            # o aviso de hoje (fazenda a fazenda), se a planilha trouxe a coluna local: só para o comparativo
-            "hoje": _aviso_hoje(ucs["LOCAL"], data, horario) if "local" in modelo.colunas else None,
-            # [lat, lon, posição da comunidade na lista acima (-1 = sem comunidade)], sem o número da UC
-            "pontos": _pontos(ucs, m.ucs["COMUNIDADE_PREVISTA"], [c.COMUNIDADE_PREVISTA for c in m.comunidades.itertuples()]),
-            "equipamento_vital": {k: vital[k] for k in ("sim", "nao", "a_confirmar")},
-            # só contagens; a classe é texto livre da planilha, então vai cortada
-            "classes": dict(Counter((c or "não informada")[:MAX_TEXTO] for c in ucs["CLASSE"])),
-        })
-    resposta["prazo"] = _prazo(vital_total)
+                "pontos_fora": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)] for pt in fora_planilha],
+                # as corrigidas, com cor própria no mapa (só latitude e longitude, sem a UC)
+                "pontos_corrigidos": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)]
+                                      for pt in modelo.pontos if pt.status == "corrigida"]}
+    linhas_fora, por_municipio = set(), {}
+    if not v.empty:
+        x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
+        xy = np.c_[x, y]
+        bases = _bases(xy)
+        r = afetados(xy, bases, DIST.regras, data, horario, idioma) if bases else None
+        fora = r.fora if r else np.arange(len(v))
+        if len(fora):   # dentro da área com a margem, mas fora dos contornos dos municípios (na divisa da concessão)
+            linhas_fora = {int(l) for l in v["LINHA"].iloc[fora]}
+            resposta["fora_da_concessao"]["ucs"] += int(len(fora))
+            resposta["fora_da_concessao"]["linhas"] = sorted(resposta["fora_da_concessao"]["linhas"] + sorted(linhas_fora))[:MAX_PROBLEMAS]
+            resposta["pontos_fora"] += _pontos(v.iloc[fora])
+        vital_total = Counter()
+        for m in (r.municipios if r else []):
+            ucs = v.iloc[m.ucs.index]
+            por_municipio[f"{m.nome}/{m.uf}"] = [int(l) for l in ucs["LINHA"]]
+            vital = Counter("a_confirmar" if f is None else "sim" if bool(f) else "nao" for f in ucs["VITAL"])
+            vital_total += vital
+            resposta["municipios"].append({
+                "codigo_ibge": m.codigo, "nome": m.nome, "uf": m.uf, "ucs": len(m.ucs),
+                "comunidades": [{"nome": c.COMUNIDADE_PREVISTA, "distrito": c.DISTRITO, "afetadas": int(c.UC_AFETADAS),
+                                 "total": int(c.UC_TOTAL), "parcial": bool(c.PARCIAL), "fragmento": bool(c.FRAGMENTO),
+                                 "confianca": round(float(c.CONFIANCA), 2)} for c in m.comunidades.itertuples()],
+                "aviso": m.aviso, "segundos": m.segundos,
+                # o aviso de hoje (fazenda a fazenda), se a planilha trouxe a coluna local: só para o comparativo
+                "hoje": _aviso_hoje(ucs["LOCAL"], data, horario) if "local" in modelo.colunas else None,
+                # [lat, lon, posição da comunidade na lista acima (-1 = sem comunidade)], sem o número da UC
+                "pontos": _pontos(ucs, m.ucs["COMUNIDADE_PREVISTA"], [c.COMUNIDADE_PREVISTA for c in m.comunidades.itertuples()]),
+                "equipamento_vital": {k: vital[k] for k in ("sim", "nao", "a_confirmar")},
+                # só contagens; a classe é texto livre da planilha, então vai cortada
+                "classes": dict(Counter((c or "não informada")[:MAX_TEXTO] for c in ucs["CLASSE"])),
+            })
+        resposta["prazo"] = _prazo(vital_total)
+    ms = resposta["municipios"]
+    resposta["conferencia"] = {
+        "vital_bloqueio": travas.vital_bloqueio(modelo, linhas_fora),
+        "rejeicao": travas.rejeicao(modelo, DIST.planilha.limite_rejeitadas),
+        "suspeitos": travas.suspeitos(modelo, por_municipio),
+        "arquivo": modelo.arquivo.nome, "sha256": modelo.arquivo.sha256,
+        "numeros": {"clientes": sum(m["ucs"] for m in ms), "municipios": len(ms),
+                    "comunidades": sum(len(m["comunidades"]) for m in ms),
+                    "equipamento_vital": sum(m["equipamento_vital"]["sim"] for m in ms),
+                    "vital_a_confirmar": sum(m["equipamento_vital"]["a_confirmar"] for m in ms),
+                    "corrigidas": modelo.resumo.corrigidas, "rejeitadas": modelo.resumo.rejeitadas,
+                    "fora_da_concessao": resposta["fora_da_concessao"]["ucs"]}}
+    return resposta
+
+
+@app.post("/api/planilha")
+async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(...), horario: str = Form(...),
+                            idioma: str = Form(idiomas.PADRAO), aba: str | None = Form(None, max_length=leitura.MAX_NOME_ABA),
+                            u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
+    """1º passo (Conferir): traduz a planilha e mostra o resultado e as travas. Nada vai para o histórico.
+    Devolve o pacote assinado (UCs opacas, 15 minutos) que o 2º passo usa para gerar o aviso."""
+    data, horario, idioma = _formulario(data, horario, idioma)
+    modelo = await _ler_e_traduzir(arquivo, aba, u)
+    resposta = _resultado(modelo, data, horario, idioma)
+    resposta["pacote"], vence = pacote_.assinar(travas.ucs_opacas(modelo), u["id"], u["empresa_id"])
+    resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
+    r = modelo.resumo
+    banco_acesso.registrar("importou planilha", f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256}): {r.total} linhas, "
+                           f"{r.ok} ok, {r.corrigidas} corrigidas, {r.rejeitadas} rejeitadas", u["id"], u["empresa_id"])
+    return JSONResponse(resposta)
+
+
+@app.post("/api/avisos")
+def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
+    """2º passo (Gerar aviso): só com o pacote da conferência válido, a caixa "Conferi" marcada, nenhuma
+    trava de equipamento vital e, acima do limite de rejeição, a justificativa. Grava no histórico."""
+    data, horario, idioma = _formulario(dados.data, dados.horario, dados.idioma)
+    try:
+        modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
+    except pacote_.PacoteRecusado as e:
+        raise HTTPException(422, str(e)) from None
+    resposta = _resultado(modelo, data, horario, idioma)
+    c, arq = resposta["conferencia"], f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})"
+    problema = travas.problema_para_gerar(c, dados.conferi, dados.justificativa)
+    if problema:
+        if c["vital_bloqueio"]:
+            banco_acesso.registrar("geração bloqueada (equipamento vital)", f"{arq}: linha(s) "
+                                   + ", ".join(str(x["linha"]) for x in c["vital_bloqueio"][:20]), u["id"], u["empresa_id"])
+        raise HTTPException(422, problema)
+    banco_acesso.registrar("conferiu os números e o mapa", f"{arq}: {c['numeros']['clientes']} clientes, "
+                           f"{c['numeros']['comunidades']} comunidades", u["id"], u["empresa_id"])
+    if c["rejeicao"]["acima"]:
+        banco_acesso.registrar("justificou rejeições acima do limite", f"{c['rejeicao']['rejeitadas']} de {c['rejeicao']['total']} "
+                               f"linhas: {travas.limpar_justificativa(dados.justificativa)}", u["id"], u["empresa_id"])
     return JSONResponse(_guardar(resposta, u, data, horario, idioma))
+
+
+@app.post("/api/planilha/json")
+async def baixar_json(arquivo: UploadFile = File(...), aba: str | None = Form(None, max_length=leitura.MAX_NOME_ABA),
+                      u: dict = Depends(exigir("baixar_json"))) -> Response:
+    """O JSON padronizado completo, com os números de UC: só num pedido explícito, reenviando o mesmo
+    arquivo (a tradução é reprodutível) e registrado na auditoria."""
+    modelo = await _ler_e_traduzir(arquivo, aba, u)
+    banco_acesso.registrar("baixou o JSON da planilha (com números de UC)",
+                           f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256}), {modelo.resumo.total} linhas", u["id"], u["empresa_id"])
+    nome = "".join(ch for ch in sem_acento(modelo.arquivo.nome.rsplit(".", 1)[0]) if ch.isalnum() or ch in "-_")[:60] or "planilha"
+    return Response(esquema_planilha.texto(modelo), media_type="application/json", headers={
+        "Content-Disposition": f'attachment; filename="farol-{nome}.json"'})
+
+
+class PedidoRelatorio(BaseModel):
+    pacote: str = Field(max_length=pacote_.MAX_PACOTE)
+
+
+@app.post("/api/planilha/relatorio")
+def relatorio_planilha(dados: PedidoRelatorio, u: dict = Depends(exigir("gerar_aviso"))) -> Response:
+    """Relatório da tradução (CSV): linha, situação, motivo ou correção e avisos. Sem UC nem coordenada."""
+    try:
+        modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
+    except pacote_.PacoteRecusado as e:
+        raise HTTPException(422, str(e)) from None
+    return Response("﻿" + travas.relatorio_csv(modelo), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="farol-relatorio-planilha.csv"'})
 
 
 def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str) -> dict:

@@ -166,7 +166,14 @@ conferir("linha ok", pt[2].status == "ok" and pt[2].uc == "1" and pt[2].equipame
 conferir("uc vazia, fórmula, longa, booleana e NaN: rejeitadas",
          [pt[n].motivo for n in (3, 4, 5, 13, 14)] == [Motivo.UC_VAZIA, Motivo.UC_INVALIDA, Motivo.UC_INVALIDA,
                                                          Motivo.UC_INVALIDA, Motivo.UC_INVALIDA])
-conferir("célula com mais de 200 caracteres: rejeitada", pt[6].motivo == Motivo.CELULA_LONGA and pt[6].uc is None)
+conferir("célula com mais de 200 caracteres: rejeitada, com a UC e o vital registrados", pt[6].motivo == Motivo.CELULA_LONGA
+         and pt[6].uc == "6" and pt[6].equipamento_vital is False, repr(pt[6]))
+jl = montar(["uc", "latitude", "longitude", "equipamento_vital"], [L("1", *P0, "s" * 201), L("u" * 201, *P0, "sim")])
+conferir("célula longa no vital: vital não lido; UC longa: sem UC", jl.pontos[0].equipamento_vital is None
+         and jl.pontos[0].uc == "1" and jl.pontos[1].uc is None and jl.pontos[1].equipamento_vital is True, repr(jl.pontos))
+jl2 = montar(["uc", "latitude", "longitude", "local"], [L("1", *P0, "z" * 201)])
+conferir("célula longa sem a coluna de vital: vital a confirmar", jl2.pontos[0].equipamento_vital is None
+         and jl2.pontos[0].motivo == Motivo.CELULA_LONGA)
 conferir("UC repetida: a primeira entra com aviso; a outra rejeitada apontando a linha 2",
          Aviso.UC_REPETIDA in pt[2].avisos and pt[7].status == "rejeitada" and pt[7].motivo == Motivo.UC_REPETIDA
          and pt[7].repete_linha == 2, f"{pt[2].avisos} {pt[7]!r}")
