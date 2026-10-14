@@ -293,6 +293,11 @@ conferir("aba escolhida (Modelo e Postes): 200, as mesmas 200 UCs", rm.status_co
 r = enviar(POSTES, "planilha_postes.xlsx", aba="Notas")
 conferir("aba que não serve: 422", r.status_code == 422, f"{r.status_code} {r.text[:120]}")
 saida = rp.text
+rede = rp.json().get("rede", {})
+conferir("aba Postes: agrupamento por circuito e por transformador (só códigos e contagens, somando as UCs válidas)",
+         set(rede) == {"circuito", "transformador"} and all(sum(x["ucs"] for x in rede[k]["grupos"]) + rede[k]["sem_codigo"] <= 200
+                                                            and rede[k]["total"] > 0 for k in rede)
+         and set(rede["circuito"]["grupos"][0]) == {"codigo", "ucs"}, json.dumps(rede)[:200])
 conferir("aba Postes: nada de NOME, NUM_CASA, MEDIDOR ou NUM_CONTA na resposta",
          not any(c in saida for c in ("NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA")), "")
 # dupla conferência: se a releitura independente não bater, nada é gerado nem gravado

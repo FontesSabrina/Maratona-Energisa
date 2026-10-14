@@ -565,6 +565,15 @@ function desenharConferencia() {
     no('strong', { texto: 'Pontos suspeitos: confira no mapa antes de marcar "Conferi"' }),
     no('ul', {}, c.suspeitos.map(x => no('li', { texto: `${x.texto}${x.municipio ? ` · ${x.municipio} (a maioria em ${x.maioria})` : ''}: `
       + `${fmt(x.ucs)} UC(s), linha(s) ${x.linhas.slice(0, 30).join(', ')}${x.linhas.length > 30 ? '…' : ''}` })))));
+  for (const [campo, rotulo] of [['circuito', 'circuito'], ['transformador', 'transformador']]) {
+    const g = r.rede?.[campo];
+    if (!g || !g.total) continue;
+    blocos.push(no('details', { classe: 'corrigidas' },
+      no('summary', { texto: `Por ${rotulo}: ${fmt(g.total)} código(s)` + (g.sem_codigo ? `, ${fmt(g.sem_codigo)} UC(s) sem código` : '') }),
+      no('p', { classe: 'ajuda', texto: `Confira se bate com a parte da rede que vai ser desligada. ${g.total > g.grupos.length ? `Os ${g.grupos.length} maiores.` : ''}` }),
+      no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, no('th', { texto: rotulo[0].toUpperCase() + rotulo.slice(1) }), no('th', { texto: 'UCs' }))),
+        no('tbody', {}, g.grupos.map(x => no('tr', {}, no('td', { texto: x.codigo }), no('td', { texto: fmt(x.ucs) }))))))));
+  }
   if (t.corrigidas.length) blocos.push(no('details', { classe: 'corrigidas' },
     no('summary', { texto: `${fmt(n.corrigidas)} linha(s) com a coordenada corrigida (em roxo no mapa)` }),
     no('ul', {}, t.corrigidas.map(x => no('li', { texto: `Linha ${x.linha}: ${x.correcao}` })))));
@@ -1060,6 +1069,32 @@ async function alternarRede() {
   else if (estado.verRede) avisar('A rede fictícia aparece de perto: aproxime num município (ou clique nele).');
 }
 
+// "Ir para": o estado e o município da concessão (a lista sai do contorno da concessão)
+function desenharIrPara() {
+  const feicoes = estado.concessao?.features || [];
+  $('irPara').hidden = !feicoes.length;
+  if (!feicoes.length) return;
+  const ufs = [...new Set(feicoes.map(f => f.properties.uf))].sort();
+  const uf = $('filtroUf').value || '';
+  if (!$('filtroUf').options.length) $('filtroUf').replaceChildren(no('option', { value: '', texto: 'Todos' }), ...ufs.map(u => no('option', { value: u, texto: u })));
+  $('filtroMunicipio').replaceChildren(no('option', { value: '', texto: 'Escolha' }), ...feicoes.filter(f => !uf || f.properties.uf === uf)
+    .map(f => [f.properties.codigo_ibge, f.properties.nome]).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+    .map(([c, n]) => no('option', { value: c, texto: n })));
+}
+
+function irParaNoMapa(evento) {
+  if (!camadaConcessao) return;
+  const camadas = camadaConcessao.getLayers();
+  if (evento.target.id === 'filtroUf') {
+    desenharIrPara();
+    const uf = $('filtroUf').value, alvo = camadas.filter(l => !uf || l.feature.properties.uf === uf);
+    if (alvo.length) mapa.fitBounds(L.featureGroup(alvo).getBounds(), { padding: [20, 20] });
+  } else {
+    const l = camadas.find(x => x.feature.properties.codigo_ibge === $('filtroMunicipio').value);
+    if (l) mapa.fitBounds(l.getBounds(), { padding: [20, 20] });
+  }
+}
+
 function desenharConcessao() {
   if (!estado.concessao) return;
   const afetados = new Set((estado.resultado?.municipios || []).map(m => m.codigo_ibge));
@@ -1289,6 +1324,7 @@ async function abrirApp() {
   $('tipo').value = estado.config.tipo_padrao;
   $('tipoOutro').maxLength = estado.config.max_outro;
   desenharConcessao();
+  desenharIrPara();
   mapa.fitBounds(camadaConcessao.getBounds(), { padding: [20, 20] });
   await irPara(estado.vista);
 }
@@ -2011,6 +2047,8 @@ async function abrir() {
   $('cfgPadrao').addEventListener('click', () => { $('cfgModelo').value = estado.configuracao.modelo_padrao; desenharPreviaConfig(); });
   $('subabas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
   $('botaoTema').addEventListener('click', alternarTema);
+  $('irPara').addEventListener('change', irParaNoMapa);
+  $('irPara').addEventListener('submit', e => e.preventDefault());
   $('botaoAjuda').addEventListener('click', abrirAjuda);
   $('ajudaFechar').addEventListener('click', () => { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); });
   document.addEventListener('click', mostrarDica);

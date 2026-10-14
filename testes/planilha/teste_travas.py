@@ -150,6 +150,12 @@ for v_, esperado in [("=1+1", "'=1+1"), ("+55", "'+55"), ("-3", "'-3"), ("@SUM",
                      ("ok", "ok"), (12, "12"), (None, ""), (True, "sim")]:
     conferir(f"célula segura: {v_!r}", T.celula_segura(v_) == esperado, repr(T.celula_segura(v_)))
 
+# ---------- agrupamento por circuito e transformador ----------
+from comunidades.nucleo import agrupamento as G  # noqa: E402
+
+g = G.por_codigo(["CIR1", "CIR2", "CIR1", None, "", "CIR1"], limite=1)
+conferir("agrupamento: o maior primeiro, total de códigos e UCs sem código", g == {"grupos": [{"codigo": "CIR1", "ucs": 3}], "total": 2, "sem_codigo": 2}, str(g))
+
 for st, nome, extra in resultados:
     print(st, nome, f"-> {extra}" if extra and st != "OK  " else "")
 falhas = sum(1 for r in resultados if r[0] != "OK  ")

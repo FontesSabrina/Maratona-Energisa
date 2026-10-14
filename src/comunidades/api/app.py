@@ -42,7 +42,7 @@ from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
 from ..fontes.base_territorial import CRS_BASE
 from .. import correio
-from ..nucleo import auditoria, esquema_planilha, idiomas, mensagem, painel, travas
+from ..nucleo import agrupamento, auditoria, esquema_planilha, idiomas, mensagem, painel, travas
 from ..nucleo import tipos_desligamento as tipos
 from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
@@ -392,6 +392,9 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
                 "classes": dict(Counter((c or "não informada")[:MAX_TEXTO] for c in ucs["CLASSE"])),
             })
         resposta["prazo"] = _prazo(vital_total, cfg)
+    # por transformador e por circuito (só os códigos da rede e contagens), se a planilha trouxe as colunas
+    resposta["rede"] = {campo: agrupamento.por_codigo(v[campo.upper()].tolist()) for campo in ("circuito", "transformador")
+                        if campo in modelo.colunas}
     ms = resposta["municipios"]
     resposta["conferencia"] = {
         "vital_bloqueio": travas.vital_bloqueio(modelo, linhas_fora),

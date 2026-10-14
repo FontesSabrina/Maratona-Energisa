@@ -138,6 +138,14 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`(mapa.setZoom(10), 0)`);
   await ate(p, `document.documentElement.dataset.mapa === 'z10'`);
   conferir('de longe: sem nomes nem contornos das comunidades', await p.avaliar(`!camadaNomes && !camadaBase`));
+  // "Ir para": estado e município da concessão
+  await p.avaliar(`(() => { const u = $('filtroUf'); u.value = 'MG'; u.dispatchEvent(new Event('change', { bubbles: true }));
+    const m = $('filtroMunicipio'); m.value = '3138401'; m.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
+  await espera(800);
+  const irPara = await p.avaliar(`({ ufs: [...$('filtroUf').options].map(o => o.value).join(','), n: $('filtroMunicipio').options.length,
+    dentro: camadaConcessao.getLayers().find(l => l.feature.properties.codigo_ibge === '3138401').getBounds().contains(mapa.getCenter()) })`);
+  conferir('mapa: "Ir para" por estado e município aproxima no município escolhido', irPara.ufs.startsWith(',MG') && irPara.n > 10 && irPara.dentro,
+    JSON.stringify(irPara));
 
   const visivel = id => `!!$('${id}').offsetParent`;
   await p.avaliar(`($('avancar').click(), 0)`);

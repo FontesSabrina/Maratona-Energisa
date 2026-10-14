@@ -9,7 +9,7 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - [x] Fase C: rádios, modelo de mensagem, envio por e-mail, confirmação, arquivos criptografados
 - [x] Fase D: comprovante, relatório mensal, relatórios de auditoria, painel do mês, semente de demonstração
 - [x] Fase E: telas por perfil, visual único Farol, Ajuda
-- [ ] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito)
+- [x] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito) — parcial, ver resumo
 - [ ] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
 
 ## Resumos por fase
@@ -39,3 +39,8 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 ### Fase E (14/10/2026)
 - Feito: menu por perfil conforme a matriz (Admin do Farol: Empresas e Auditoria geral; Admin da empresa: Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações, Auditoria; Operador: Novo aviso, Histórico, Relatórios; Consulta: Mapa, Histórico, Relatórios; Relatórios com Painel do mês, Do período e Comparativo); telas de admin ligadas à API real: usuários com municípios (convite sem senha, senha temporária, último admin protegido), rádios (alcance por município e por comunidade com distrito, editar, desativar), configurações (modelo da mensagem com prévia, telefone, limite, fuso UTM, antecedência), empresas com CNPJ alfanumérico opcional (validação do protótipo do Lucas portada para Python) e suspender/reativar (sessões encerradas); visual único Farol (Âmbar, Noite, Maré, Névoa) em todas as telas, inclusive entrar e trocar a senha, tema claro e escuro (o fundo do mapa acompanha); botão Ajuda por perfil e "?" para UC, equipamento vital, corrigida, rejeitada, limite de rejeição, localidade vizinha, código de verificação e economia.
 - Testes: rodar_testes.ps1 21 de 21 (acesso 46/46 com CNPJ, municípios e suspensão; matriz com PATCH /api/empresas; navegador 107/107 com rádios, configurações, ajuda, dicas, tema escuro e 44 px nas telas do Admin); --so-algoritmo igual ao passo 12.
+
+### Fase F (14/10/2026, parcial)
+- Feito: filtro do mapa por estado e município ("Ir para", aproxima no município) e agrupamento das UCs por circuito e por transformador na conferência (nucleo/agrupamento.py; só códigos da rede e contagens).
+- Não feito (vai para "Próximos passos" no README): selecionar um polígono pronto (comunidade ou distrito) para simular o desligamento e aceitar UTM/GMS na tela de simulação. As duas ficam no mapa estático de demonstração (mapa_template.html), que tem testes de tela idênticos ao passo 12; mexer nele agora arriscaria a referência às vésperas da apresentação. Colorir os pontos por circuito no mapa também fica para depois.
+- Testes: rodar_testes.ps1 21 de 21 (travas 49/49, API 77/77, navegador 108/108); --so-algoritmo igual ao passo 12.

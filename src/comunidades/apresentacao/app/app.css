@@ -143,6 +143,10 @@ button.prim:hover:not(:disabled) { filter: none; background: #F0A928; }
 .amostra.outra { border: 1px solid #93A1AF; }
 .amostra.uc { width: 10px; height: 10px; margin: 0 4px; border-radius: 50%; background: #B07800; border: 1px solid #FFFFFF; box-shadow: 0 0 0 1px #93A1AF; }
 .amostra.uc.fora { background: #B42318; }
+.ir-para { position: absolute; top: 10px; right: 10px; z-index: 1000; display: flex; gap: 8px; padding: 8px 10px; border-radius: 12px;
+  background: color-mix(in srgb, var(--sup) 94%, transparent); border: 1px solid var(--linha); box-shadow: var(--sombra); }
+.ir-para label { display: grid; gap: 2px; font-size: 12px; }
+.ir-para select { min-width: 120px; }
 .legenda li.legenda-ucs { display: grid; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--linha); }
 .legenda-ucs > span { display: flex; align-items: center; gap: 8px; }
 .legenda li.legenda-rede { display: grid; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--linha); }

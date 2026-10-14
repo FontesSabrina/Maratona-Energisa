@@ -287,6 +287,10 @@
 
   <section class="mapa-area" aria-label="Mapa">
     <div id="mapa" role="region" aria-label="Mapa dos municípios da concessão e das comunidades afetadas"></div>
+    <form class="ir-para" id="irPara" aria-label="Ir para um município" hidden>
+      <label>Estado <select id="filtroUf"></select></label>
+      <label>Município <select id="filtroMunicipio"></select></label>
+    </form>
     <ul class="legenda" id="legenda" aria-label="Legenda do mapa">
       <li class="legenda-topo"><button type="button" id="botaoLegenda" aria-expanded="true" aria-controls="legenda">
         <span aria-hidden="true" class="seta">▾</span> <span id="botaoLegendaTexto">Minimizar legenda</span></button></li>
