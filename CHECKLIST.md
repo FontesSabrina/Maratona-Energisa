@@ -10,7 +10,7 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - [x] Fase D: comprovante, relatório mensal, relatórios de auditoria, painel do mês, semente de demonstração
 - [x] Fase E: telas por perfil, visual único Farol, Ajuda
 - [x] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito) — parcial, ver resumo
-- [ ] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
+- [x] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
 
 ## Resumos por fase
 
@@ -44,3 +44,8 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Feito: filtro do mapa por estado e município ("Ir para", aproxima no município) e agrupamento das UCs por circuito e por transformador na conferência (nucleo/agrupamento.py; só códigos da rede e contagens).
 - Não feito (vai para "Próximos passos" no README): selecionar um polígono pronto (comunidade ou distrito) para simular o desligamento e aceitar UTM/GMS na tela de simulação. As duas ficam no mapa estático de demonstração (mapa_template.html), que tem testes de tela idênticos ao passo 12; mexer nele agora arriscaria a referência às vésperas da apresentação. Colorir os pontos por circuito no mapa também fica para depois.
 - Testes: rodar_testes.ps1 21 de 21 (travas 49/49, API 77/77, navegador 108/108); --so-algoritmo igual ao passo 12.
+
+### Fase G (14/10/2026)
+- Feito: README completo (o que é, resultados do pipeline, passo a passo no Windows, perfis, arquitetura MVC, segurança/LGPD, validação, próximos passos); SEGURANCA.md com a tabela "Ameaça → proteção → teste que prova"; ORIGEM.md na raiz (dados, componentes, voz, Mailpit, dependências, licenças e hashes); docs/DEMO.md (roteiro de 5 minutos com o bloqueio do equipamento vital); DEPLOY.md com as variáveis novas; testes/rodar_testes.ps1 (desde a Fase B). Banco local migrado e com a semente de demonstração (16 avisos, 19 envios, 4 rádios; auditoria íntegra).
+- Bateria final: rodar_testes.ps1 21 de 21 (980 verificações); --so-algoritmo igual ao passo 12.
+- PR: sabrina/plano-final -> melhorias (link no fim da sessão).

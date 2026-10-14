@@ -39,3 +39,19 @@ Docker no Render, com o banco Postgres + PostGIS no Neon. Diferenças em produç
 - **Base territorial ou rede refeitas** (base_concessao, rede_concessao): rode de novo o passo 1.4.
 - **Senha perdida:** `$env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente --nova-senha EMAIL`.
 - **Saúde:** `https://farol-....onrender.com/api/saude` mostra quantos municípios o banco tem (66).
+
+## 4. Variáveis do plano final (desde 14/10/2026)
+
+O `render.yaml` já declara todas; nenhum valor vai para o git.
+
+| Variável | O que é | Como preencher no Render |
+|---|---|---|
+| `FAROL_CHAVE_PACOTE` | Chave HMAC do pacote da conferência da planilha | Gerada pelo Render (`generateValue`); não mexa |
+| `FAROL_CHAVE_ARQUIVOS` | Chave AES-256-GCM dos PDF e MP3 enviados às rádios | Gerada pelo Render; **não troque depois**: os arquivos já guardados deixariam de abrir |
+| `FAROL_URL_PUBLICA` | Endereço público do Farol, para o link "Confirmar recebimento" do e-mail | `https://farol-....onrender.com` |
+| `FAROL_SMTP_HOST`, `_PORTA`, `_USUARIO`, `_SENHA`, `_REMETENTE` (e `FAROL_SMTP_SEGURANCA`: starttls, ssl ou nenhuma) | Servidor de e-mail para mandar o aviso às rádios | Do provedor de e-mail da empresa; sem `FAROL_SMTP_HOST`, o envio por e-mail fica desligado (WhatsApp e cópia continuam) |
+
+- O banco ganha as tabelas novas (auditoria encadeada, rádios, configuração da empresa, envios e arquivos cifrados) ao rodar a semente (passo 1.5), que pode rodar de novo.
+- **Histórico de demonstração** para os relatórios (avisos, rádios e envios fictícios, uma vez só):
+  `$env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente_demo` (precisa de `data/sintetico/` na máquina local).
+- No banco de produção, o usuário do app deve poder só `SELECT` e `INSERT` na tabela `registro` (sem `UPDATE`, `DELETE` nem `TRUNCATE`), além dos gatilhos que já recusam essas operações.
