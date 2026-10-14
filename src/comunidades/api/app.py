@@ -43,7 +43,8 @@ from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
 from ..fontes.base_territorial import CRS_BASE
-from ..nucleo import esquema_planilha, idiomas, painel, travas
+from ..nucleo import auditoria, esquema_planilha, idiomas, painel, travas
+from ..nucleo import tipos_desligamento as tipos
 from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
 from ..nucleo import planilha
@@ -135,7 +136,8 @@ def config(u: dict = Depends(usuario_atual)) -> dict:
             "idiomas": {k: v["nome"] for k, v in idiomas.IDIOMAS.items()}, "idioma_padrao": DIST.idioma_padrao,
             "prazo_legal_horas": DIST.prazo_legal_horas, "prazo_vital_dias_uteis": DIST.prazo_vital_dias_uteis,
             "norma": DIST.norma, "palavras_por_segundo": PALAVRAS_POR_SEGUNDO,
-            "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}, "audio": AUDIO}
+            "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}, "audio": AUDIO,
+            "tipos": tipos.ROTULOS, "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO}
 
 
 @app.get("/api/concessao")
@@ -302,6 +304,8 @@ class PedidoAviso(BaseModel):
     idioma: str = Field(idiomas.PADRAO, max_length=10)
     conferi: bool = False
     justificativa: str | None = Field(None, max_length=2000)
+    tipo: str = Field(tipos.PADRAO, max_length=40)
+    tipo_outro: str | None = Field(None, max_length=1000)
 
 
 def _formulario(data: str, horario: str, idioma: str) -> tuple[str, str, str]:
@@ -309,6 +313,14 @@ def _formulario(data: str, horario: str, idioma: str) -> tuple[str, str, str]:
     if idioma not in idiomas.IDIOMAS:
         raise HTTPException(422, f"idioma: use um de {', '.join(idiomas.IDIOMAS)}.")
     return data, horario, idioma
+
+
+def _motivo(tipo: str, outro: str | None) -> tuple[str, str]:
+    """O tipo de desligamento (lista fechada ou "Outro" curto e sem dado pessoal) e o texto do motivo."""
+    try:
+        return tipos.motivo(tipo, outro)
+    except ValueError as e:
+        raise HTTPException(422, f"Tipo de desligamento: {e}") from None
 
 
 class _PedeAba(Exception):
@@ -405,12 +417,15 @@ def _resultado(modelo, data: str, horario: str, idioma: str) -> dict:
 @app.post("/api/planilha")
 async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(...), horario: str = Form(...),
                             idioma: str = Form(idiomas.PADRAO), aba: str | None = Form(None, max_length=leitura.MAX_NOME_ABA),
+                            tipo: str = Form(tipos.PADRAO, max_length=40), tipo_outro: str | None = Form(None, max_length=1000),
                             u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
     """1º passo (Conferir): traduz a planilha e mostra o resultado e as travas. Nada vai para o histórico.
     Devolve o pacote assinado (UCs opacas, 15 minutos) que o 2º passo usa para gerar o aviso."""
     data, horario, idioma = _formulario(data, horario, idioma)
+    tipo, motivo = _motivo(tipo, tipo_outro)
     modelo = await _ler_e_traduzir(arquivo, aba, u)
     resposta = _resultado(modelo, data, horario, idioma)
+    resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
     resposta["pacote"], vence = pacote_.assinar(travas.ucs_opacas(modelo), u["id"], u["empresa_id"])
     resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
     r = modelo.resumo
@@ -424,6 +439,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     """2º passo (Gerar aviso): só com o pacote da conferência válido, a caixa "Conferi" marcada, nenhuma
     trava de equipamento vital e, acima do limite de rejeição, a justificativa. Grava no histórico."""
     data, horario, idioma = _formulario(dados.data, dados.horario, dados.idioma)
+    tipo, motivo = _motivo(dados.tipo, dados.tipo_outro)
     try:
         modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
     except pacote_.PacoteRecusado as e:
@@ -441,7 +457,8 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     if c["rejeicao"]["acima"]:
         banco_acesso.registrar("justificou rejeições acima do limite", f"{c['rejeicao']['rejeitadas']} de {c['rejeicao']['total']} "
                                f"linhas: {travas.limpar_justificativa(dados.justificativa)}", u["id"], u["empresa_id"])
-    return JSONResponse(_guardar(resposta, u, data, horario, idioma))
+    resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
+    return JSONResponse(_guardar(resposta, u, data, horario, idioma, tipo, motivo))
 
 
 @app.post("/api/planilha/json")
@@ -472,8 +489,9 @@ def relatorio_planilha(dados: PedidoRelatorio, u: dict = Depends(exigir("gerar_a
                     headers={"Content-Disposition": 'attachment; filename="farol-relatorio-planilha.csv"'})
 
 
-def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str) -> dict:
-    """Grava no histórico da empresa só o agregado (sem as linhas com problema) e devolve a resposta com o id."""
+def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str) -> dict:
+    """Grava no histórico da empresa só o agregado (sem as linhas com problema), com a linha "gerou aviso"
+    na auditoria na mesma transação, e devolve a resposta com o id, o código de verificação e quem pediu."""
     p = resposta["planilha"]
     resumo = {"linhas": p["linhas"], "validas": p["validas"], "problemas": p["total_problemas"],
               "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "prazo": resposta["prazo"]}
@@ -481,9 +499,11 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str) -> d
     municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital")},
                    "hoje": {k: m["hoje"][k] for k in ("locais", "palavras", "segundos")} if m.get("hoje") else None}
                   for m in resposta["municipios"]]
-    resposta["id"] = banco_acesso.gravar_aviso(u["empresa_id"], u["id"], data, horario, idioma, resumo, municipios)
-    banco_acesso.registrar("gerou aviso", f"aviso {resposta['id']}: {', '.join(m['nome'] for m in municipios) or 'nenhum município'}"
-                           f" ({p['linhas']} linhas)", u["id"], u["empresa_id"])
+    nomes = ", ".join(m["nome"] for m in municipios) or "nenhum município"
+    g = banco_acesso.gravar_aviso(u["empresa_id"], u["id"], data, horario, idioma, resumo, municipios, tipo, motivo,
+                                  lambda id_: f"aviso {id_}: {nomes} ({p['linhas']} linhas), {tipos.ROTULOS[tipo].lower()}")
+    resposta.update(id=g["id"], codigo=g["codigo"], criado_em=g["criado_em"].isoformat(), usuario=g["solicitante"],
+                    usuario_perfil=PERFIS.get(g["solicitante_perfil"], ""), status="gerado")
     return resposta
 
 
@@ -512,7 +532,7 @@ def gerar_audio(dados: PedidoAudio, u: dict = Depends(exigir("gerar_aviso"))) ->
         raise HTTPException(422, str(e)) from None
     municipio = "".join(ch for ch in dados.municipio if ch.isalnum() or ch in " -")[:60].strip() or "aviso"
     arquivo = "-".join(sem_acento(municipio).lower().encode("ascii", "ignore").decode().split()) or "aviso"
-    banco_acesso.registrar("gerou o áudio do aviso" + (" de hoje (comparativo)" if dados.comparativo else ""),
+    banco_acesso.registrar("gerou MP3 do aviso" + (" de hoje (comparativo)" if dados.comparativo else ""),
                            f"{municipio}, {segundos:.0f} s", u["id"], u["empresa_id"])
     return Response(mp3, media_type="audio/mpeg", headers={
         "Content-Disposition": f'attachment; filename="farol-aviso-{arquivo}.mp3"',
@@ -520,8 +540,11 @@ def gerar_audio(dados: PedidoAudio, u: dict = Depends(exigir("gerar_aviso"))) ->
 
 
 def _aviso_publico(a: dict) -> dict:
+    tipo = a.get("tipo") or None
     return {"id": a["id"], "criado_em": a["criado_em"].isoformat(), "data": a["data"], "horario": a["horario"],
-            "idioma": a["idioma"], "usuario": a["usuario"], "resumo": a["resumo"], "municipios": a["municipios"]}
+            "idioma": a["idioma"], "usuario": a["usuario"], "usuario_perfil": PERFIS.get(a.get("usuario_perfil"), ""),
+            "resumo": a["resumo"], "municipios": a["municipios"], "status": a.get("status") or "gerado", "codigo": a.get("codigo"),
+            "desligamento": {"tipo": tipo, "rotulo": tipos.ROTULOS.get(tipo, ""), "motivo": a.get("motivo")} if tipo else None}
 
 
 @app.get("/api/historico")
@@ -551,10 +574,81 @@ def guardar_texto_final(id_: int, codigo: str, dados: TextoFinal, u: dict = Depe
     texto = dados.texto.strip()
     if not 1 <= len(texto) <= 3000:
         raise HTTPException(422, "Texto do aviso: de 1 a 3.000 caracteres.")
+    a = banco_acesso.aviso(id_, u["empresa_id"])
+    gerado_ = next((m.get("aviso") for m in (a or {}).get("municipios", []) if m.get("codigo_ibge") == codigo), None)
     if not banco_acesso.texto_final(id_, u["empresa_id"], codigo, texto):
         raise HTTPException(404, "Aviso ou município não encontrado nesta empresa.")
+    if gerado_ is not None and texto != gerado_:
+        banco_acesso.registrar("editou a mensagem", f"aviso {id_}, município {codigo}: {len(gerado_.split())} -> "
+                               f"{len(texto.split())} palavras", u["id"], u["empresa_id"])
     banco_acesso.registrar("guardou o texto final", f"aviso {id_}, município {codigo}", u["id"], u["empresa_id"])
     return {"ok": True}
+
+
+class Cancelamento(BaseModel):
+    motivo: str = Field(max_length=1000)
+
+
+class NovaData(BaseModel):
+    data: str = Field(max_length=200)
+    horario: str = Field(max_length=200)
+
+
+def _aviso_da_empresa(id_: int, u: dict) -> dict:
+    a = banco_acesso.aviso(id_, u["empresa_id"])
+    if not a:
+        raise HTTPException(404, "Aviso não encontrado nesta empresa.")
+    if a.get("status") == "cancelado":
+        raise HTTPException(409, "Este aviso já foi cancelado.")
+    return a
+
+
+@app.post("/api/historico/{id_}/cancelar")
+def cancelar(id_: int, dados: Cancelamento, u: dict = Depends(exigir("gerar_aviso"))) -> dict:
+    """Cancela o desligamento: o aviso fica no histórico, marcado, e o motivo vai para a auditoria."""
+    _aviso_da_empresa(id_, u)
+    motivo = tipos.limpar(dados.motivo)
+    if (p := tipos.problema_outro(motivo)):
+        raise HTTPException(422, f"Motivo do cancelamento: {p}")
+    banco_acesso.cancelar_aviso(id_, u["empresa_id"])
+    banco_acesso.registrar("cancelou o aviso", f"aviso {id_}: {motivo}", u["id"], u["empresa_id"])
+    return _aviso_publico(banco_acesso.aviso(id_, u["empresa_id"]))
+
+
+@app.post("/api/historico/{id_}/data")
+def mudar_data(id_: int, dados: NovaData, u: dict = Depends(exigir("gerar_aviso"))) -> dict:
+    """Muda a data ou o horário do desligamento; o antes e o depois vão para a auditoria."""
+    a = _aviso_da_empresa(id_, u)
+    data, horario = _texto_do_aviso("data", dados.data), _texto_do_aviso("horário", dados.horario)
+    banco_acesso.mudar_data(id_, u["empresa_id"], data, horario)
+    banco_acesso.registrar("mudou a data do aviso", f"aviso {id_}: de {a['data']}, {a['horario']} para {data}, {horario}",
+                           u["id"], u["empresa_id"])
+    return _aviso_publico(banco_acesso.aviso(id_, u["empresa_id"]))
+
+
+@app.post("/api/historico/{id_}/municipios/{codigo}/pdf")
+def registrar_pdf(id_: int, codigo: str, u: dict = Depends(exigir("gerar_aviso"))) -> dict:
+    """Registra na auditoria o PDF do roteiro para a rádio (gerado na tela)."""
+    a = banco_acesso.aviso(id_, u["empresa_id"])
+    if not a or not any(m.get("codigo_ibge") == codigo for m in a["municipios"]):
+        raise HTTPException(404, "Aviso ou município não encontrado nesta empresa.")
+    banco_acesso.registrar("gerou PDF", f"aviso {id_}, município {codigo}", u["id"], u["empresa_id"])
+    return {"ok": True}
+
+
+@app.get("/api/verificar/{codigo}")
+def verificar_codigo(codigo: str, u: dict = Depends(usuario_atual)) -> dict:
+    """Confere um código de verificação (FRL-XXXX-XXXX-XXXX): a linha da auditoria que ele aponta, da
+    própria empresa (o Admin do Farol vê de todas), e se a corrente da auditoria está íntegra."""
+    h = "".join(ch for ch in codigo.upper().removeprefix("FRL") if ch.isalnum())
+    if len(h) != 12 or any(ch not in "0123456789ABCDEF" for ch in h):
+        raise HTTPException(422, "Código de verificação: use o formato FRL-XXXX-XXXX-XXXX.")
+    ln = banco_acesso.linha_por_hash(h)
+    if not ln or (u["perfil"] != "admin_farol" and ln["empresa_id"] != u["empresa_id"]):
+        raise HTTPException(404, "Código não encontrado na auditoria desta empresa.")
+    return {"codigo": auditoria.codigo_verificacao(ln["hash"]), "quando": ln["quando"].isoformat(), "acao": ln["acao"],
+            "detalhe": ln["detalhe"], "por": ln["usuario"], "perfil": PERFIS.get(ln["perfil"], ""),
+            "auditoria_integra": banco_acesso.verificar_registro()["ok"]}
 
 
 # Arquivos da tela: o app, o Leaflet e as fontes embutidas no projeto (vendor/) e o logo. Nada de CDN.

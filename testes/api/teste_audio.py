@@ -114,7 +114,7 @@ erros = {"idioma en": op.post("/api/audio", json={**pedido, "idioma": "en"}).sta
 conferir("erros: idioma sem voz, texto vazio, texto longo demais, campos longos demais (422)",
          all(v == 422 for v in erros.values()), str(erros))
 with conectar() as c, c.cursor() as cur:
-    cur.execute("SELECT detalhe FROM registro WHERE acao = 'gerou o áudio do aviso'")
+    cur.execute("SELECT detalhe FROM registro WHERE acao = 'gerou MP3 do aviso'")
     reg = [d for (d,) in cur.fetchall()]
 conferir("registro: áudio gerado (município e duração, sem o texto)", len(reg) == 2 and all("Graminha" not in d for d in reg), str(reg))
 # produção no plano gratuito (FAROL_AUDIO=0): a tela é avisada e a API recusa, sem carregar a voz

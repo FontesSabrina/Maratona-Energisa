@@ -118,7 +118,7 @@ conferir("CF-0066: 758 UCs, 754 em Leopoldina e 4 além da divisa em São João 
          json.dumps([(mm["nome"], mm["ucs"]) for mm in j["municipios"]], ensure_ascii=False))
 # cada envio ganha um id no histórico; nome, formato e aba do arquivo mudam de .csv para .xlsx
 sem_id = lambda d: {k: ({**v, "arquivo": None} if k == "traducao" else {**v, "arquivo": None, "sha256": None} if k == "conferencia" else v)
-                    for k, v in d.items() if k != "id"}
+                    for k, v in d.items() if k not in ("id", "codigo", "criado_em")}
 conferir(".xlsx dá a mesma resposta que o .csv (fora o id do histórico)", rx.status_code == 200 and sem_id(rx.json()) == sem_id(j))
 from pyproj import Transformer
 x, y = Transformer.from_crs("EPSG:4674", BT.CRS_BASE, always_xy=True).transform(t["longitude"].to_numpy(), t["latitude"].to_numpy())

@@ -83,6 +83,10 @@
             <label>Início <input type="time" id="inicio" value="08:00" step="900" required></label>
             <label>Fim <input type="time" id="fim" value="14:00" step="900" required></label>
           </div>
+          <label>Tipo de desligamento <select id="tipo"></select></label>
+          <label id="tipoOutroRotulo" hidden>Descreva o motivo (até 200 caracteres)
+            <input id="tipoOutro" maxlength="200" autocomplete="off" aria-describedby="tipoOutroAjuda"></label>
+          <p class="ajuda" id="tipoOutroAjuda" hidden>Entra na mensagem da rádio ("para …"). Não escreva nome de cliente, número de UC, CPF, telefone nem endereço.</p>
           <label class="idioma">Idioma do aviso <select id="idioma"></select></label>
           <label id="abaRotulo" hidden>Aba da planilha (mais de uma tem as colunas) <select id="aba"></select></label>
           <p class="ajuda" id="passo2Arquivo"></p>
@@ -136,6 +140,9 @@
     <!-- Resultado (de um aviso novo ou do histórico): a tela o põe no lugar da vista de onde veio -->
     <section id="resultado" class="resultado" hidden aria-labelledby="tituloResultado">
       <h2 id="tituloResultado" class="subtitulo"></h2>
+      <p id="solicitado" class="solicitado"></p>
+      <!-- Aviso do histórico: mudar a data ou cancelar (quem gera aviso; tudo vai para a auditoria) -->
+      <div id="acoesAviso" class="cartao acoes-aviso" hidden></div>
       <!-- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" -->
       <div id="conferencia" class="cartao conferencia" hidden></div>
       <div id="resumo" class="cartao resumo"></div>
@@ -180,7 +187,11 @@
 
     <!-- Registro de atividades -->
     <section id="vista-registro" class="vista" hidden aria-labelledby="tituloRegistro">
-      <h1 id="tituloRegistro">Registro de atividades</h1>
+      <h1 id="tituloRegistro">Auditoria</h1>
+      <p class="ajuda">Cada ação vira uma linha, com o nome e o perfil de quem fez. Nada é apagado nem alterado, e cada linha
+        guarda o código da anterior: qualquer adulteração quebra a corrente.</p>
+      <div class="acoes"><button type="button" id="verificarAuditoria">Conferir a integridade</button></div>
+      <p id="estadoAuditoria" class="estado" role="status" aria-live="polite"></p>
       <div id="listaRegistro" class="lista"></div>
     </section>
   </section>

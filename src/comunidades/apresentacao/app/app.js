@@ -38,7 +38,7 @@ const VISTAS = [  // vista, rótulo, ação exigida
   ['aviso', 'Novo aviso', 'gerar_aviso'], ['historico', 'Histórico', 'ver_historico'], ['painel', 'Dashboard', 'ver_historico'],
   ['comparativo', 'Comparativo', 'ver_historico'],
   ['usuarios', 'Usuários', 'gerenciar_usuarios'], ['empresas', 'Empresas', 'gerenciar_empresas'],
-  ['registro', 'Registro', 'ver_registro'],
+  ['registro', 'Auditoria', 'ver_registro'],
 ];
 const pode = acao => !!estado.usuario?.acoes.includes(acao);
 const vistasDoPerfil = () => VISTAS.filter(([, , a]) => pode(a));
@@ -62,13 +62,22 @@ function validarArquivo(arquivo) {
   return null;
 }
 
-function validarFormulario({ arquivo, data, inicio, fim }) {
+function validarFormulario({ arquivo, data, inicio, fim, tipo, tipoOutro }) {
   const problema = validarArquivo(arquivo);
   if (problema) return problema;
   if (!data) return 'Informe a data do desligamento.';
   if (!inicio || !fim) return 'Informe o horário de início e de fim.';
   if (fim <= inicio) return 'O fim tem de ser depois do início.';
+  if (tipo === 'outro' && tipoOutro.trim().length < 3) return 'Descreva o motivo do desligamento (de 3 a 200 caracteres).';
   return null;
+}
+
+// "Solicitado por Fulana (Operador) em 14/10/2026 às 10:32 · código de verificação FRL-…" (o nome vem do login)
+function solicitadoTexto(r) {
+  if (!r?.id || !r.criado_em) return '';
+  const q = new Date(r.criado_em);
+  return `Solicitado por ${r.usuario || '—'}${r.usuario_perfil ? ` (${r.usuario_perfil})` : ''} em ${q.toLocaleDateString('pt-BR')} às `
+    + `${q.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${r.codigo ? ` · código de verificação ${r.codigo}` : ''}`;
 }
 
 function validarSenhaNova(nova, repetida) {
@@ -144,7 +153,8 @@ function doHistorico(a) {
     id: a.id, aviso_ficticio: estado.config.aviso_ficticio, municipios: a.municipios, prazo: r.prazo,
     planilha: { linhas: r.linhas, validas: r.validas, total_problemas: r.problemas, problemas: [], problemas_por_motivo: {} },
     fora_da_concessao: { ucs: r.fora_da_concessao, linhas: [] },
-    criado_em: a.criado_em, usuario: a.usuario,
+    criado_em: a.criado_em, usuario: a.usuario, usuario_perfil: a.usuario_perfil, codigo: a.codigo, status: a.status,
+    desligamento: a.desligamento,
   };
 }
 
@@ -281,7 +291,7 @@ function desenharMunicipios() {
       no('p', { classe: 'tempo', id: `tempo-${cod}`, texto: tempoTexto(texto) }),
       no('p', { id: `final-${cod}`, classe: 'ajuda' }),
       no('div', { classe: 'acoes' },
-        no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: 'Baixar PDF para a rádio' }),
+        editavel && no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: 'Baixar PDF para a rádio' }),
         no('button', { type: 'button', 'data-acao': 'copiar', 'data-codigo': cod, texto: 'Copiar texto' }),
         temAudio() && no('button', { type: 'button', 'data-acao': 'ouvir', 'data-codigo': cod, texto: 'Ouvir' }),
         temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: 'Baixar áudio (MP3)' }),
@@ -374,9 +384,30 @@ function desenharConferencia() {
   desenharFunil();
 }
 
+// quem pediu, quando e o código; no histórico, mudar a data ou cancelar (quem gera aviso)
+function desenharSolicitado() {
+  const r = estado.resultado;
+  const partes = r ? [solicitadoTexto(r), r.desligamento ? `Tipo: ${r.desligamento.rotulo} (${r.desligamento.motivo})` : ''].filter(Boolean) : [];
+  $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })),
+    r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Desligamento cancelado' }) : '');
+  const lugar = $('acoesAviso');
+  lugar.hidden = !(r && estado.origem === 'historico' && pode('gerar_aviso') && r.status !== 'cancelado');
+  if (lugar.hidden) return lugar.replaceChildren();
+  lugar.replaceChildren(no('h3', { texto: 'Mudou alguma coisa?' }),
+    no('div', { classe: 'campos' },
+      no('label', { texto: 'Nova data ' }, no('input', { type: 'date', id: 'novaData' })),
+      no('label', { texto: 'Início ' }, no('input', { type: 'time', id: 'novoInicio', value: '08:00', step: '900' })),
+      no('label', { texto: 'Fim ' }, no('input', { type: 'time', id: 'novoFim', value: '14:00', step: '900' }))),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-aviso': 'data', texto: 'Mudar a data' })),
+    no('label', { texto: 'Motivo do cancelamento (vai para a auditoria; sem nome de cliente)' },
+      no('input', { id: 'motivoCancelar', maxlength: '200', autocomplete: 'off' })),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'perigo', 'data-aviso': 'cancelar', texto: 'Cancelar o desligamento' })));
+}
+
 function desenharResultado() {
   desenharAbas();
   desenharConferencia();
+  desenharSolicitado();
   if (!estado.resultado) return;
   const r = estado.resultado, f = estado.formulario;
   $('tituloResultado').textContent = estado.origem === 'historico'
@@ -405,8 +436,10 @@ function desenharHistorico() {
         no('span', { classe: 'chips' }, a.municipios.length ? a.municipios.map(m => no('span', { classe: 'chip', texto: `${m.nome}/${m.uf}` }))
           : no('span', { classe: 'chip vazio', texto: 'nenhum município' })),
         no('span', { classe: 'meta', texto: `${fmt(ucs)} UCs · ${fmt(com)} comunidades · cerca de ${fmt(seg)} s no ar` }),
-        no('span', { classe: 'meta', texto: `Gerado em ${dataHora(a.criado_em)}${a.usuario ? ' por ' + a.usuario : ''} · aviso nº ${a.id}` }),
-        a.municipios.some(m => m.texto_final) ? no('span', { classe: 'selo final', texto: 'Texto final guardado' }) : null));
+        no('span', { classe: 'meta', texto: `${solicitadoTexto(a) || `Gerado em ${dataHora(a.criado_em)}`} · aviso nº ${a.id}` }),
+        no('span', { classe: 'chips' }, a.desligamento ? no('span', { classe: 'chip tipo', texto: a.desligamento.rotulo }) : null,
+          a.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Cancelado' }) : null,
+          a.municipios.some(m => m.texto_final) ? no('span', { classe: 'selo final', texto: 'Texto final guardado' }) : null)));
   });
   const total = estado.historico.length;
   $('contagemHistorico').textContent = total ? (lista.length === total ? `${fmt(total)} aviso(s).` : `${fmt(lista.length)} de ${fmt(total)} aviso(s).`) : '';
@@ -517,10 +550,12 @@ function desenharEmpresas() {
 }
 
 function desenharRegistro() {
-  const linhas = estado.registro.map(r => no('tr', {}, no('td', { texto: dataHora(r.quando) }), no('td', { texto: r.usuario || '—' }),
-    no('td', { texto: r.empresa || '—' }), no('td', { texto: r.acao }), no('td', { texto: r.detalhe })));
+  const linhas = estado.registro.map(r => no('tr', {}, no('td', { texto: dataHora(r.quando) }),
+    no('td', { texto: r.usuario ? `${r.usuario}${r.perfil ? ` (${r.perfil})` : ''}` : '—' }),
+    no('td', { texto: r.empresa || '—' }), no('td', { texto: r.acao }), no('td', { texto: r.detalhe }),
+    no('td', { classe: 'codigo', texto: r.codigo || '' })));
   $('listaRegistro').replaceChildren(no('table', { classe: 'tabela' },
-    no('thead', {}, no('tr', {}, ['Quando', 'Quem', 'Empresa', 'O quê', 'Detalhe'].map(t => no('th', { texto: t })))),
+    no('thead', {}, no('tr', {}, ['Quando', 'Quem', 'Empresa', 'O quê', 'Detalhe', 'Código'].map(t => no('th', { texto: t })))),
     no('tbody', {}, linhas)));
 }
 
@@ -777,7 +812,8 @@ async function desenharRoteiro(codigo) {
     no('div', { classe: 'rt-marca' }, no('img', { src: '/assets/marca/farol.svg', alt: '' }),
       no('div', {}, no('p', { classe: 'rt-nome', texto: 'Farol' }), no('p', { classe: 'rt-slogan', texto: 'Cada comunidade avisada pelo nome' }))),
     no('h1', { texto: 'Roteiro para a rádio' }),
-    no('p', { classe: 'rt-meta', texto: `${m.nome}/${m.uf} · desligamento programado em ${f.dataLonga}, das ${f.horario} · ${estado.usuario.empresa || estado.config.distribuidora}` }),
+    no('p', { classe: 'rt-meta', texto: `${m.nome}/${m.uf} · desligamento programado em ${f.dataLonga}, das ${f.horario} · ${estado.usuario.empresa || estado.config.distribuidora}`
+      + (estado.resultado.desligamento ? ` · ${estado.resultado.desligamento.rotulo}` : '') }),
     no('h2', { texto: 'Texto para leitura' }),
     no('p', { classe: 'rt-aviso', texto }),
     no('p', { classe: 'rt-tempo', texto: tempoTexto(texto) }),
@@ -787,8 +823,9 @@ async function desenharRoteiro(codigo) {
     no('p', { texto: `Antecedência mínima: ${estado.resultado.prazo.antecedencia_minima} (${estado.resultado.prazo.norma}).` }),
     no('p', { texto: `Unidades com equipamento vital: ${fmt(m.equipamento_vital.sim)}` + (m.equipamento_vital.a_confirmar ? ` (${fmt(m.equipamento_vital.a_confirmar)} a confirmar)` : '') + '.' }),
     no('div', { classe: 'rt-rodape' },
-      no('p', { texto: `Gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-        + `${estado.resultado.id ? ` · aviso nº ${estado.resultado.id}` : ''} · ${estado.usuario.nome}. Código de verificação do texto (SHA-256): ` },
+      no('p', { classe: 'rt-solicitado', texto: `${solicitadoTexto(estado.resultado)}${estado.resultado.id ? ` · aviso nº ${estado.resultado.id}` : ''}.` }),
+      no('p', { texto: `PDF gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        + ` por ${estado.usuario.nome}. Código do texto (SHA-256): ` },
         no('span', { classe: 'rt-codigo', texto: codigoV })),
       no('p', { texto: estado.resultado.aviso_ficticio })));
 }
@@ -841,6 +878,9 @@ async function abrirApp() {
   $('faixa').textContent = estado.config.aviso_ficticio;
   $('idioma').replaceChildren(...Object.entries(estado.config.idiomas).map(([k, nome]) => no('option', { value: k, texto: nome })));
   $('idioma').value = estado.config.idioma_padrao;
+  $('tipo').replaceChildren(...Object.entries(estado.config.tipos).map(([k, nome]) => no('option', { value: k, texto: nome })));
+  $('tipo').value = estado.config.tipo_padrao;
+  $('tipoOutro').maxLength = estado.config.max_outro;
   desenharConcessao();
   mapa.fitBounds(camadaConcessao.getBounds(), { padding: [20, 20] });
   await irPara(estado.vista);
@@ -899,7 +939,7 @@ function limparTela() {
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro', 'roteiro',
-    'painelDash', 'contagemHistorico', 'conferencia', 'aba'])
+    'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria'])
     $(id).replaceChildren();
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
@@ -998,7 +1038,8 @@ async function mostrarResultado(resultado, origem, formulario) {
 // Nada vai para o histórico ainda.
 async function enviar(evento) {
   evento.preventDefault();
-  const form = { arquivo: estado.arquivo, data: $('data').value, inicio: $('inicio').value, fim: $('fim').value, idioma: $('idioma').value };
+  const form = { arquivo: estado.arquivo, data: $('data').value, inicio: $('inicio').value, fim: $('fim').value, idioma: $('idioma').value,
+    tipo: $('tipo').value, tipoOutro: $('tipoOutro').value };
   const problema = validarFormulario(form);
   if (problema) {
     if (validarArquivo(form.arquivo)) { estado.passo = 1; desenharAbas(); }
@@ -1013,6 +1054,8 @@ async function enviar(evento) {
   dados.append('data', dataTexto(form.data));
   dados.append('horario', horario);
   dados.append('idioma', form.idioma);
+  dados.append('tipo', form.tipo);
+  if (form.tipo === 'outro') dados.append('tipo_outro', form.tipoOutro);
   if (estado.aba) dados.append('aba', estado.aba);
   try {
     const j = await api('/api/planilha', { method: 'POST', body: dados });
@@ -1021,7 +1064,8 @@ async function enviar(evento) {
       : `Conferência pronta: ${fmt(c.numeros.clientes)} cliente(s), ${fmt(c.numeros.comunidades)} comunidade(s). Confira os números e o mapa para gerar o aviso.`,
       !!c.vital_bloqueio.length || !j.municipios.length);
     estado.passo = 3;
-    await mostrarResultado(j, 'novo', { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma });
+    await mostrarResultado(j, 'novo', { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma,
+      tipo: form.tipo, tipoOutro: form.tipo === 'outro' ? form.tipoOutro : null });
     document.documentElement.dataset.farol = 'conferencia';
   } catch (e) {
     if (e.status === 409 && e.dados.abas) {   // mais de uma aba serve: a pessoa escolhe e confere de novo
@@ -1046,7 +1090,7 @@ async function gerarAviso() {
   avisar('Gerando o aviso…');
   try {
     const j = await api('/api/avisos', { method: 'POST', json: { pacote: estado.resultado.pacote, data: f.data, horario: f.horario, idioma: f.idioma,
-      conferi: estado.conferi, justificativa: estado.justificativa.trim() || null } });
+      conferi: estado.conferi, justificativa: estado.justificativa.trim() || null, tipo: f.tipo, tipo_outro: f.tipoOutro } });
     const n = j.municipios.length;
     avisar(n ? `Pronto: ${n} município(s), ${fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0))} comunidade(s). Guardado no histórico (aviso nº ${j.id}).`
       : `Nenhuma UC na área de concessão. Guardado no histórico (aviso nº ${j.id}).`, !n);
@@ -1186,6 +1230,10 @@ async function acao(evento) {
   } else if (b.dataset.acao === 'pdf') {
     await desenharRoteiro(codigo);
     await guardarFinal(codigo);
+    if (estado.resultado.id) {   // o PDF fica registrado na auditoria
+      try { await api(`/api/historico/${estado.resultado.id}/municipios/${codigo}/pdf`, { method: 'POST' }); }
+      catch (e) { if (e.status !== 401) avisar(e.message, true); return; }
+    }
     const titulo = document.title;
     document.title = `Farol - aviso ${m.nome} ${estado.formulario.data.replace('/', '-')}`;  // nome sugerido do PDF
     window.print();
@@ -1210,6 +1258,45 @@ async function abrirHistorico(evento) {
     $('resultado').scrollIntoView({ block: 'start' });
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
+// aviso do histórico: mudar a data ou cancelar; o servidor confere a permissão e registra o antes e o depois
+async function acaoAviso(evento) {
+  const b = evento.target.closest('button[data-aviso]');
+  if (!b) return;
+  const r = estado.resultado;
+  try {
+    let a;
+    if (b.dataset.aviso === 'data') {
+      const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
+      if (!d || !i || !f || f <= i) return avisar('Informe a nova data e um horário de fim depois do início.', true);
+      a = await api(`/api/historico/${r.id}/data`, { method: 'POST', json: { data: dataTexto(d), horario: `${horaTexto(i)} às ${horaTexto(f)}` } });
+      avisar(`Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`);
+    } else {
+      const motivo = $('motivoCancelar').value.trim();
+      if (motivo.length < 3) return avisar('Escreva o motivo do cancelamento.', true);
+      if (!confirm(`Cancelar o desligamento do aviso nº ${r.id}? O aviso fica no histórico, marcado como cancelado.`)) return;
+      a = await api(`/api/historico/${r.id}/cancelar`, { method: 'POST', json: { motivo } });
+      avisar(`Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`);
+    }
+    await mostrarResultado(doHistorico(a), 'historico', { data: a.data, dataLonga: a.data, horario: a.horario, idioma: a.idioma });
+    estado.historico = estado.historico.map(x => x.id === a.id ? a : x);
+    desenharHistorico();
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
+async function verificarAuditoria() {
+  try {
+    const v = await api('/api/auditoria/verificar');
+    mensagemEm('estadoAuditoria', v.ok ? `Auditoria íntegra${v.linhas ? `: ${fmt(v.linhas)} linhas conferidas` : ''}. Nenhuma linha foi alterada nem apagada.`
+      : `A auditoria NÃO confere${v.quebra_id ? ` a partir da linha ${v.quebra_id} (${v.motivo})` : `: ${v.motivo}`}.`, !v.ok);
+    estado.registro = (await api('/api/registro')).registro;
+    desenharRegistro();
+  } catch (e) {
+    if (e.status !== 401) mensagemEm('estadoAuditoria', e.message, true);
   }
 }
 
@@ -1277,6 +1364,9 @@ async function abrir() {
   $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
   $('arquivo').addEventListener('change', e => escolherPlanilha(e.target.files[0]));
   $('aba').addEventListener('change', e => { estado.aba = e.target.value; });
+  $('tipo').addEventListener('change', e => { for (const id of ['tipoOutroRotulo', 'tipoOutroAjuda']) $(id).hidden = e.target.value !== 'outro'; });
+  $('acoesAviso').addEventListener('click', acaoAviso);
+  $('verificarAuditoria').addEventListener('click', verificarAuditoria);
   $('conferencia').addEventListener('change', editarConferencia);
   $('conferencia').addEventListener('input', editarConferencia);
   $('conferencia').addEventListener('click', acaoConferencia);

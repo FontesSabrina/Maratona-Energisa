@@ -139,6 +139,10 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('funil: com a planilha, passo 2 (data e horário)', await p.avaliar(`estado.passo === 2 && ${visivel('passo-2')} && !${visivel('passo-1')}
     && ${visivel('gerar')} && $('passo2Arquivo').textContent.includes('planilha_CF-0066.csv')`));
   await p.avaliar(`($('data').value = '2026-11-20', $('inicio').value = '08:00', $('fim').value = '14:00', 0)`);
+  await p.avaliar(`(() => { const t = $('tipo'); t.value = 'outro'; t.dispatchEvent(new Event('change')); return 0; })()`);
+  conferir('tipo "Outro": aparece o campo com o aviso de não escrever nome de cliente', await p.avaliar(`!$('tipoOutroRotulo').hidden
+    && /Não escreva nome de cliente/.test($('tipoOutroAjuda').textContent) && [...$('tipo').options].length === 6`));
+  await p.avaliar(`(() => { const t = $('tipo'); t.value = 'poda'; t.dispatchEvent(new Event('change')); return 0; })()`);
   await p.avaliar(`(document.documentElement.dataset.farol = 'enviando', $('gerar').click(), 0)`);
   await ate(p, `document.documentElement.dataset.farol === 'conferencia' || $('estado').classList.contains('erro')`);
   const msgConf = await p.avaliar(`$('estado').textContent`);
@@ -212,6 +216,9 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `document.documentElement.dataset.farol === 'resultado' || $('estado').classList.contains('erro')`);
   const msg = await p.avaliar(`$('estado').textContent`);
   conferir('gerar aviso: pronto e guardado no histórico', /^Pronto.*aviso nº \d+/.test(msg), msg);
+  const sol = await p.avaliar(`$('solicitado').textContent`);
+  conferir('aviso gerado: "Solicitado por" com o nome e o perfil do login, o código de verificação e o tipo',
+    /^Solicitado por Operador da EMG \(Operador\) em \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2} · código de verificação FRL-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}Tipo: Poda de árvores/.test(sol), sol);
   const avisos = await p.avaliar(`({ passo: estado.passo, resumo: ${visivel('resumo')}, texto: !!document.querySelector('#municipios textarea')?.offsetParent,
     novo: ${visivel('novoAviso')}, titulo: $('tituloResultado').textContent })`);
   conferir('funil: passo 4 (avisos) mostra o texto para a rádio e o "Novo desligamento"',
@@ -263,6 +270,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   // PDF: o que o botão faz antes de abrir a impressão (roteiro + texto final no histórico)
   await p.avaliar(`desenharRoteiro('${cod}').then(() => guardarFinal('${cod}'))`);
   const roteiro = await p.avaliar(`$('roteiro').textContent`);
+  conferir('roteiro: "Solicitado por" com o código FRL e o tipo do desligamento', /Solicitado por Operador da EMG \(Operador\) em .* código de verificação FRL-/.test(roteiro)
+    && roteiro.includes('Poda de árvores'), roteiro.slice(0, 300));
   conferir('roteiro: texto editado, município, data, nº do aviso e código de verificação', roteiro.includes('Mais informações pelo telefone')
     && roteiro.includes('Leopoldina/MG') && roteiro.includes('20/11/2026') && /aviso nº \d+/.test(roteiro) && /SHA-256\): [0-9a-f]{16}/.test(roteiro), roteiro.slice(0, 200));
   const repetido = roteiro.match(/\(([^()]+)\) \(\1\)/);
@@ -311,6 +320,17 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`(() => { const b = $('buscaHistorico'); b.value = ''; b.dispatchEvent(new Event('input')); return 0; })()`);
   conferir('histórico: a busca acha a comunidade sem acento e filtra o que não tem', achou === 2 && nada.n === 0 && /Nenhum aviso com esse filtro/.test(nada.msg),
     JSON.stringify({ achou, nada }));
+  // mudar a data e cancelar pelo histórico (o aviso aberto é o do Operador)
+  conferir('histórico: quem gera aviso vê "Mudar a data" e "Cancelar"', await p.avaliar(`!$('acoesAviso').hidden && !!document.querySelector('[data-aviso=cancelar]')`));
+  await p.avaliar(`($('novaData').value = '2026-11-21', $('novoInicio').value = '09:00', $('novoFim').value = '15:00', document.querySelector('[data-aviso=data]').click(), 0)`);
+  await ate(p, `$('estado').textContent.includes('mudada para 21/11')`);
+  conferir('mudar a data: o aviso e o cartão do histórico com a data nova', await p.avaliar(`estado.resultado.municipios.length > 0
+    && $('tituloResultado').textContent.includes('21/11, 9h às 15h') && $('listaHistorico').textContent.includes('21/11, 9h às 15h')`));
+  await p.avaliar(`(window.confirm = () => true, $('motivoCancelar').value = 'chuva forte prevista', document.querySelector('[data-aviso=cancelar]').click(), 0)`);
+  await ate(p, `/cancelado/.test($('estado').textContent)`);
+  conferir('cancelar: marcado como cancelado, sem as ações, o chip no histórico', await p.avaliar(`estado.resultado.status === 'cancelado'
+    && $('acoesAviso').hidden && /Desligamento cancelado/.test($('solicitado').textContent) && /Cancelado/.test($('listaHistorico').textContent)`));
+  await captura(p, '4b_cancelado.png');
 
   await p.avaliar(`irPara('comparativo')`);
   await ate(p, `document.querySelector('#comparativo .comp') && document.querySelector('#comparativoTotal .comp-total')`);
@@ -356,7 +376,9 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `!$('resultado').hidden && document.querySelector('#municipios textarea')`);
   const leitura = await p.avaliar(`({ readonly: [...document.querySelectorAll('#municipios textarea')].every(t => t.readOnly),
     desfazer: document.querySelectorAll('[data-acao=restaurar]').length, pdf: document.querySelectorAll('[data-acao=pdf]').length })`);
-  conferir('Consulta: aviso só para ler (sem editar nem desfazer), com PDF', leitura.readonly && !leitura.desfazer && leitura.pdf > 0, JSON.stringify(leitura));
+  conferir('Consulta: aviso só para ler (sem editar, desfazer nem PDF para a rádio)', leitura.readonly && !leitura.desfazer && leitura.pdf === 0, JSON.stringify(leitura));
+  conferir('Consulta: vê quem pediu e o código, sem mudar a data nem cancelar', /^Solicitado por .+ código de verificação FRL-/.test(await p.avaliar(`$('solicitado').textContent`))
+    && await p.avaliar(`$('acoesAviso').hidden`));
   conferir('Consulta: nenhum ponto de UC no mapa', await p.avaliar(`!camadaUcs && $('botaoUcs').closest('li').hidden`));
   conferir('Consulta: a API recusa gerar aviso (403)', await p.avaliar(`fetch('/api/avisos', { method: 'POST' }).then(r => r.status === 403)`));
   const semAudio = await p.avaliar(`(() => { desenharComparativo();
@@ -367,7 +389,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const a = await entrarNaTela(p, 'admin@emg.example', SENHAS['admin@emg.example']);
-  conferir('Admin da empresa: Novo aviso, Histórico, Dashboard, Comparativo, Usuários e Registro', a.abas.join(',') === 'Novo aviso,Histórico,Dashboard,Comparativo,Usuários,Registro', JSON.stringify(a.abas));
+  conferir('Admin da empresa: Novo aviso, Histórico, Dashboard, Comparativo, Usuários e Auditoria', a.abas.join(',') === 'Novo aviso,Histórico,Dashboard,Comparativo,Usuários,Auditoria', JSON.stringify(a.abas));
   await p.avaliar(`irPara('usuarios')`);
   await ate(p, `document.querySelectorAll('#listaUsuarios [data-usuario]').length >= 3`);
   await p.avaliar(`($('novoNome').value = 'Maria Operadora', $('novoEmail').value = 'maria@emg.example', $('novoPerfil').value = 'operador', $('formUsuario').requestSubmit(), 0)`);
@@ -381,12 +403,16 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `document.querySelectorAll('#listaRegistro tbody tr').length`);
   const reg = await p.avaliar(`[...document.querySelectorAll('#listaRegistro tbody tr')].map(t => t.textContent).join(' | ')`);
   conferir('registro da empresa: cadastro de usuário, aviso gerado e texto final', /cadastrou usuário/.test(reg) && /gerou aviso/.test(reg) && /guardou o texto final/.test(reg), reg.slice(0, 200));
-  conferir('registro da empresa: importou a planilha e conferiu os números (com o nome de quem fez)',
-    /Operador.*importou planilha|importou planilha/.test(reg) && /conferiu os números e o mapa/.test(reg), reg.slice(0, 300));
+  conferir('auditoria da empresa: importou, conferiu, mudou a data e cancelou, com o nome e o perfil de quem fez',
+    /importou planilha/.test(reg) && /conferiu os números e o mapa/.test(reg) && /Operador da EMG \(Operador\)/.test(reg)
+    && /mudou a data do aviso/.test(reg) && /cancelou o aviso/.test(reg) && /FRL-[0-9A-F]{4}/.test(reg), reg.slice(0, 300));
+  await p.avaliar(`($('verificarAuditoria').click(), 0)`);
+  conferir('auditoria: "Conferir a integridade" diz que está íntegra', await ate(p, `/^Auditoria íntegra/.test($('estadoAuditoria').textContent)`));
+  await captura(p, '5b_auditoria.png');
   await p.avaliar(`($('sair').click(), 0)`); await ate(p, `estado.tela === 'entrar'`);
 
   const f = await entrarNaTela(p, 'admin@farol.example', SENHAS['admin@farol.example']);
-  conferir('Admin do Farol: só Empresas e Registro', f.abas.join(',') === 'Empresas,Registro', JSON.stringify(f.abas));
+  conferir('Admin do Farol: só Empresas e Auditoria', f.abas.join(',') === 'Empresas,Auditoria', JSON.stringify(f.abas));
   await ate(p, `document.querySelectorAll('#listaEmpresas tbody tr').length`);
   conferir('Admin do Farol: a empresa EMG na lista', /EMG/.test(await p.avaliar(`$('listaEmpresas').textContent`)));
   conferir('nenhuma exceção nem violação da CSP (perfis)', !p.excecoes.length && !(await p.avaliar('window.__csp')).length, JSON.stringify(p.excecoes));

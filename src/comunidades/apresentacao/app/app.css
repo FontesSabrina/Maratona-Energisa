@@ -361,3 +361,16 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
 .resultado[data-modo="passo4"] .conferencia { display: none; }
 #motivoGerar:empty { display: none; }
 .amostra.uc.corrigida { background: #7A4FD1; }
+
+/* ---------- Quem pediu, tipo, cancelado e auditoria ---------- */
+.solicitado { margin: -6px 0 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13.5px; color: var(--texto2); }
+.solicitado:empty { display: none; }
+.chip.cancelado { background: color-mix(in srgb, var(--erro) 14%, var(--sup)); color: var(--erro); font-weight: 600; }
+.chip.tipo { background: color-mix(in srgb, var(--ambar) 22%, var(--sup)); color: var(--texto); }
+.acoes-aviso { display: grid; gap: 10px; }
+.acoes-aviso h3 { margin: 0; font-size: 16px; }
+.acoes-aviso input:not([type]) { min-height: 44px; }
+button.perigo { border-color: var(--erro); color: var(--erro); background: var(--sup); }
+button.perigo:hover:not(:disabled) { background: color-mix(in srgb, var(--erro) 8%, var(--sup)); }
+.tabela td.codigo { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; white-space: nowrap; }
+.rt-solicitado { font-weight: 600; }
