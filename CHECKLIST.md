@@ -61,3 +61,15 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - PR: sabrina/plano-final -> melhorias (link no fim da sessão).
 
 ## Decisões da Fase H (tomadas sem perguntar: a opção mais segura e mais simples)
+- Atribuição: tudo conta no mês em que o aviso foi criado (envios, custo e prazo do aviso vão para o mês dele).
+- Auditoria geral de acessos (Admin do Farol) não tem "Enviar": o Admin do Farol não tem domínio de empresa para restringir os destinatários.
+- Equipamento vital por comunidade não é guardado (só a contagem por município): os relatórios mostram o vital por município.
+- Não existe campo de justificativa de atraso: a coluna aparece com "—" até a distribuidora pedir esse campo.
+- Ficha da comunidade, mapa de calor, linha do tempo, lista de vias e comprovante na tela só mostram: não vão para a auditoria. Todo relatório na tela vai, como "gerou relatório X (tela)"; todo PDF, CSV, via e envio também.
+- Projeção do ano: acumulado + média dos meses fechados (contando meses fechados sem gasto como zero) x meses que faltam; o mês em andamento não entra na média. Sem mês fechado (janeiro), sem projeção.
+- Setas ↑ ↓ no PDF viram + e - (as fontes do PDF são Latin-1); na tela e no CSV ficam as setas.
+- A segunda via usa a mesma chave do cofre dos arquivos (FAROL_CHAVE_ARQUIVOS); sem a chave o PDF não é gerado (503), para nunca existir relatório sem via.
+- Envio de relatório: 1 a 5 destinatários do domínio da empresa, 10 envios por hora por usuário (na memória do processo, como o limite de login).
+- Confirmação de recebimento pela rádio (link do e-mail) fica na auditoria sem usuário: quem confirma é a rádio, não alguém do Farol.
+- Alerta de repetição (padrão: 3 desligamentos em 30 dias, configurável): amarelo, não bloqueia; aparece na conferência e, ao gerar, vai para a auditoria.
+- Registro total (H6) é conferido lendo o código das rotas (teste_registro_total.py) e, no banco, pelo teste_relatorios_h (nenhuma linha com usuário sem nome e perfil).

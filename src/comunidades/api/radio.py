@@ -33,6 +33,7 @@ from ..config import sem_acento
 from ..nucleo import economia, mensagem
 from ..nucleo import radios as alcance_
 from ..nucleo.acesso import PERFIS, problema_email
+from ..nucleo.auditoria import diferencas
 from ..nucleo.tipos_desligamento import limpar
 from ..segredos import segredo
 from .acesso import exigir
@@ -62,6 +63,10 @@ class Configuracao(BaseModel):
     limite_rejeicao: float = Field(ge=0, le=0.5)
     epsg_utm: int = Field(ge=31960, le=31985)
     antecedencia_dias: int = Field(ge=1, le=90)
+    orcamento_radio: float | None = Field(None, ge=0, le=100_000_000)   # orçamento anual de rádio (R$)
+    alerta_preco: float = Field(0.20, ge=0, le=5)                       # alerta quando o envio custa mais que isso acima da média
+    repeticao_n: int = Field(3, ge=2, le=50)                            # repetição: N desligamentos...
+    repeticao_dias: int = Field(30, ge=7, le=365)                       # ...dentro de D dias
 
 
 @rotas.get("/api/empresa/configuracao")
@@ -78,10 +83,14 @@ def salvar_configuracao(dados: Configuracao, u: dict = Depends(exigir("configura
         raise HTTPException(422, "Nome da empresa na mensagem: de 2 a 120 caracteres.")
     antes = config_empresa(u["empresa_id"])
     novo = {"modelo_mensagem": dados.modelo_mensagem.strip(), "nome_mensagem": nome, "telefone": limpar(dados.telefone),
-            "limite_rejeicao": round(dados.limite_rejeicao, 4), "epsg_utm": dados.epsg_utm, "antecedencia_dias": dados.antecedencia_dias}
+            "limite_rejeicao": round(dados.limite_rejeicao, 4), "epsg_utm": dados.epsg_utm, "antecedencia_dias": dados.antecedencia_dias,
+            "orcamento_radio": round(dados.orcamento_radio, 2) if dados.orcamento_radio is not None else None,
+            "alerta_preco": round(dados.alerta_preco, 4), "repeticao_n": dados.repeticao_n, "repeticao_dias": dados.repeticao_dias}
     banco.salvar_config(u["empresa_id"], u["id"], novo)
-    mudou = [k for k in novo if str(novo[k]) != str(antes.get(k))]
-    banco_acesso.registrar("alterou a configuração da empresa", ", ".join(mudou) or "nada mudou", u["id"], u["empresa_id"])
+    banco_acesso.registrar("alterou a configuração da empresa", diferencas(antes, novo, {
+        "modelo_mensagem": "modelo da mensagem", "nome_mensagem": "nome na mensagem", "telefone": "telefone", "limite_rejeicao": "limite de rejeição",
+        "epsg_utm": "fuso UTM", "antecedencia_dias": "antecedência (dias)", "orcamento_radio": "orçamento de rádio", "alerta_preco": "alerta de preço",
+        "repeticao_n": "repetição (N)", "repeticao_dias": "repetição (dias)"}), u["id"], u["empresa_id"])
     return ver_configuracao(u)
 
 
@@ -147,8 +156,12 @@ def alterar_radio(id_: int, dados: DadosRadio, u: dict = Depends(exigir("gerenci
         raise HTTPException(404, "Rádio não encontrada nesta empresa.")
     d = _validar_radio(dados)
     banco.alterar_radio(id_, u["empresa_id"], d)
-    mudou = [k for k in ("nome", "email", "whatsapp", "alcance", "valor_padrao", "cobranca", "ativa") if str(d[k]) != str(antes[k])]
-    banco_acesso.registrar("alterou cadastro de rádio", f"{d['nome']}: {', '.join(mudou) or 'nada mudou'}", u["id"], u["empresa_id"])
+    resumo_alcance = lambda a: f"{len(a.get('municipios') or [])} município(s), {len(a.get('comunidades') or [])} comunidade(s)"
+    banco_acesso.registrar("alterou cadastro de rádio", f"{antes['nome']}: " + diferencas(
+        {**antes, "alcance": resumo_alcance(antes["alcance"]), "valor_padrao": _dinheiro(antes["valor_padrao"])},
+        {**d, "alcance": resumo_alcance(d["alcance"]), "valor_padrao": _dinheiro(d["valor_padrao"])},
+        {"nome": "nome", "email": "e-mail", "whatsapp": "WhatsApp", "alcance": "alcance", "valor_padrao": "valor padrão", "cobranca": "cobrança",
+         "ativa": "ativa"}), u["id"], u["empresa_id"])
     return {"radio": _radio_publica(banco.radio(id_, u["empresa_id"]))}
 
 

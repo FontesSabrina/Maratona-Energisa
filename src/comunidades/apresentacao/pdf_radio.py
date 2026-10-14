@@ -15,7 +15,7 @@ from fpdf import FPDF
 MARCA = Path(__file__).resolve().parent / "marca" / "farol.svg"
 NOITE, MARE, AMBAR, CINZA = (14, 22, 32), (28, 42, 55), (245, 184, 61), (90, 102, 112)
 _TROCAS = str.maketrans({"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "...", "•": "-", "→": "->",
-                         " ": " ", " ": " ", "✓": "", "⇪": ""})
+                         " ": " ", " ": " ", "✓": "OK", "⇪": "", "↑": "+", "↓": "-"})
 
 
 def _l1(texto) -> str:

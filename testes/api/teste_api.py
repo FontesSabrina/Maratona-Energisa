@@ -364,7 +364,8 @@ conferir("conferir: números (clientes, municípios, comunidades, equipamento vi
                                           "vital_a_confirmar": 0, "corrigidas": 0, "rejeitadas": 0, "fora_da_concessao": 0},
          json.dumps(ji["conferencia"]["numeros"]))
 conferir("suspeito (amarelo): 4 UCs em São João Nepomuceno, município diferente da maioria",
-         [(x["tipo"], x["municipio"], x["ucs"]) for x in ji["conferencia"]["suspeitos"]] == [("municipio_diferente", "São João Nepomuceno/MG", 4)],
+         [(x["tipo"], x["municipio"], x["ucs"]) for x in ji["conferencia"]["suspeitos"] if x["tipo"] != "repeticao"]
+         == [("municipio_diferente", "São João Nepomuceno/MG", 4)],
          json.dumps(ji["conferencia"]["suspeitos"], ensure_ascii=False))
 # o pacote vai ao navegador: UCs trocadas por códigos opacos
 dentro = json.loads(gzip.decompress(base64.urlsafe_b64decode(ji["pacote"].split(".")[1] + "==")))

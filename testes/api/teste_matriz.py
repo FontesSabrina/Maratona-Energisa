@@ -59,10 +59,18 @@ MATRIZ = {
     ("GET", "/api/historico/{id_}/envios"): EMPRESA, ("GET", "/api/envios/{id_}/arquivos/{tipo}"): EMPRESA,
     # relatórios: o do período e o comprovante (os três perfis da empresa); auditoria da empresa (Admin da empresa);
     # auditoria geral de acessos, de todas as empresas (Admin do Farol)
-    ("GET", "/api/relatorios/mensal"): EMPRESA, ("GET", "/api/relatorios/mensal.pdf"): EMPRESA, ("GET", "/api/relatorios/mensal.csv"): EMPRESA,
     ("GET", "/api/historico/{id_}/comprovante"): EMPRESA, ("GET", "/api/historico/{id_}/comprovante.pdf"): EMPRESA,
+    # Fase H: cada relatório gera (tela), baixa (PDF/CSV) e envia; Consulta só gera e baixa; auditoria só o Admin da empresa;
+    # acessos de todas as empresas só o Admin do Farol (sem envio)
+    **{("GET", f"/api/relatorios/{t}"): EMPRESA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},
+    **{("GET", f"/api/relatorios/{t}.{{formato}}"): EMPRESA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},
+    **{("POST", f"/api/relatorios/{t}/enviar"): GERA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},
     ("GET", "/api/relatorios/auditoria"): {ADM}, ("GET", "/api/relatorios/auditoria.{formato}"): {ADM},
+    ("POST", "/api/relatorios/auditoria/enviar"): {ADM},
     ("GET", "/api/relatorios/acessos"): {FAROL}, ("GET", "/api/relatorios/acessos.{formato}"): {FAROL},
+    ("GET", "/api/relatorios/vias"): TODOS, ("GET", "/api/relatorios/vias/{id_}.pdf"): TODOS,
+    ("GET", "/api/historico/{id_}/linha-do-tempo"): EMPRESA,
+    ("GET", "/api/comunidades/ficha"): EMPRESA, ("GET", "/api/comunidades/calor"): EMPRESA,
     # a rádio confirma o recebimento pelo link do e-mail, sem login
     ("GET", "/confirmar/{token}"): PUBLICA, ("POST", "/confirmar/{token}"): PUBLICA,
 }
@@ -114,7 +122,8 @@ outra = pronto("admin@out.example", r.json()["senha_temporaria"])
 
 
 def caminho(path: str) -> str:
-    ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1, "/api/empresas": 999999}
+    ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1, "/api/empresas": 999999,
+           "/api/relatorios/vias": 999999}
     p = path.replace("{id_}", str(next((v for k, v in ids.items() if path.startswith(k)), aviso["id"])))
     p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43).replace("{formato}", "csv")
     return p.replace("{codigo}", "FRL-0000-0000-0000" if "verificar" in p else "3138401")

@@ -60,3 +60,12 @@ def cobertura(radios: list[dict], municipio: dict) -> dict:
     sem = [c for c, _ in afetadas if id(c) not in cobertas]
     distrito = lambda d: "Sede" if d == municipio.get("nome") else d or "?"   # o distrito-sede tem o nome do município
     return {"radios": por_radio, "sem_radio": [f"{nome_base(c['nome'])} ({distrito(c.get('distrito'))})" for c in sem]}
+
+
+def alcanca(radio: dict, municipio: str, nome: str, distrito: str | None) -> bool:
+    """A rádio alcança a comunidade (pelo município inteiro ou pelo nome com o distrito)?"""
+    a = radio.get("alcance") or {}
+    if str(municipio) in set(a.get("municipios") or []):
+        return True
+    k = chave(municipio, nome, distrito or "")
+    return any(chave(c["municipio"], c["nome"], c.get("distrito")) == k for c in a.get("comunidades") or [])

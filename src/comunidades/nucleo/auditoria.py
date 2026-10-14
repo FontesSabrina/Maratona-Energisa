@@ -56,3 +56,17 @@ def codigo_verificacao(hash_: str) -> str:
     """'FRL-' e os 12 primeiros caracteres do hash, em 3 grupos (ex.: FRL-3F2A-91C0-7B44)."""
     h = hash_[:12].upper()
     return f"FRL-{h[:4]}-{h[4:8]}-{h[8:12]}"
+
+
+def diferencas(antes: dict, depois: dict, rotulos: dict) -> str:
+    """'valor padrão: 150.00 → 200.00; e-mail: a@x → b@x' (só o que mudou). Textos longos viram 'alterado (N → M caracteres)'."""
+    partes = []
+    for campo, rotulo in rotulos.items():
+        a, d = antes.get(campo), depois.get(campo)
+        if str(a) == str(d):
+            continue
+        if len(str(a)) > 60 or len(str(d)) > 60:
+            partes.append(f"{rotulo}: alterado ({len(str(a or ''))} → {len(str(d or ''))} caracteres)")
+        else:
+            partes.append(f"{rotulo}: {'—' if a in (None, '') else a} → {'—' if d in (None, '') else d}")
+    return "; ".join(partes) or "nada mudou"

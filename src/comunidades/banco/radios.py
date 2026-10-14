@@ -81,6 +81,27 @@ CREATE TABLE IF NOT EXISTS arquivo_envio (
     cifrado    bytea NOT NULL,
     UNIQUE (envio_id, tipo)
 );
+-- Fase H: orçamento anual de rádio, alerta de preço e repetição (configuração da empresa)
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS orcamento_radio numeric(14, 2) CHECK (orcamento_radio >= 0),
+    ADD COLUMN IF NOT EXISTS alerta_preco numeric(5, 4) CHECK (alerta_preco BETWEEN 0 AND 5),
+    ADD COLUMN IF NOT EXISTS repeticao_n integer CHECK (repeticao_n BETWEEN 2 AND 50),
+    ADD COLUMN IF NOT EXISTS repeticao_dias integer CHECK (repeticao_dias BETWEEN 7 AND 365);
+-- Fase H: segunda via de cada relatório em PDF, cifrada (o código FRL aponta a linha da auditoria; o SHA-256 confere o arquivo)
+CREATE TABLE IF NOT EXISTS relatorio_via (
+    id            bigserial PRIMARY KEY,
+    empresa_id    bigint REFERENCES empresa ON DELETE RESTRICT,
+    usuario_id    bigint REFERENCES usuario ON DELETE RESTRICT,
+    usuario_nome  text NOT NULL,
+    tipo          text NOT NULL,
+    titulo        text NOT NULL,
+    filtros       text NOT NULL DEFAULT '',
+    codigo        text NOT NULL UNIQUE,
+    sha256        text NOT NULL,
+    tamanho       integer NOT NULL,
+    cifrado       bytea NOT NULL,
+    criado_em     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS relatorio_via_empresa ON relatorio_via (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS radio_empresa ON radio (empresa_id);
 CREATE INDEX IF NOT EXISTS envio_aviso ON envio (aviso_id);
 CREATE INDEX IF NOT EXISTS envio_empresa ON envio (empresa_id, criado_em DESC);
@@ -114,7 +135,8 @@ def config(empresa_id: int) -> dict:
 
 
 def salvar_config(empresa_id: int, usuario_id: int, dados: dict) -> None:
-    campos = ("modelo_mensagem", "nome_mensagem", "telefone", "limite_rejeicao", "epsg_utm", "antecedencia_dias")
+    campos = ("modelo_mensagem", "nome_mensagem", "telefone", "limite_rejeicao", "epsg_utm", "antecedencia_dias", "orcamento_radio",
+              "alerta_preco", "repeticao_n", "repeticao_dias")
     _um("INSERT INTO empresa_config (empresa_id, atualizado_por, " + ", ".join(campos) + ") VALUES (%s, %s, "
         + ", ".join(["%s"] * len(campos)) + ") ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por,"
         " atualizado_em = now(), " + ", ".join(f"{c} = EXCLUDED.{c}" for c in campos),

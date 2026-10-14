@@ -1,29 +1,42 @@
-"""Relatórios: o do período (mensal), o comprovante de um aviso, o de auditoria da empresa e o de acessos (geral).
+"""Relatórios (Fase H): mensal, custos por rádio, comunidades, prazos, auditoria, acessos e a ficha da comunidade.
 
-- Mensal e comprovante: os três perfis da empresa (Admin, Operador e Consulta), só da própria empresa.
-- Auditoria da empresa: só o Admin da empresa. Acessos de todas as empresas: só o Admin do Farol.
-- Filtros: período (mês ou de/até), município, tipo, rádio e pessoa.
-- Exportar em PDF ou CSV (CSV protegido contra fórmula): cada exportação vira uma linha da auditoria
-  ("gerou relatório ...") com o nome de quem gerou, e o código de verificação do relatório sai do hash
-  dessa linha (FRL-...; /api/verificar/{codigo} confere).
-Só agregados e o que está gravado: nada de UC, coordenada ou nome de cliente.
+Cada relatório é um documento (nucleo/relatorios.py) que vira tela (JSON), PDF (apresentacao/pdf_relatorio.py)
+e CSV protegido contra fórmula. Regras de todos (H0):
+- Permissões: Admin da empresa e Operador geram, baixam e enviam; Consulta só gera e baixa; auditoria só o
+  Admin da empresa; acessos de todas as empresas só o Admin do Farol (sem envio: ele não tem domínio de empresa).
+- Toda geração (tela, PDF, CSV), download de segunda via e envio vira linha da auditoria, com quem, o tipo, os
+  filtros, os destinatários e o SHA-256 do PDF. O código de verificação (FRL-...) sai do hash da linha "gerou".
+- Segunda via: cada PDF fica guardado cifrado (AES-256-GCM, a mesma chave dos arquivos das rádios); baixar a via
+  confere o SHA-256 antes de entregar.
+- Enviar: e-mail com o PDF, só para endereços do domínio da empresa, até 5, com limite por hora.
+- Filtros: período (mês, ano ou intervalo), município, tipo, rádio, pessoa.
+O comprovante do aviso continua como era (mesmas rotas, mesmo PDF).
 """
 
-from datetime import date, datetime
+import hashlib
+import time
+from collections import defaultdict, deque
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
-from ..apresentacao import pdf_relatorio
+from .. import cofre, correio
+from ..apresentacao import email_relatorio, pdf_relatorio
 from ..banco import acesso as banco_acesso
+from ..banco import base_territorial as banco_territorio
+from ..banco import radios as banco_radios
 from ..banco import relatorios as banco
 from ..nucleo import relatorio as R
-from ..nucleo.acesso import PERFIS
+from ..nucleo import relatorios as RH
+from ..nucleo.acesso import PERFIS, pode, problema_email
 from ..nucleo.auditoria import codigo_verificacao
+from ..nucleo.radios import alcanca
 from ..nucleo.tipos_desligamento import ROTULOS
-from .acesso import exigir
-from .comum import AVISO_FICTICIO, BRASILIA, DIST
+from .acesso import exigir, usuario_atual
+from .comum import AVISO_FICTICIO, BRASILIA, DIST, config_empresa
 
 rotas = APIRouter()
 MAX_DIAS = 400
@@ -31,149 +44,345 @@ ACESSOS = ("entrou", "saiu", "senha errada", "senha errada (conta bloqueada por 
            "login recusado (usuário bloqueado ou empresa suspensa)", "trocou a senha", "gerou senha temporária",
            "semente: nova senha temporária")
 STATUS = {"preparando": "preparando", "enviado": "enviado", "entregue": "entregue", "falhou": "falhou", "confirmado": "confirmado"}
+TIPOS = {   # tipo -> (ação exigida, nome, pode enviar)
+    "mensal": ("ver_historico", "relatório mensal", True),
+    "custos": ("ver_historico", "custos por rádio", True),
+    "comunidades": ("ver_historico", "comunidades mais afetadas", True),
+    "prazos": ("ver_historico", "prazos", True),
+    "comunidade": ("ver_historico", "ficha da comunidade", True),
+    "auditoria": ("relatorio_auditoria", "relatório de auditoria", True),
+    "acessos": ("auditoria_geral", "auditoria geral de acessos", False),
+}
+MAX_DESTINATARIOS, LIMITE_ENVIOS_REL, JANELA = 5, 10, 3600
+_envios: dict[int, deque] = defaultdict(deque)
 
 
-def _periodo(mes: str | None, inicio: str | None, fim: str | None) -> tuple[date, date, bool]:
-    """(início, fim, é um mês inteiro). Padrão: o mês corrente."""
-    try:
-        if inicio or fim:
-            i, f = date.fromisoformat(inicio or fim), date.fromisoformat(fim or inicio)
-            mes_inteiro = False
-        else:
-            i, f = R.periodo_do_mes(mes or datetime.now(BRASILIA).strftime("%Y-%m"))
-            mes_inteiro = True
-    except (ValueError, TypeError):
-        raise HTTPException(422, "Período: use mes=AAAA-MM ou inicio e fim no formato AAAA-MM-DD.") from None
-    if f < i or (f - i).days > MAX_DIAS:
-        raise HTTPException(422, f"Período: o fim depois do início, até {MAX_DIAS} dias.")
-    return i, f, mes_inteiro
-
-
-def _brl(v) -> str:
-    s = f"{Decimal(str(v)):,.2f}"
-    return "R$ " + s.replace(",", "_").replace(".", ",").replace("_", ".")
-
-
-def _tempo(s) -> str:
-    s = int(s or 0)
-    sinal, s = ("-" if s < 0 else ""), abs(s)
-    return f"{sinal}{s // 60} min {s % 60:02d} s" if s >= 60 else f"{sinal}{s} s"
-
-
-def _registrar(u: dict, o_que: str, detalhe: str) -> str:
-    """A linha da auditoria do relatório; o código de verificação sai do hash dela."""
-    return codigo_verificacao(banco_acesso.registrar(o_que, detalhe[:500], u["id"], u["empresa_id"])["hash"])
+def _hoje() -> date:
+    return datetime.now(BRASILIA).date()
 
 
 def _quem(u: dict) -> str:
     return f"{u['nome']} ({PERFIS[u['perfil']]})"
 
 
-# ---------- Mensal (ou de um período) ----------
-def _mensal(u: dict, mes, inicio, fim, municipio, tipo, radio, pessoa) -> dict:
-    i, f, mes_inteiro = _periodo(mes, inicio, fim)
-    filtros = {"municipio": municipio, "tipo": tipo, "radio": radio, "pessoa": pessoa}
-    avisos = banco.avisos(u["empresa_id"], i, f)
-    envios = banco.envios(u["empresa_id"], [a["id"] for a in avisos])
-    rel = R.mensal(avisos, envios, i, f, filtros, DIST.prazo_legal_horas, DIST.prazo_vital_dias_uteis)
-    if mes_inteiro:
-        ai, af = R.periodo_do_mes(R.mes_anterior(i))
-        av_ant = banco.avisos(u["empresa_id"], ai, af)
-        ant = R.mensal(av_ant, banco.envios(u["empresa_id"], [a["id"] for a in av_ant]), ai, af, filtros,
-                       DIST.prazo_legal_horas, DIST.prazo_vital_dias_uteis)
-        rel["comparacao"] = {"periodo": ant["periodo"]["rotulo"], "numeros": R.comparar(rel, ant)}
-    rel["opcoes"] = {   # o que dá para filtrar neste período (da própria empresa)
-        "municipios": sorted({(m["codigo_ibge"], f"{m['nome']}/{m['uf']}") for a in avisos for m in a["municipios"]}, key=lambda x: x[1]),
-        "tipos": sorted({a["tipo"] for a in avisos if a.get("tipo")}), "rotulos_tipos": ROTULOS,
-        "radios": sorted({(e["radio_id"], e["radio_nome"]) for e in envios}, key=lambda x: x[1]),
-        "pessoas": sorted({a["usuario"] for a in avisos if a.get("usuario")}),
-    }
-    return rel
+# ---------- filtros e período ----------
+def filtros(mes: str | None = Query(None, max_length=7), ano: int | None = Query(None, ge=2000, le=2100),
+            inicio: str | None = Query(None, max_length=10), fim: str | None = Query(None, max_length=10),
+            municipio: str | None = Query(None, max_length=7), tipo: str | None = Query(None, max_length=40),
+            radio: str | None = Query(None, max_length=12), pessoa: str | None = Query(None, max_length=120),
+            nome: str | None = Query(None, max_length=120), distrito: str | None = Query(None, max_length=120),
+            so_acessos: bool = False, empresa: str | None = Query(None, max_length=10),
+            categoria: str | None = Query(None, max_length=20)) -> dict:
+    return {k: v for k, v in dict(mes=mes, ano=ano, inicio=inicio, fim=fim, municipio=municipio, tipo=tipo, radio=radio, pessoa=pessoa,
+                                  nome=nome, distrito=distrito, so_acessos=so_acessos or None, empresa=empresa, categoria=categoria).items()
+            if v not in (None, "")}
 
 
-def _filtros_texto(rel: dict) -> str:
-    f = dict(rel["filtros"])
-    if "municipio" in f:
-        f["municipio"] = dict(rel["opcoes"]["municipios"]).get(f["municipio"], f["municipio"])
-    if "tipo" in f:
-        f["tipo"] = ROTULOS.get(f["tipo"], f["tipo"])
-    if "radio" in f:
-        f["radio"] = dict((str(k), v) for k, v in rel["opcoes"]["radios"]).get(str(f["radio"]), f["radio"])
-    return ", ".join(f"{k}: {v}" for k, v in f.items()) or "sem filtros"
+CHAVES_FILTRO = {"mes": 7, "ano": 4, "inicio": 10, "fim": 10, "municipio": 7, "tipo": 40, "radio": 12, "pessoa": 120, "nome": 120,
+                 "distrito": 120, "so_acessos": 5, "empresa": 10, "categoria": 20}
 
 
-@rotas.get("/api/relatorios/mensal")
-def relatorio_mensal(mes: str | None = None, inicio: str | None = None, fim: str | None = None, municipio: str | None = None,
-                     tipo: str | None = None, radio: str | None = None, pessoa: str | None = None,
-                     u: dict = Depends(exigir("ver_historico"))) -> dict:
-    return _mensal(u, mes, inicio, fim, municipio, tipo, radio, pessoa)
+def limpar_filtros(d: dict) -> dict:
+    """Os filtros que vêm no corpo do "Enviar": só as chaves conhecidas, em texto curto."""
+    saida = {}
+    for k, v in (d or {}).items():
+        if k in CHAVES_FILTRO and v not in (None, "", False):
+            s = str(v).strip()
+            if len(s) > CHAVES_FILTRO[k]:
+                raise HTTPException(422, f"Filtro {k}: texto longo demais.")
+            saida[k] = int(s) if k == "ano" and s.isdigit() else (True if k == "so_acessos" else s)
+    return saida
 
 
-def _secoes_mensal(rel: dict) -> list[tuple]:
-    r = rel["resumo"]
-    sec = [("titulo", "Resumo"), ("numeros", [
-        ("Desligamentos programados", str(r["desligamentos"])), ("Cancelados", str(r["cancelados"])),
-        ("Avisos (por município)", str(r["avisos"])), ("Comunidades avisadas", str(r["comunidades"])),
-        ("UCs no aviso", str(r["ucs"])), ("Com equipamento vital (só a contagem)", str(r["equipamento_vital"])),
-        ("Envios às rádios", str(r["envios"])), ("Confirmados pela rádio", str(r["confirmados"])),
-        ("Tempo no ar (mensagens enviadas)", _tempo(r["segundos_no_ar"])), ("Custo", _brl(r["custo"])),
-        ("Economia calculada (tempo no ar)", _brl(r["economia_calculada"])), ("Economia informada (custo antigo)", _brl(r["economia_informada"])),
-        ("Tempo de ar economizado", _tempo(r["tempo_economizado"])),
-        ("No prazo", f"{r['no_prazo']} de {r['com_envio']} com envio" + (f" ({r['pct_no_prazo']:.1f}%)".replace(".", ",") if r["pct_no_prazo"] is not None else ""))])]
-    if rel.get("comparacao"):
-        nomes = {"desligamentos": "Desligamentos", "avisos": "Avisos", "ucs": "UCs", "envios": "Envios", "confirmados": "Confirmados",
-                 "segundos_no_ar": "Segundos no ar", "custo": "Custo (R$)", "economia_calculada": "Economia calculada (R$)",
-                 "economia_informada": "Economia informada (R$)", "tempo_economizado": "Segundos economizados", "pct_no_prazo": "% no prazo"}
-        sec += [("titulo", f"Comparação com {rel['comparacao']['periodo']}"),
-                ("tabela", ["Número", "Este período", "Anterior", "Diferença"],
-                 [[nomes[k], v["atual"], v["anterior"], v["diferenca"]] for k, v in rel["comparacao"]["numeros"].items()])]
-    sec += [("titulo", "Por tipo de desligamento"), ("tabela", ["Tipo", "Desligamentos", "UCs"],
-                                                      [[x["rotulo"], x["desligamentos"], x["ucs"]] for x in rel["por_tipo"]]),
-            ("titulo", "Por rádio"), ("tabela", ["Rádio", "Envios", "Confirmados", "Tempo no ar", "Custo", "Economia"],
-                                      [[x["radio"], x["envios"], x["confirmados"], _tempo(x["segundos"]), _brl(x["custo"]), _brl(x["economia"])]
-                                       for x in rel["por_radio"]]),
-            ("titulo", "Comunidades mais afetadas"), ("tabela", ["Comunidade", "Distrito", "Município", "Avisos", "UCs"],
-                                                      [[x["comunidade"].split(" (")[0], x["distrito"], x["municipio"], x["avisos"], x["ucs"]]
-                                                       for x in rel["por_comunidade"]]),
-            ("titulo", "Avisos fora do prazo"), ("tabela", ["Aviso", "Desligamento", "Municípios", "Regra", "Atraso"],
-                                                 [[x["aviso"], f"{x['data']}, {x['horario']}", x["municipios"], x["regra"], f"{x['atraso_horas']} h"]
-                                                  for x in rel["fora_do_prazo"]]),
-            ("titulo", "Avisos sem envio registrado"), ("tabela", ["Aviso", "Desligamento", "Municípios"],
-                                                        [[x["aviso"], x["data"], x["municipios"]] for x in rel["sem_envio"]]),
-            ("titulo", "Como a economia foi calculada")] + [("texto", "- " + t) for t in rel["como_calculado"]]
-    sec += [("titulo", "Lista detalhada"), ("tabela", ["Aviso", "Gerado", "Desligamento", "Tipo", "Municípios", "UCs", "Vital", "Rádios",
-                                                       "Envios", "Custo", "No prazo", "Pedido por", "Situação"],
-                                            [[x["aviso"], datetime.fromisoformat(x["criado_em"]).astimezone(BRASILIA).strftime("%d/%m %H:%M"),
-                                              f"{x['data']}, {x['horario']}", x["tipo"], x["municipios"], x["ucs"], x["equipamento_vital"],
-                                              x["radios"], f"{x['confirmados']}/{x['envios']}", _brl(x["custo"]),
-                                              "-" if x["no_prazo"] is None else "sim" if x["no_prazo"] else "não", x["por"], x["status"]]
-                                             for x in rel["lista"]])]
-    return sec
+def periodo(f: dict, padrao: str) -> tuple[date, date, str, bool]:
+    """(início, fim, modo, fechado). modo: mes | ano | intervalo; fechado: o período já acabou."""
+    hoje = _hoje()
+    try:
+        if f.get("inicio") or f.get("fim"):
+            i, fim = date.fromisoformat(f.get("inicio") or f["fim"]), date.fromisoformat(f.get("fim") or f["inicio"])
+            modo = "intervalo"
+        elif f.get("ano") or (padrao == "ano" and not f.get("mes")):
+            a = int(f.get("ano") or hoje.year)
+            i, fim, modo = date(a, 1, 1), date(a, 12, 31), "ano"
+        else:
+            i, fim = R.periodo_do_mes(f.get("mes") or f"{hoje:%Y-%m}")
+            modo = "mes"
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(422, "Período: use mes=AAAA-MM, ano=AAAA ou inicio e fim (AAAA-MM-DD).") from None
+    if fim < i or (fim - i).days > MAX_DIAS:
+        raise HTTPException(422, f"Período: o fim depois do início, até {MAX_DIAS} dias.")
+    return i, fim, modo, fim < hoje
 
 
-@rotas.get("/api/relatorios/mensal.pdf")
-def relatorio_mensal_pdf(mes: str | None = None, inicio: str | None = None, fim: str | None = None, municipio: str | None = None,
-                         tipo: str | None = None, radio: str | None = None, pessoa: str | None = None,
-                         u: dict = Depends(exigir("ver_historico"))) -> Response:
-    rel = _mensal(u, mes, inicio, fim, municipio, tipo, radio, pessoa)
-    codigo = _registrar(u, "gerou relatório do período (PDF)", f"{rel['periodo']['rotulo']}; {_filtros_texto(rel)}")
-    pdf = pdf_relatorio.documento(f"Relatório de avisos - {rel['periodo']['rotulo']}", f"{u.get('empresa_nome') or ''} - {_filtros_texto(rel)}",
-                                  _quem(u), codigo, _secoes_mensal(rel), AVISO_FICTICIO, datetime.now(BRASILIA), paisagem=True)
-    return Response(pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="farol-relatorio-{rel["periodo"]["inicio"][:7]}.pdf"', "X-Codigo": codigo})
+def _rotulo(i: date, fim: date, modo: str) -> str:
+    return str(i.year) if modo == "ano" else R.rotulo_periodo(i, fim)
 
 
-@rotas.get("/api/relatorios/mensal.csv")
-def relatorio_mensal_csv(mes: str | None = None, inicio: str | None = None, fim: str | None = None, municipio: str | None = None,
-                         tipo: str | None = None, radio: str | None = None, pessoa: str | None = None,
-                         u: dict = Depends(exigir("ver_historico"))) -> Response:
-    rel = _mensal(u, mes, inicio, fim, municipio, tipo, radio, pessoa)
-    codigo = _registrar(u, "gerou relatório do período (CSV)", f"{rel['periodo']['rotulo']}; {_filtros_texto(rel)}")
-    return Response("﻿" + R.mensal_csv(rel, _quem(u), codigo), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="farol-relatorio-{rel["periodo"]["inicio"][:7]}.csv"', "X-Codigo": codigo})
+def _filtros_texto(f: dict) -> str:
+    nomes = {"municipio": "município", "tipo": "tipo", "radio": "rádio", "pessoa": "pessoa", "nome": "comunidade", "distrito": "distrito",
+             "so_acessos": "só acessos", "empresa": "empresa", "categoria": "tipo de ação"}
+    partes = []
+    for k, rot in nomes.items():
+        if f.get(k):
+            v = ROTULOS.get(f[k], f[k]) if k == "tipo" else f[k]
+            partes.append(f"{rot}: {v}")
+    return ", ".join(partes) or "sem filtros"
 
 
-# ---------- Comprovante de um aviso ----------
+# ---------- os documentos ----------
+def _cobertura(radios: list[dict], avisos: list[dict]) -> dict:
+    cob = {}
+    for a in avisos:
+        for m in a["municipios"]:
+            for c in m["comunidades"]:
+                k = (RH.nome_comunidade(c, m), m["nome"])
+                if k not in cob:
+                    cob[k] = [r["nome"] for r in radios if r["ativa"] and alcanca(r, m["codigo_ibge"], c["nome"], c.get("distrito"))]
+    return cob
+
+
+def _comparacoes(emp: int, i: date, fim: date) -> tuple[list, list]:
+    """Avisos e envios do mesmo mês do ano anterior (e de dezembro do ano anterior, se o mês é janeiro)."""
+    try:
+        ia, fa = i.replace(year=i.year - 1), fim.replace(year=fim.year - 1)
+    except ValueError:
+        ia, fa = i.replace(year=i.year - 1, day=28), fim.replace(year=fim.year - 1, day=28)
+    av = banco.avisos(emp, ia, fa)
+    if i.month == 1:
+        av += banco.avisos(emp, date(i.year - 1, 12, 1), date(i.year - 1, 12, 31))
+    return av, banco.envios(emp, [a["id"] for a in av])
+
+
+def construir(u: dict, tipo: str, f: dict) -> tuple[dict, dict, str]:
+    """(documento, campos a mais do JSON, subtítulo)."""
+    emp, hoje, H, D = u["empresa_id"], _hoje(), DIST.prazo_legal_horas, DIST.prazo_vital_dias_uteis
+    cfg = config_empresa(emp) if emp else {}
+    extra = {}
+    filtros_avisos = {k: f.get(k) for k in ("municipio", "tipo", "radio", "pessoa")}
+    if tipo == "mensal":
+        i, fim, modo, fechado = periodo(f, "mes")
+        av_ano = banco.avisos(emp, date(fim.year, 1, 1), fim)
+        en_ano = banco.envios(emp, [a["id"] for a in av_ano])
+        av_c, en_c = _comparacoes(emp, i, fim) if modo == "mes" else ([], [])
+        regs = banco.registros(emp, date(fim.year, 1, 1), fim + timedelta(days=1))
+        doc = RH.mensal(av_ano, en_ano, av_c, en_c, regs, i, fim, filtros_avisos, hoje, H, D, fechado)
+        av_p = [a for a in av_ano if i <= a["criado_em"].astimezone(BRASILIA).date() <= fim]
+        legado = R.mensal(av_p, en_ano, i, fim, filtros_avisos, H, D)   # os campos de antes, para quem já os usa
+        extra = {k: legado[k] for k in ("periodo", "filtros", "resumo", "por_tipo", "por_radio", "por_comunidade", "fora_do_prazo",
+                                         "sem_envio", "lista", "como_calculado")}
+        extra["opcoes"] = _opcoes(av_ano, en_ano)
+    elif tipo == "custos":
+        i, fim, modo, fechado = periodo(f, "ano")
+        ano = fim.year
+        mes_ref = 12 if fim < date(hoje.year, hoje.month, 1) else hoje.month if modo == "ano" else fim.month
+        fech = fechado or (modo == "mes" and fim < hoje)
+        av = banco.avisos(emp, date(ano, 1, 1), date(ano, 12, 31))
+        av_ant = banco.avisos(emp, date(ano - 1, 1, 1), date(ano - 1, 12, 31))
+        doc = RH.custos(av, banco.envios(emp, [a["id"] for a in av]), av_ant, banco.envios(emp, [a["id"] for a in av_ant]), ano, mes_ref,
+                        fech, filtros_avisos, cfg)
+        extra["opcoes"] = _opcoes(av, banco.envios(emp, [a["id"] for a in av]))
+    elif tipo == "comunidades":
+        i, fim, modo, _ = periodo(f, "ano")
+        av = banco.avisos(emp, i, fim)
+        en = banco.envios(emp, [a["id"] for a in av])
+        doc = RH.comunidades(av, en, _cobertura(banco_radios.radios(emp, so_ativas=False), av), i, fim, filtros_avisos, cfg)
+        extra["opcoes"] = _opcoes(av, en)
+    elif tipo == "prazos":
+        i, fim, modo, _ = periodo(f, "mes")
+        av = banco.avisos(emp, i, fim)
+        en = banco.envios(emp, [a["id"] for a in av])
+        if modo == "mes":
+            ant_i = (i - timedelta(days=1)).replace(day=1)
+            av_c = banco.avisos(emp, ant_i, i - timedelta(days=1))
+            av_aa, _ = _comparacoes(emp, i, fim)
+            av_c += av_aa
+        else:
+            av_c = []
+        fut = banco.avisos_futuros(emp, hoje)
+        doc = RH.prazos(av, en, av_c, banco.envios(emp, [a["id"] for a in av_c]), i, fim, filtros_avisos, hoje, fut,
+                        banco.envios(emp, [a["id"] for a in fut]), H, D, mes=modo == "mes")
+        extra["opcoes"] = _opcoes(av, en)
+    elif tipo in ("auditoria", "acessos"):
+        geral = tipo == "acessos"
+        i, fim, modo, _ = periodo(f, "mes")
+        rs = banco.registros(None if geral else emp, i, fim, pessoa=f.get("pessoa"), acoes=ACESSOS if f.get("so_acessos") else None,
+                             empresa_sigla=f.get("empresa") if geral else None)
+        linhas = _linhas(rs)
+        if f.get("categoria"):
+            linhas = [x for x in linhas if RH.categoria(x["acao"]) == f["categoria"]]
+        v = banco_acesso.verificar_registro()
+        doc = RH.auditoria(linhas, v if geral else {"ok": v["ok"], "motivo": None if v["ok"] else "não confere"}, geral, _rotulo(i, fim, modo))
+        extra = {"periodo": {"inicio": i.isoformat(), "fim": fim.isoformat(), "rotulo": _rotulo(i, fim, modo)}, "linhas": linhas,
+                 "total": len(linhas), "pessoas": sorted({x["usuario"] for x in linhas if x["usuario"]}),
+                 "categorias": list(RH.CATEGORIAS) + ["outros"],
+                 "filtros": {k: v for k, v in {"pessoa": f.get("pessoa"), "empresa": f.get("empresa") if geral else None,
+                                               "só acessos": "sim" if f.get("so_acessos") else None}.items() if v}}
+    elif tipo == "comunidade":
+        if not (f.get("municipio") and f.get("nome")):
+            raise HTTPException(422, "Ficha da comunidade: informe municipio (código IBGE) e nome.")
+        i, fim = hoje - timedelta(days=365), hoje + timedelta(days=60)
+        av = banco.avisos(emp, i - timedelta(days=30), hoje)
+        en = banco.envios(emp, [a["id"] for a in av])
+        radios = [r["nome"] for r in banco_radios.radios(emp) if alcanca(r, f["municipio"], f["nome"], f.get("distrito"))]
+        enderecos = banco_territorio.enderecos_da_comunidade(f["municipio"], f["nome"], f.get("distrito"))
+        fic = RH.ficha((f["municipio"], f["nome"], f.get("distrito") or ""), av, en, radios, enderecos, hoje, H, D)
+        doc = RH.ficha_documento(fic)
+        extra["ficha"] = fic
+        modo = "intervalo"
+        i, fim = hoje - timedelta(days=365), hoje
+    else:
+        raise HTTPException(404, "Relatório desconhecido.")
+    sub = f"{u.get('empresa_nome') or 'Todas as empresas'} · {_rotulo(i, fim, modo) if tipo != 'comunidade' else 'últimos 12 meses'} · {_filtros_texto(f)}"
+    return doc, extra, sub
+
+
+def _opcoes(avisos: list[dict], envios: list[dict]) -> dict:
+    return {"municipios": sorted({(m["codigo_ibge"], f"{m['nome']}/{m['uf']}") for a in avisos for m in a["municipios"]}, key=lambda x: x[1]),
+            "tipos": sorted({a["tipo"] for a in avisos if a.get("tipo")}), "rotulos_tipos": ROTULOS,
+            "radios": sorted({(e["radio_id"], e["radio_nome"]) for e in envios}, key=lambda x: x[1]),
+            "pessoas": sorted({a["usuario"] for a in avisos if a.get("usuario")})}
+
+
+def _linhas(rs: list[dict]) -> list[dict]:
+    return [{"quando": r["quando"].astimezone(BRASILIA).strftime("%d/%m/%Y %H:%M:%S"), "usuario": r["usuario"],
+             "perfil": PERFIS.get(r["perfil"], r["perfil"] or ""), "empresa": r["empresa"], "acao": r["acao"], "detalhe": r["detalhe"],
+             "codigo": codigo_verificacao(r["hash"]) if r["hash"] else None} for r in rs]
+
+
+# ---------- geração, segunda via e envio ----------
+def _registrar(u: dict, acao: str, detalhe: str) -> str:
+    return codigo_verificacao(banco_acesso.registrar(acao, detalhe[:500], u["id"], u["empresa_id"])["hash"])
+
+
+def gerar_pdf(u: dict, tipo: str, f: dict) -> tuple[bytes, str, str, dict]:
+    """O PDF do relatório: a linha "gerou" (o código), o PDF com o rodapé e a segunda via cifrada, com o SHA-256 na auditoria."""
+    doc, _, sub = construir(u, tipo, f)
+    codigo = _registrar(u, f"gerou relatório {tipo} (PDF)", f"{doc['titulo']}; {sub}")
+    pdf = pdf_relatorio.documento_completo(doc, sub, _quem(u), codigo, datetime.now(BRASILIA), AVISO_FICTICIO)
+    sha = hashlib.sha256(pdf).hexdigest()
+    if not cofre.disponivel():
+        raise HTTPException(503, "Sem a chave do cofre (FAROL_CHAVE_ARQUIVOS): a segunda via não seria guardada.")
+    via_id = banco.guardar_via(u["empresa_id"], u["id"], u["nome"], tipo, doc["titulo"], sub, codigo, sha, len(pdf),
+                               cofre.cifrar(pdf, u["empresa_id"] or 0, 0, f"relatorio:{codigo}"))
+    banco_acesso.registrar("guardou a via do relatório", f"{codigo} (via {via_id}): sha256 {sha}", u["id"], u["empresa_id"])
+    return pdf, codigo, sha, doc
+
+
+def _nome_arquivo(tipo: str, codigo: str, formato: str) -> str:
+    return f"farol-{tipo}-{codigo}.{formato}"
+
+
+def _rota_json(tipo: str, acao: str):
+    def rota(f: dict = Depends(filtros), u: dict = Depends(exigir(acao))) -> dict:
+        doc, extra, sub = construir(u, tipo, f)
+        banco_acesso.registrar(f"gerou relatório {tipo} (tela)", f"{doc['titulo']}; {sub}"[:500], u["id"], u["empresa_id"])
+        return {**extra, "documento": doc, "subtitulo": sub,
+                "projecao": None if not doc.get("projecao") else {k: str(v) if isinstance(v, Decimal) else v for k, v in doc["projecao"].items()}}
+    rota.__name__ = f"relatorio_{tipo}"
+    return rota
+
+
+def _rota_arquivo(tipo: str, acao: str):
+    def rota(formato: str, f: dict = Depends(filtros), u: dict = Depends(exigir(acao))) -> Response:
+        if formato == "pdf":
+            pdf, codigo, sha, _ = gerar_pdf(u, tipo, f)
+            return Response(pdf, media_type="application/pdf", headers={
+                "Content-Disposition": f'attachment; filename="{_nome_arquivo(tipo, codigo, "pdf")}"', "X-Codigo": codigo, "X-Sha256": sha})
+        if formato == "csv":
+            doc, _, sub = construir(u, tipo, f)
+            codigo = _registrar(u, f"gerou relatório {tipo} (CSV)", f"{doc['titulo']}; {sub}")
+            return Response("﻿" + RH.csv_documento(doc, sub, _quem(u), codigo), media_type="text/csv; charset=utf-8",
+                            headers={"Content-Disposition": f'attachment; filename="{_nome_arquivo(tipo, codigo, "csv")}"', "X-Codigo": codigo})
+        raise HTTPException(404, "Formato: pdf ou csv.")
+    rota.__name__ = f"relatorio_{tipo}_arquivo"
+    return rota
+
+
+class PedidoEnvio(BaseModel):
+    filtros: dict = Field(default_factory=dict)
+    destinatarios: list[str] = Field(max_length=MAX_DESTINATARIOS * 2)
+
+
+def _limite(usuario_id: int) -> None:
+    agora, fila = time.monotonic(), _envios[usuario_id]
+    while fila and agora - fila[0] > JANELA:
+        fila.popleft()
+    if len(fila) >= LIMITE_ENVIOS_REL:
+        raise HTTPException(429, f"Limite de {LIMITE_ENVIOS_REL} envios de relatório por hora atingido.")
+    fila.append(agora)
+
+
+def _rota_enviar(tipo: str, acao: str):
+    def rota(dados: PedidoEnvio, u: dict = Depends(exigir(acao)), _e: dict = Depends(exigir("enviar_relatorio"))) -> dict:
+        emp = banco_acesso.empresa(u["empresa_id"])
+        destinos = list(dict.fromkeys(str(d).strip().lower() for d in dados.destinatarios if str(d).strip()))
+        if not 1 <= len(destinos) <= MAX_DESTINATARIOS:
+            raise HTTPException(422, f"Destinatários: de 1 a {MAX_DESTINATARIOS} e-mails.")
+        ruins = [d for d in destinos if problema_email(d, emp["dominio"])]
+        if ruins:
+            raise HTTPException(422, f"Só e-mails @{emp['dominio']} podem receber relatórios: {', '.join(ruins)}.")
+        if not correio.ligado():
+            raise HTTPException(503, "O envio por e-mail está desligado neste servidor.")
+        _limite(u["id"])
+        f = limpar_filtros(dados.filtros)
+        pdf, codigo, sha, doc = gerar_pdf(u, tipo, f)
+        msg = email_relatorio.mensagem(remetente=correio.remetente(), destinos=destinos, titulo=doc["titulo"], codigo=codigo,
+                                       gerado_por=_quem(u), empresa=emp["nome"], pdf=(_nome_arquivo(tipo, codigo, "pdf"), pdf),
+                                       aviso_ficticio=AVISO_FICTICIO)
+        try:
+            correio.enviar(msg)
+        except correio.FalhaEnvio as e:
+            banco_acesso.registrar(f"envio do relatório {tipo} falhou", f"{codigo} para {', '.join(destinos)}: {e}", u["id"], u["empresa_id"])
+            raise HTTPException(502, f"O e-mail não foi entregue: {e}.") from None
+        banco_acesso.registrar(f"enviou relatório {tipo} por e-mail", f"{codigo} para {', '.join(destinos)}; sha256 {sha}", u["id"], u["empresa_id"])
+        return {"ok": True, "codigo": codigo, "destinatarios": destinos, "sha256": sha}
+    rota.__name__ = f"relatorio_{tipo}_enviar"
+    return rota
+
+
+for _tipo, (_acao, _nome, _envia) in TIPOS.items():
+    rotas.add_api_route(f"/api/relatorios/{_tipo}", _rota_json(_tipo, _acao), methods=["GET"])
+    rotas.add_api_route(f"/api/relatorios/{_tipo}.{{formato}}", _rota_arquivo(_tipo, _acao), methods=["GET"])
+    if _envia:
+        rotas.add_api_route(f"/api/relatorios/{_tipo}/enviar", _rota_enviar(_tipo, _acao), methods=["POST"])
+
+
+def _tipos_do_perfil(u: dict) -> tuple[str, ...]:
+    return tuple(t for t, (acao, _, _) in TIPOS.items() if pode(u["perfil"], acao))
+
+
+@rotas.get("/api/relatorios/vias")
+def vias(u: dict = Depends(usuario_atual)) -> dict:
+    """As segundas vias dos relatórios que o perfil pode ver (da própria empresa)."""
+    return {"vias": [{"id": v["id"], "tipo": v["tipo"], "titulo": v["titulo"], "filtros": v["filtros"], "codigo": v["codigo"], "sha256": v["sha256"],
+                      "tamanho": v["tamanho"], "por": v["usuario_nome"], "criado_em": v["criado_em"].isoformat()}
+                     for v in banco.vias(u["empresa_id"], _tipos_do_perfil(u))]}
+
+
+@rotas.get("/api/relatorios/vias/{id_}.pdf")
+def baixar_via(id_: int, u: dict = Depends(usuario_atual)) -> Response:
+    """A mesma via do relatório, decifrada; o SHA-256 é conferido com o guardado antes de entregar."""
+    v = banco.via(id_, u["empresa_id"])
+    if not v or v["tipo"] not in _tipos_do_perfil(u):
+        raise HTTPException(404, "Via não encontrada.")
+    try:
+        pdf = cofre.decifrar(v["cifrado"], u["empresa_id"] or 0, 0, f"relatorio:{v['codigo']}")
+    except cofre.SemChave:
+        raise HTTPException(503, "Sem a chave do cofre neste servidor.") from None
+    except cofre.Violado:
+        banco_acesso.registrar("segunda via não confere (cofre)", v["codigo"], u["id"], u["empresa_id"])
+        raise HTTPException(409, "A via guardada não confere (alterada). Nada foi entregue.") from None
+    if hashlib.sha256(pdf).hexdigest() != v["sha256"]:
+        banco_acesso.registrar("segunda via não confere (sha256)", v["codigo"], u["id"], u["empresa_id"])
+        raise HTTPException(409, "A via guardada não confere com o SHA-256. Nada foi entregue.")
+    banco_acesso.registrar("baixou a segunda via do relatório", f"{v['codigo']} (via {id_}): sha256 {v['sha256']} conferido",
+                           u["id"], u["empresa_id"])
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{_nome_arquivo(v["tipo"], v["codigo"], "pdf")}"', "X-Codigo": v["codigo"],
+        "X-Sha256": v["sha256"]})
+
+
+# ---------- Comprovante de um aviso (como era) ----------
 def _comprovante(id_: int, u: dict) -> dict:
     a = banco_acesso.aviso(id_, u["empresa_id"])
     if not a:
@@ -184,6 +393,14 @@ def _comprovante(id_: int, u: dict) -> dict:
 @rotas.get("/api/historico/{id_}/comprovante")
 def comprovante(id_: int, u: dict = Depends(exigir("ver_historico"))) -> dict:
     return _comprovante(id_, u)
+
+
+def _brl(v) -> str:
+    return RH.brl(v)
+
+
+def _tempo(s) -> str:
+    return RH.tempo(s)
 
 
 @rotas.get("/api/historico/{id_}/comprovante.pdf")
@@ -214,72 +431,6 @@ def comprovante_pdf(id_: int, u: dict = Depends(exigir("ver_historico"))) -> Res
                     headers={"Content-Disposition": f'attachment; filename="farol-comprovante-aviso-{id_}.pdf"', "X-Codigo": codigo})
 
 
-# ---------- Auditoria da empresa (Admin da empresa) e acessos de todas (Admin do Farol) ----------
-def _linhas(rs: list[dict]) -> list[dict]:
-    return [{"quando": r["quando"].astimezone(BRASILIA).strftime("%d/%m/%Y %H:%M:%S"), "usuario": r["usuario"],
-             "perfil": PERFIS.get(r["perfil"], r["perfil"] or ""), "empresa": r["empresa"], "acao": r["acao"], "detalhe": r["detalhe"],
-             "codigo": codigo_verificacao(r["hash"]) if r["hash"] else None} for r in rs]
-
-
-def _auditoria(u: dict, geral: bool, mes, inicio, fim, pessoa, empresa, so_acessos: bool) -> dict:
-    i, f, _ = _periodo(mes, inicio, fim)
-    rs = banco.registros(None if geral else u["empresa_id"], i, f, pessoa=pessoa or None,
-                         acoes=ACESSOS if so_acessos else None, empresa_sigla=(empresa or None) if geral else None)
-    linhas = _linhas(rs)
-    return {"periodo": {"inicio": i.isoformat(), "fim": f.isoformat(), "rotulo": R.rotulo_periodo(i, f)}, "linhas": linhas,
-            "total": len(linhas), "pessoas": sorted({x["usuario"] for x in linhas if x["usuario"]}),
-            "filtros": {k: v for k, v in {"pessoa": pessoa, "empresa": empresa if geral else None, "só acessos": "sim" if so_acessos else None}.items() if v}}
-
-
-def _exportar_auditoria(u: dict, geral: bool, formato: str, **kw) -> Response:
-    d = _auditoria(u, geral, **kw)
-    titulo = ("Auditoria geral de acessos" if geral else "Relatório de auditoria") + f" - {d['periodo']['rotulo']}"
-    filtros = ", ".join(f"{k}: {v}" for k, v in d["filtros"].items()) or "sem filtros"
-    codigo = _registrar(u, f"gerou {'auditoria geral de acessos' if geral else 'relatório de auditoria'} ({formato.upper()})",
-                        f"{d['periodo']['rotulo']}; {filtros}; {d['total']} linhas")
-    nome = f"farol-{'acessos' if geral else 'auditoria'}-{d['periodo']['inicio'][:7]}.{formato}"
-    if formato == "csv":
-        return Response("﻿" + R.auditoria_csv(d["linhas"], titulo, _quem(u), codigo), media_type="text/csv; charset=utf-8",
-                        headers={"Content-Disposition": f'attachment; filename="{nome}"', "X-Codigo": codigo})
-    sec = [("texto", f"{d['total']} linha(s). Nada é apagado nem alterado na auditoria; cada linha guarda o código da anterior."),
-           ("tabela", ["Quando", "Quem", "Perfil", "Empresa", "O quê", "Detalhe", "Código"],
-            [[x["quando"], x["usuario"] or "-", x["perfil"], x["empresa"] or "-", x["acao"], x["detalhe"], x["codigo"]] for x in d["linhas"]])]
-    pdf = pdf_relatorio.documento(titulo, f"{'Todas as empresas' if geral else u.get('empresa_nome') or ''} - {filtros}", _quem(u), codigo, sec,
-                                  AVISO_FICTICIO, datetime.now(BRASILIA), paisagem=True)
-    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{nome}"', "X-Codigo": codigo})
-
-
-@rotas.get("/api/relatorios/auditoria")
-def relatorio_auditoria(mes: str | None = None, inicio: str | None = None, fim: str | None = None, pessoa: str | None = None,
-                        so_acessos: bool = False, u: dict = Depends(exigir("relatorio_auditoria"))) -> dict:
-    return _auditoria(u, False, mes, inicio, fim, pessoa, None, so_acessos)
-
-
-@rotas.get("/api/relatorios/auditoria.{formato}")
-def relatorio_auditoria_arquivo(formato: str, mes: str | None = None, inicio: str | None = None, fim: str | None = None,
-                                pessoa: str | None = None, so_acessos: bool = False,
-                                u: dict = Depends(exigir("relatorio_auditoria"))) -> Response:
-    if formato not in ("pdf", "csv"):
-        raise HTTPException(404, "Formato: pdf ou csv.")
-    return _exportar_auditoria(u, False, formato, mes=mes, inicio=inicio, fim=fim, pessoa=pessoa, empresa=None, so_acessos=so_acessos)
-
-
-@rotas.get("/api/relatorios/acessos")
-def relatorio_acessos(mes: str | None = None, inicio: str | None = None, fim: str | None = None, pessoa: str | None = None,
-                      empresa: str | None = Query(None, max_length=10), so_acessos: bool = True,
-                      u: dict = Depends(exigir("auditoria_geral"))) -> dict:
-    return _auditoria(u, True, mes, inicio, fim, pessoa, empresa, so_acessos)
-
-
-@rotas.get("/api/relatorios/acessos.{formato}")
-def relatorio_acessos_arquivo(formato: str, mes: str | None = None, inicio: str | None = None, fim: str | None = None,
-                              pessoa: str | None = None, empresa: str | None = Query(None, max_length=10), so_acessos: bool = True,
-                              u: dict = Depends(exigir("auditoria_geral"))) -> Response:
-    if formato not in ("pdf", "csv"):
-        raise HTTPException(404, "Formato: pdf ou csv.")
-    return _exportar_auditoria(u, True, formato, mes=mes, inicio=inicio, fim=fim, pessoa=pessoa, empresa=empresa, so_acessos=so_acessos)
-
-
 def painel_do_mes(empresa_id: int, hoje: date) -> dict:
     """Os números do mês corrente para o dashboard: gasto, economizado, avisos e % no prazo."""
     i, f = R.periodo_do_mes(f"{hoje:%Y-%m}")
@@ -290,3 +441,25 @@ def painel_do_mes(empresa_id: int, hoje: date) -> dict:
             "economia_informada": r["economia_informada"], "tempo_economizado": r["tempo_economizado"], "desligamentos": r["desligamentos"],
             "envios": r["envios"], "confirmados": r["confirmados"], "pct_no_prazo": r["pct_no_prazo"], "com_envio": r["com_envio"]}
 
+
+# ---------- H7: ficha da comunidade e mapa de calor (só leitura, sem arquivo: não vai para a auditoria) ----------
+@rotas.get("/api/comunidades/ficha")
+def ficha_comunidade(municipio: str = Query(..., pattern=r"^\d{7}$"), nome: str = Query(..., min_length=1, max_length=120),
+                     distrito: str | None = Query(None, max_length=120), u: dict = Depends(exigir("ver_historico"))) -> dict:
+    """O painel da comunidade no mapa: contagens, rádios que alcançam e os desligamentos dos últimos 12 meses."""
+    _, extra, _ = construir(u, "comunidade", {"municipio": municipio, "nome": nome, "distrito": distrito})
+    return extra["ficha"]
+
+
+@rotas.get("/api/comunidades/calor")
+def calor(u: dict = Depends(exigir("ver_historico"))) -> dict:
+    """Desligamentos por comunidade nos últimos 12 meses (chave: código IBGE|nome sem sufixo|distrito), para o mapa de calor."""
+    hoje = _hoje()
+    contagem = defaultdict(int)
+    for a in banco.avisos(u["empresa_id"], hoje - timedelta(days=365), hoje):
+        if a.get("status") == "cancelado":
+            continue
+        for m in a["municipios"]:
+            for c in m["comunidades"]:
+                contagem[f"{m['codigo_ibge']}|{str(c['nome']).split(' (')[0]}|{c.get('distrito') or ''}"] += 1
+    return {"desde": (hoje - timedelta(days=365)).isoformat(), "comunidades": contagem, "maximo": max(contagem.values(), default=0)}

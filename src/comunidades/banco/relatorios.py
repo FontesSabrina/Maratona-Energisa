@@ -35,6 +35,42 @@ def envios(empresa_id: int, aviso_ids: list[int]) -> list[dict]:
                   (empresa_id, list(aviso_ids)))
 
 
+def guardar_via(empresa_id: int | None, usuario_id: int, usuario_nome: str, tipo: str, titulo: str, filtros: str, codigo: str,
+                sha256: str, tamanho: int, cifrado: bytes) -> int:
+    with conectar() as c:
+        return c.execute("INSERT INTO relatorio_via (empresa_id, usuario_id, usuario_nome, tipo, titulo, filtros, codigo, sha256, tamanho, cifrado)"
+                         " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                         (empresa_id, usuario_id, usuario_nome, tipo, titulo, filtros, codigo, sha256, tamanho, cifrado)).fetchone()[0]
+
+
+VIA = "v.id, v.empresa_id, v.usuario_nome, v.tipo, v.titulo, v.filtros, v.codigo, v.sha256, v.tamanho, v.criado_em"
+
+
+def vias(empresa_id: int | None, tipos: tuple[str, ...], limite: int = 200) -> list[dict]:
+    """As vias da empresa (ou as sem empresa, do Admin do Farol), dos tipos que o perfil pode ver."""
+    filtro = "v.empresa_id = %s" if empresa_id is not None else "v.empresa_id IS NULL"
+    args = (empresa_id,) if empresa_id is not None else ()
+    return _todos(f"SELECT {VIA} FROM relatorio_via v WHERE {filtro} AND v.tipo = ANY(%s) ORDER BY v.id DESC LIMIT %s",
+                  (*args, list(tipos), limite))
+
+
+def via(id_: int, empresa_id: int | None) -> dict | None:
+    filtro = "v.empresa_id = %s" if empresa_id is not None else "v.empresa_id IS NULL"
+    args = (empresa_id,) if empresa_id is not None else ()
+    r = _todos(f"SELECT {VIA}, v.cifrado FROM relatorio_via v WHERE v.id = %s AND {filtro}", (id_, *args))
+    return r[0] if r else None
+
+
+def via_por_codigo(codigo: str) -> dict | None:
+    r = _todos(f"SELECT {VIA} FROM relatorio_via v WHERE v.codigo = %s", (codigo,))
+    return r[0] if r else None
+
+
+def avisos_futuros(empresa_id: int, desde: date) -> list[dict]:
+    """Avisos gerados nos últimos 60 dias (os que podem ter desligamento nos próximos dias)."""
+    return avisos(empresa_id, desde - timedelta(days=60), desde + timedelta(days=1))
+
+
 def registros(empresa_id: int | None, inicio: date, fim: date, pessoa: str | None = None, acoes: tuple[str, ...] | None = None,
               empresa_sigla: str | None = None, limite: int = 5000) -> list[dict]:
     """Linhas da auditoria do período (da empresa, ou de todas com empresa_id None), da mais antiga à mais recente."""

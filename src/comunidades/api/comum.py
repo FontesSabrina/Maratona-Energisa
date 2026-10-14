@@ -45,5 +45,9 @@ def config_empresa(empresa_id: int | None) -> dict:
         "limite_rejeicao": float(escolher("limite_rejeicao", DIST.planilha.limite_rejeitadas)),
         "epsg_utm": int(escolher("epsg_utm", DIST.planilha.epsg_utm)),
         "antecedencia_dias": int(escolher("antecedencia_dias", DIST.prazo_interno_dias)),
+        "orcamento_radio": float(c["orcamento_radio"]) if c.get("orcamento_radio") is not None else None,
+        "alerta_preco": float(escolher("alerta_preco", 0.20)),
+        "repeticao_n": int(escolher("repeticao_n", 3)),
+        "repeticao_dias": int(escolher("repeticao_dias", 30)),
         "padroes": not c,
     }

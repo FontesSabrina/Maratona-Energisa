@@ -23,7 +23,7 @@ import secrets
 import time
 import traceback
 from collections import Counter, defaultdict, deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +40,8 @@ from ..apresentacao import audio
 from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
+from ..banco import radios as banco_radios
+from ..banco import relatorios as banco_relatorios
 from ..fontes.base_territorial import CRS_BASE
 from .. import correio
 from ..nucleo import agrupamento, auditoria, esquema_planilha, idiomas, mensagem, painel, travas
@@ -174,6 +176,7 @@ def saude() -> dict:
 
 @app.get("/api/modelo-planilha")
 def modelo(u: dict = Depends(usuario_atual)) -> Response:
+    banco_acesso.registrar("baixou o modelo da planilha", "modelo_planilha_farol.csv", u["id"], u["empresa_id"])
     # com BOM, para o Excel abrir os acentos certos
     return Response("﻿" + modelo_csv(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="modelo_planilha_farol.csv"'})
@@ -424,6 +427,7 @@ async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(..
     resposta = _resultado(modelo, data, horario, idioma, cfg)
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
+    _alerta_repeticao(resposta, u, cfg)
     resposta["pacote"], vence = pacote_.assinar(travas.ucs_opacas(modelo), u["id"], u["empresa_id"])
     resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
     r = modelo.resumo
@@ -445,6 +449,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     cfg = config_empresa(u["empresa_id"])
     resposta = _resultado(modelo, data, horario, idioma, cfg)
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
+    rep = _alerta_repeticao(resposta, u, cfg)
     c, arq = resposta["conferencia"], f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})"
     problema = travas.problema_para_gerar(c, dados.conferi, dados.justificativa)
     if problema:
@@ -452,6 +457,8 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
             banco_acesso.registrar("geração bloqueada (equipamento vital)", f"{arq}: linha(s) "
                                    + ", ".join(str(x["linha"]) for x in c["vital_bloqueio"][:20]), u["id"], u["empresa_id"])
         raise HTTPException(422, problema)
+    if rep:
+        banco_acesso.registrar("alerta de repetição", f"{arq}: {rep}"[:500], u["id"], u["empresa_id"])
     banco_acesso.registrar("conferiu os números e o mapa", f"{arq}: {c['numeros']['clientes']} clientes, "
                            f"{c['numeros']['comunidades']} comunidades", u["id"], u["empresa_id"])
     if c["rejeicao"]["acima"]:
@@ -485,8 +492,31 @@ def relatorio_planilha(dados: PedidoRelatorio, u: dict = Depends(exigir("gerar_a
         modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
     except pacote_.PacoteRecusado as e:
         raise HTTPException(422, str(e)) from None
+    banco_acesso.registrar("baixou o relatório da planilha (CSV)", f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})", u["id"], u["empresa_id"])
     return Response("﻿" + travas.relatorio_csv(modelo), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="farol-relatorio-planilha.csv"'})
+
+
+def _alerta_repeticao(resposta: dict, u: dict, cfg: dict) -> str | None:
+    """Comunidades deste aviso que já tiveram desligamentos nos últimos D dias (com este, N ou mais): aviso amarelo, não bloqueia."""
+    n, dias = cfg["repeticao_n"], cfg["repeticao_dias"]
+    hoje = datetime.now(BRASILIA).date()
+    anteriores = Counter()
+    for a in banco_relatorios.avisos(u["empresa_id"], hoje - timedelta(days=dias), hoje):
+        if a.get("status") == "cancelado":
+            continue
+        for m in a["municipios"]:
+            for c in m["comunidades"]:
+                anteriores[(m["codigo_ibge"], c["nome"], c.get("distrito"))] += 1
+    repetidas = sorted({f"{c['nome'].split(' (')[0]} ({m['nome']}): {anteriores[(m['codigo_ibge'], c['nome'], c.get('distrito'))] + 1}"
+                        for m in resposta["municipios"] for c in m["comunidades"]
+                        if anteriores[(m["codigo_ibge"], c["nome"], c.get("distrito"))] + 1 >= n})
+    if not repetidas:
+        return None
+    texto = f"Repetição: com este, {n} ou mais desligamentos em {dias} dias"
+    resposta["conferencia"]["suspeitos"].append({"tipo": "repeticao", "texto": texto, "ucs": len(repetidas), "linhas": [],
+                                                 "comunidades": repetidas})
+    return f"{texto}: {', '.join(repetidas)}"
 
 
 def _mensagens(municipios: list[dict], cfg: dict, data: str, horario: str, idioma: str, motivo: str, codigo: str = "") -> None:
@@ -506,7 +536,8 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
     na auditoria na mesma transação, e devolve a resposta com o id, o código de verificação e quem pediu."""
     p = resposta["planilha"]
     resumo = {"linhas": p["linhas"], "validas": p["validas"], "problemas": p["total_problemas"],
-              "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "prazo": resposta["prazo"]}
+              "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "prazo": resposta["prazo"],
+              "corrigidas": resposta["conferencia"]["numeros"]["corrigidas"], "arquivo_sha256": resposta["conferencia"]["sha256"]}
     # do aviso de hoje, só as contagens (o texto lista imóveis e ruas e não precisa ficar guardado)
     municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital",
                                          "mensagem", "segundos_mensagem")},
@@ -644,6 +675,19 @@ def mudar_data(id_: int, dados: NovaData, u: dict = Depends(exigir("gerar_aviso"
     return _aviso_publico(banco_acesso.aviso(id_, u["empresa_id"]))
 
 
+@app.get("/api/historico/{id_}/linha-do-tempo")
+def linha_do_tempo(id_: int, u: dict = Depends(exigir("ver_historico"))) -> dict:
+    """Tudo o que aconteceu com o aviso, em ordem, com o nome e o perfil de quem fez (da auditoria)."""
+    a = banco_acesso.aviso(id_, u["empresa_id"])
+    if not a:
+        raise HTTPException(404, "Aviso não encontrado nesta empresa.")
+    envios = [e["id"] for e in banco_radios.envios(u["empresa_id"], id_)]
+    linhas = banco_acesso.linhas_do_aviso(u["empresa_id"], id_, envios, (a.get("resumo") or {}).get("arquivo_sha256"))
+    return {"aviso": id_, "linhas": [{"quando": r["quando"].isoformat(), "usuario": r["usuario"], "perfil": PERFIS.get(r["perfil"], ""),
+                                      "acao": r["acao"], "detalhe": r["detalhe"], "codigo": auditoria.codigo_verificacao(r["hash"])}
+                                     for r in linhas]}
+
+
 @app.get("/api/verificar/{codigo}")
 def verificar_codigo(codigo: str, u: dict = Depends(usuario_atual)) -> dict:
     """Confere um código de verificação (FRL-XXXX-XXXX-XXXX): a linha da auditoria que ele aponta, da
@@ -656,7 +700,8 @@ def verificar_codigo(codigo: str, u: dict = Depends(usuario_atual)) -> dict:
         raise HTTPException(404, "Código não encontrado na auditoria desta empresa.")
     return {"codigo": auditoria.codigo_verificacao(ln["hash"]), "quando": ln["quando"].isoformat(), "acao": ln["acao"],
             "detalhe": ln["detalhe"], "por": ln["usuario"], "perfil": PERFIS.get(ln["perfil"], ""),
-            "auditoria_integra": banco_acesso.verificar_registro()["ok"]}
+            "auditoria_integra": banco_acesso.verificar_registro()["ok"],
+            "sha256_pdf": (banco_relatorios.via_por_codigo(auditoria.codigo_verificacao(ln["hash"])) or {}).get("sha256")}
 
 
 # Arquivos da tela: o app, o Leaflet e as fontes embutidas no projeto (vendor/) e o logo. Nada de CDN.

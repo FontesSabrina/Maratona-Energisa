@@ -141,7 +141,9 @@ conferir("um cancelado, um sem envio e um fora do prazo no período da demonstra
          and sum(len(x["sem_envio"]) for x in juntos.values()) == 1 and sum(len(x["fora_do_prazo"]) for x in juntos.values()) >= 1,
          json.dumps({k: [len(x[k]) for x in juntos.values()] for k in ("sem_envio", "fora_do_prazo")}))
 conferir("por rádio: soma dos envios = envios do resumo", sum(x["envios"] for x in j["por_radio"]) == j["resumo"]["envios"])
-conferir("comparação com o mês anterior presente", j.get("comparacao", {}).get("periodo") == juntos[anterior]["periodo"]["rotulo"])
+conferir("comparação com o mês anterior presente (↑↓ % no resumo do documento)",
+         any(c["contra"] == "mês anterior" for x in j["documento"]["resumo"] for c in x["comparacoes"]),
+         json.dumps(j["documento"]["resumo"], ensure_ascii=False)[:300])
 conferir("lista detalhada: um item por aviso do período, com o código FRL", len(j["lista"]) == j["resumo"]["desligamentos"] + j["resumo"]["cancelados"]
          and all((x["codigo"] or "").startswith("FRL-") for x in j["lista"]))
 leo = next(c for c, n in j["opcoes"]["municipios"] if n.startswith("Leopoldina"))
@@ -167,9 +169,9 @@ p = con.get(f"/api/relatorios/mensal.pdf?mes={anterior}")
 cod = p.headers.get("x-codigo", "")
 txt = texto_pdf(p.content)
 conferir("PDF do período: gerado por (nome e perfil) e o código", p.content[:5] == b"%PDF-" and "Consulta da EMG (Consulta)" in txt and cod in txt
-         and "Como a economia foi calculada" in txt and not re.search(r"\b3\d{9}\b", txt), txt[:200])
+         and "Como calculamos" in txt and not re.search(r"\b3\d{9}\b", txt), txt[:200])
 vc = adm.get(f"/api/verificar/{cod}")
-conferir("o código do relatório está na auditoria (verificar)", vc.status_code == 200 and vc.json()["acao"] == "gerou relatório do período (PDF)"
+conferir("o código do relatório está na auditoria (verificar)", vc.status_code == 200 and vc.json()["acao"] == "gerou relatório mensal (PDF)"
          and vc.json()["por"] == "Consulta da EMG", vc.text[:160])
 cv = con.get(f"/api/relatorios/mensal.csv?mes={anterior}")
 conferir("CSV do período: cabeçalho com quem gerou e o código; uma linha por aviso", cv.status_code == 200 and "Consulta da EMG (Consulta)" in cv.text
@@ -195,7 +197,8 @@ conferir("relatório de auditoria: só acessos", so["total"] > 0 and {x["acao"] 
 apdf = adm.get(f"/api/relatorios/auditoria.pdf?mes={mes}")
 acsv = adm.get(f"/api/relatorios/auditoria.csv?mes={mes}&pessoa=Operador da EMG")
 conferir("auditoria em PDF e CSV (filtro por pessoa), com o código", apdf.content[:5] == b"%PDF-" and acsv.status_code == 200
-         and all(";Operador da EMG;" in ln for ln in acsv.text.splitlines()[5:]) and acsv.headers["x-codigo"] in acsv.text)
+         and "Operador da EMG" in acsv.text and "Admin da EMG;" not in acsv.text and acsv.headers["x-codigo"] in acsv.text,
+         acsv.text[:400])
 r = far.post("/api/empresas", json={"nome": "Outra", "sigla": "OUT", "dominio": "out.example", "admin_nome": "Admin Outra",
                                     "admin_email": "admin@out.example"})
 outra = pronto("admin@out.example", r.json()["senha_temporaria"])

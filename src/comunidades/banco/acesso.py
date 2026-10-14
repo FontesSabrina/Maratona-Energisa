@@ -374,3 +374,12 @@ def texto_final(id_: int, empresa_id: int, codigo: str, texto: str) -> bool:
     _executar("UPDATE aviso SET municipios = %s WHERE id = %s AND empresa_id = %s",
               (json.dumps(ms, ensure_ascii=False), id_, empresa_id))
     return True
+
+
+def linhas_do_aviso(empresa_id: int, aviso_id: int, envios: list[int], sha256: str | None) -> list[dict]:
+    """As linhas do registro que falam deste aviso (pelo número, pelos envios dele ou pelo SHA-256 da planilha)."""
+    padroes = [rf"\maviso {aviso_id}\M"] + ([rf"\menvio ({'|'.join(str(e) for e in envios)})\M"] if envios else [])
+    filtro = " OR ".join(["r.detalhe ~ %s"] * len(padroes)) + (" OR r.detalhe LIKE %s" if sha256 else "")
+    args = [*padroes] + ([f"%{sha256}%"] if sha256 else [])
+    return _todos("SELECT r.id, r.quando, r.acao, r.detalhe, r.usuario_nome AS usuario, r.perfil, r.hash FROM registro r"
+                  f" WHERE r.empresa_id = %s AND ({filtro}) ORDER BY r.id", (empresa_id, *args))

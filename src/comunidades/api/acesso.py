@@ -246,8 +246,11 @@ def alterar_usuario(id_: int, dados: AlteraUsuario, u: dict = Depends(exigir("ge
         raise HTTPException(409, "Este é o último admin ativo da empresa: cadastre outro admin antes de mudar o perfil ou bloquear.")
     municipios = _municipios(dados.municipios)
     banco.alterar_usuario(id_, dados.perfil, dados.status, municipios)
-    banco.registrar("alterou usuário", f"{alvo['nome']}: {regras.PERFIS[dados.perfil]}, {dados.status}"
-                    + (f", {len(municipios)} município(s)" if municipios is not None else ""), u["id"], u["empresa_id"])
+    banco.registrar("alterou usuário", f"{alvo['nome']}: " + auditoria.diferencas(
+        {"perfil": regras.PERFIS[alvo["perfil"]], "status": alvo["status"], "municipios": ", ".join(alvo.get("municipios") or []) or "todos"},
+        {"perfil": regras.PERFIS[dados.perfil], "status": dados.status,
+         "municipios": (", ".join(municipios) or "todos") if municipios is not None else ", ".join(alvo.get("municipios") or []) or "todos"},
+        {"perfil": "perfil", "status": "situação", "municipios": "municípios"}), u["id"], u["empresa_id"])
     return {"usuario": _linha_usuario(banco.usuario(id_))}
 
 
@@ -291,7 +294,8 @@ def mudar_empresa(id_: int, dados: SituacaoEmpresa, u: dict = Depends(exigir("ge
     if dados.status not in ("ativa", "suspensa"):
         raise HTTPException(422, "Situação: ativa ou suspensa.")
     banco.mudar_status_empresa(id_, dados.status)
-    banco.registrar("suspendeu empresa" if dados.status == "suspensa" else "reativou empresa", f"{e['nome']} ({e['sigla']})", u["id"], id_)
+    banco.registrar("suspendeu empresa" if dados.status == "suspensa" else "reativou empresa",
+                    f"{e['nome']} ({e['sigla']}): situação {e['status']} → {dados.status}", u["id"], id_)
     return {"empresa": {"id": id_, "status": dados.status}}
 
 
