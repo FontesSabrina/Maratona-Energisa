@@ -194,28 +194,6 @@ textarea[readonly] { background: var(--sup); }
   .faixa { width: 100%; }
 }
 
-/* ---------- Roteiro para a rádio: só na impressão (Salvar como PDF) ---------- */
-#roteiro { display: none; }
-@page { size: A4; margin: 0; }
-@media print {
-  body { display: block; background: #fff; }
-  body > :not(#roteiro) { display: none !important; }
-  #roteiro { display: block; padding: 14mm 18mm 12mm; color: #000; font: 11pt/1.5 "IBM Plex Sans", system-ui, sans-serif; }
-  #roteiro .rt-marca { display: flex; align-items: center; gap: 8pt; margin-bottom: 8pt; }
-  #roteiro .rt-marca img { width: 28pt; height: 28pt; }
-  #roteiro .rt-nome { font-size: 15pt; font-weight: 600; line-height: 1.1; margin: 0; }
-  #roteiro .rt-slogan { font-size: 9pt; color: #444; margin: 0; }
-  #roteiro h1 { font-size: 18pt; margin: 0 0 2pt; }
-  #roteiro .rt-meta { color: #333; font-size: 10pt; border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin: 0 0 10pt; }
-  #roteiro h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 12pt 0 4pt; }
-  #roteiro .rt-aviso { font-size: 15pt; line-height: 1.6; margin: 0; padding: 10pt 12pt; border: 1pt solid #000; border-radius: 4pt; }
-  #roteiro .rt-tempo { font-size: 9.5pt; color: #333; margin: 4pt 0 0; }
-  #roteiro ul { margin: 0; padding-left: 14pt; }
-  #roteiro p { margin: 0 0 3pt; }
-  #roteiro .rt-rodape { margin-top: 16pt; padding-top: 6pt; border-top: .75pt solid #888; font-size: 8.5pt; color: #444; }
-  #roteiro .rt-codigo { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
-}
-
 /* ---------- Telas de entrar e de criar a senha: gradiente verde, curva clara à direita e cartão claro ---------- */
 body:has(.tela-acesso:not([hidden])) {
   --acesso-texto: #1F2A30; --acesso-cartao: #F7F8F7; --acesso-botao: #1B8A8A; --acesso-linha: #D3DBD6;
@@ -373,4 +351,18 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
 button.perigo { border-color: var(--erro); color: var(--erro); background: var(--sup); }
 button.perigo:hover:not(:disabled) { background: color-mix(in srgb, var(--erro) 8%, var(--sup)); }
 .tabela td.codigo { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; white-space: nowrap; }
-.rt-solicitado { font-weight: 600; }
+
+/* ---------- Envio para a rádio (por município): rádio, valor, economia e os envios feitos ---------- */
+.envio-radio { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--linha); }
+.envio-radio:empty { display: none; }
+.envio-radio h4 { margin: 0; font-size: 15px; }
+.envio-radio input:not([type]), .envio-radio input[type=email] { min-height: 44px; }
+.envio-radio .economia { margin: 0; font-size: 13.5px; color: var(--texto2); }
+.nova-radio { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--sup2); }
+.envios { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.envios li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; background: var(--sup); font-size: 14px; }
+.envios .meta { font-size: 12.5px; color: var(--texto2); }
+.chip.envio { justify-self: start; }
+.chip.envio.entregue, .chip.envio.enviado { background: color-mix(in srgb, var(--info) 14%, var(--sup)); color: var(--info); }
+.chip.envio.confirmado { background: color-mix(in srgb, var(--ok) 18%, var(--sup)); color: var(--ok); font-weight: 600; }
+.chip.envio.falhou { background: color-mix(in srgb, var(--erro) 14%, var(--sup)); color: var(--erro); font-weight: 600; }

@@ -223,7 +223,7 @@ comp_hist = [mm for a in hist for mm in a["municipios"] if mm.get("hoje")]
 conferir("dashboard: comparativo com os municípios que têm o aviso de hoje, tempo de hoje x Farol",
          pn["comparativo"]["municipios"] == len(comp_hist) > 0
          and pn["comparativo"]["segundos_hoje"] == sum(mm["hoje"]["segundos"] for mm in comp_hist)
-         and pn["comparativo"]["segundos_farol"] == sum(mm["segundos"] for mm in comp_hist), json.dumps(pn["comparativo"]))
+         and pn["comparativo"]["segundos_farol"] == sum(mm.get("segundos_mensagem") or mm["segundos"] for mm in comp_hist), json.dumps(pn["comparativo"]))
 conferir("dashboard: só agregados (nada de UC, coordenada ou texto de aviso)",
          not sem_dados_da_planilha(json.dumps(pn), t)
          and all(set(m) == {"codigo_ibge", "nome", "uf", "avisos", "ucs"} for m in pn["municipios"])

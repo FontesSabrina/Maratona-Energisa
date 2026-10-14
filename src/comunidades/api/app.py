@@ -19,12 +19,11 @@ Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-pr
 import functools
 import hashlib
 import logging
-import os
 import secrets
 import time
 import traceback
 from collections import Counter, defaultdict, deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +34,6 @@ from pydantic import BaseModel, Field
 import shapely
 from pyproj import Transformer
 
-from .. import distribuidora as dist_
 from .. import senhas
 from ..config import sem_acento
 from ..apresentacao import audio
@@ -43,7 +41,8 @@ from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
 from ..fontes.base_territorial import CRS_BASE
-from ..nucleo import auditoria, esquema_planilha, idiomas, painel, travas
+from .. import correio
+from ..nucleo import auditoria, esquema_planilha, idiomas, mensagem, painel, travas
 from ..nucleo import tipos_desligamento as tipos
 from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
@@ -54,25 +53,22 @@ from ..nucleo.motivos import TEXTOS, Motivo
 from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv
 from . import conferencia, leitura
 from . import pacote as pacote_
+from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, DIST, MAX_TEXTO, config_empresa, segundos
+from .comum import texto_do_aviso as _texto_do_aviso
+from .radio import rotas as radio_rotas
 from .acesso import PRODUCAO, exigir, rotas, usuario_atual
 from .proxy import ProxyConfiavel
 
 MAX_PROBLEMAS = 200          # problemas listados um a um na resposta (o total vem sempre)
-MAX_TEXTO = 40               # data e horário: o que vai no aviso, digitado pelo operador
 CASAS_PONTO = 5              # casas decimais dos pontos no mapa (cerca de 1 m)
-# FAROL_AUDIO=0 desliga o áudio do aviso (o plano gratuito do Render não tem memória para a voz)
-AUDIO = os.environ.get("FAROL_AUDIO", "1") != "0"
-AVISO_FICTICIO = ("Rede elétrica e clientes fictícios nesta demonstração; território, endereços e "
-                  "comunidades reais (IBGE, Censo 2022).")
-BRASILIA = timezone(timedelta(hours=-3))  # sem horário de verão desde 2019
 MAX_AVISOS_PAINEL = 5000      # avisos considerados no dashboard (os mais recentes)
 GEO_PARA_BASE = Transformer.from_crs("EPSG:4674", CRS_BASE, always_xy=True)
 
 # em produção, sem a documentação interativa (é a única parte sem CSP: carrega o Swagger de fora)
 app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
               openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None)
-DIST = dist_.carregar()
 app.include_router(rotas)
+app.include_router(radio_rotas)
 if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
     app.add_middleware(ProxyConfiavel)
 
@@ -116,7 +112,7 @@ async def cabecalhos(request, chamar):
     r.headers["Referrer-Policy"] = "no-referrer"
     r.headers["X-Frame-Options"] = "DENY"
     r.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
-    if not request.url.path.startswith(SEM_CSP):
+    if not request.url.path.startswith(SEM_CSP) and "content-security-policy" not in r.headers:
         r.headers["Content-Security-Policy"] = CSP
     r.headers.setdefault("Cache-Control", "no-store")  # resultados de planilha nunca ficam em cache
     if PRODUCAO:  # só HTTPS daqui para a frente (o Render serve em HTTPS)
@@ -137,7 +133,7 @@ def config(u: dict = Depends(usuario_atual)) -> dict:
             "prazo_legal_horas": DIST.prazo_legal_horas, "prazo_vital_dias_uteis": DIST.prazo_vital_dias_uteis,
             "norma": DIST.norma, "palavras_por_segundo": PALAVRAS_POR_SEGUNDO,
             "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}, "audio": AUDIO,
-            "tipos": tipos.ROTULOS, "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO}
+            "tipos": tipos.ROTULOS, "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO, "email": correio.ligado()}
 
 
 @app.get("/api/concessao")
@@ -180,13 +176,6 @@ def modelo(u: dict = Depends(usuario_atual)) -> Response:
                     headers={"Content-Disposition": 'attachment; filename="modelo_planilha_farol.csv"'})
 
 
-def _texto_do_aviso(nome: str, v: str) -> str:
-    v = " ".join(str(v).split())
-    if not v or len(v) > MAX_TEXTO:
-        raise HTTPException(422, f"{nome}: informe de 1 a {MAX_TEXTO} caracteres.")
-    return v
-
-
 def _bases(xy: np.ndarray) -> list[BaseMunicipio]:
     """Só as bases dos municípios que as UCs tocam (os contornos de todos decidem quais são)."""
     todos = banco.contornos(CRS_BASE)
@@ -224,14 +213,14 @@ def _aviso_hoje(locais, data: str, horario: str) -> dict | None:
             "segundos": round(palavras / PALAVRAS_POR_SEGUNDO)}
 
 
-def _prazo(vital: Counter) -> dict:
+def _prazo(vital: Counter, cfg: dict) -> dict:
     if vital["sim"]:
         regra = f"{DIST.prazo_vital_dias_uteis} dias úteis (há unidades com equipamento vital)"
     elif vital["a_confirmar"]:
         regra = f"{DIST.prazo_vital_dias_uteis} dias úteis até confirmar as unidades sem a informação de equipamento vital"
     else:
         regra = f"{DIST.prazo_legal_horas} horas"
-    return {"antecedencia_minima": regra, "norma": DIST.norma, "planejamento_interno_dias": DIST.prazo_interno_dias}
+    return {"antecedencia_minima": regra, "norma": DIST.norma, "planejamento_interno_dias": cfg["antecedencia_dias"]}
 
 
 @functools.lru_cache(maxsize=1)
@@ -240,9 +229,10 @@ def _area() -> Area:
     return Area(shapely.union_all([g for _, _, _, g in banco.contornos("EPSG:4674")]))
 
 
-def _parametros() -> planilha.Parametros:
+def _parametros(cfg: dict) -> planilha.Parametros:
+    """Os parâmetros do tradutor: o fuso UTM é o da empresa; o resto, o da distribuidora."""
     c = DIST.planilha
-    return planilha.Parametros(dentro=_area(), epsg_utm=c.epsg_utm, isolado_km=c.ponto_isolado_km,
+    return planilha.Parametros(dentro=_area(), epsg_utm=cfg["epsg_utm"], isolado_km=c.ponto_isolado_km,
                                muitas_ucs=c.muitas_ucs_mesma_coordenada)
 
 
@@ -258,7 +248,7 @@ def _traduzir(conteudo: bytes, nome: str | None, aba: str | None, u: dict):
     if not tabela.linhas:
         raise PlanilhaInvalida("A planilha não tem nenhuma linha de dados.")
     modelo = planilha.montar(
-        tabela.campos, tabela.cabecalho, tabela.linhas, _parametros(),
+        tabela.campos, tabela.cabecalho, tabela.linhas, _parametros(config_empresa(u["empresa_id"])),
         arquivo={"nome": _nome_arquivo(nome), "sha256": hashlib.sha256(conteudo).hexdigest(), "formato": tabela.formato,
                  "aba": tabela.aba, "colunas_ignoradas": tabela.colunas_ignoradas},
         empresa=(u.get("empresa_nome") or "")[:120], gerado_em=datetime.now(BRASILIA).strftime("%Y-%m-%dT%H:%M"),
@@ -349,7 +339,7 @@ async def _ler_e_traduzir(arquivo: UploadFile, aba: str | None, u: dict):
         del conteudo
 
 
-def _resultado(modelo, data: str, horario: str, idioma: str) -> dict:
+def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
     """Do JSON validado (nunca da planilha bruta): municípios, comunidades, avisos, pontos e as travas."""
     v = planilha.validas(modelo)
     rejeitadas = [pt for pt in modelo.pontos if pt.status == "rejeitada"]
@@ -361,7 +351,7 @@ def _resultado(modelo, data: str, horario: str, idioma: str) -> dict:
                                            for pt in rejeitadas[:MAX_PROBLEMAS]]},
                 "traducao": _traducao(modelo),
                 "fora_da_concessao": {"ucs": len(fora_planilha), "linhas": [pt.linha for pt in fora_planilha[:MAX_PROBLEMAS]]},
-                "municipios": [], "prazo": _prazo(Counter()),
+                "municipios": [], "prazo": _prazo(Counter(), cfg),
                 "pontos_fora": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)] for pt in fora_planilha],
                 # as corrigidas, com cor própria no mapa (só latitude e longitude, sem a UC)
                 "pontos_corrigidos": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)]
@@ -398,11 +388,11 @@ def _resultado(modelo, data: str, horario: str, idioma: str) -> dict:
                 # só contagens; a classe é texto livre da planilha, então vai cortada
                 "classes": dict(Counter((c or "não informada")[:MAX_TEXTO] for c in ucs["CLASSE"])),
             })
-        resposta["prazo"] = _prazo(vital_total)
+        resposta["prazo"] = _prazo(vital_total, cfg)
     ms = resposta["municipios"]
     resposta["conferencia"] = {
         "vital_bloqueio": travas.vital_bloqueio(modelo, linhas_fora),
-        "rejeicao": travas.rejeicao(modelo, DIST.planilha.limite_rejeitadas),
+        "rejeicao": travas.rejeicao(modelo, cfg["limite_rejeicao"]),
         "suspeitos": travas.suspeitos(modelo, por_municipio),
         "arquivo": modelo.arquivo.nome, "sha256": modelo.arquivo.sha256,
         "numeros": {"clientes": sum(m["ucs"] for m in ms), "municipios": len(ms),
@@ -424,8 +414,10 @@ async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(..
     data, horario, idioma = _formulario(data, horario, idioma)
     tipo, motivo = _motivo(tipo, tipo_outro)
     modelo = await _ler_e_traduzir(arquivo, aba, u)
-    resposta = _resultado(modelo, data, horario, idioma)
+    cfg = config_empresa(u["empresa_id"])
+    resposta = _resultado(modelo, data, horario, idioma, cfg)
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
+    _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     resposta["pacote"], vence = pacote_.assinar(travas.ucs_opacas(modelo), u["id"], u["empresa_id"])
     resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
     r = modelo.resumo
@@ -444,7 +436,9 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
         modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
     except pacote_.PacoteRecusado as e:
         raise HTTPException(422, str(e)) from None
-    resposta = _resultado(modelo, data, horario, idioma)
+    cfg = config_empresa(u["empresa_id"])
+    resposta = _resultado(modelo, data, horario, idioma, cfg)
+    _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     c, arq = resposta["conferencia"], f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})"
     problema = travas.problema_para_gerar(c, dados.conferi, dados.justificativa)
     if problema:
@@ -458,7 +452,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
         banco_acesso.registrar("justificou rejeições acima do limite", f"{c['rejeicao']['rejeitadas']} de {c['rejeicao']['total']} "
                                f"linhas: {travas.limpar_justificativa(dados.justificativa)}", u["id"], u["empresa_id"])
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
-    return JSONResponse(_guardar(resposta, u, data, horario, idioma, tipo, motivo))
+    return JSONResponse(_guardar(resposta, u, data, horario, idioma, tipo, motivo, cfg))
 
 
 @app.post("/api/planilha/json")
@@ -489,14 +483,27 @@ def relatorio_planilha(dados: PedidoRelatorio, u: dict = Depends(exigir("gerar_a
                     headers={"Content-Disposition": 'attachment; filename="farol-relatorio-planilha.csv"'})
 
 
-def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str) -> dict:
+def _mensagens(municipios: list[dict], cfg: dict, data: str, horario: str, idioma: str, motivo: str, codigo: str = "") -> None:
+    """A mensagem da rádio de cada município, pelo modelo da empresa (nucleo/mensagem.py), e o tempo no ar.
+    Só em português (o modelo é escrito em português); nos outros idiomas fica o aviso do algoritmo."""
+    for m in municipios:
+        if idioma != idiomas.PADRAO:
+            m["mensagem"], m["segundos_mensagem"] = None, None
+            continue
+        m["mensagem"] = mensagem.montar(cfg["modelo_mensagem"], mensagem.valores_do_municipio(
+            m, distribuidora=cfg["nome_mensagem"], data=data, horario=horario, motivo=motivo, telefone=cfg["telefone"], codigo=codigo))
+        m["segundos_mensagem"] = segundos(m["mensagem"])
+
+
+def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str, cfg: dict) -> dict:
     """Grava no histórico da empresa só o agregado (sem as linhas com problema), com a linha "gerou aviso"
     na auditoria na mesma transação, e devolve a resposta com o id, o código de verificação e quem pediu."""
     p = resposta["planilha"]
     resumo = {"linhas": p["linhas"], "validas": p["validas"], "problemas": p["total_problemas"],
               "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "prazo": resposta["prazo"]}
     # do aviso de hoje, só as contagens (o texto lista imóveis e ruas e não precisa ficar guardado)
-    municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital")},
+    municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital",
+                                         "mensagem", "segundos_mensagem")},
                    "hoje": {k: m["hoje"][k] for k in ("locais", "palavras", "segundos")} if m.get("hoje") else None}
                   for m in resposta["municipios"]]
     nomes = ", ".join(m["nome"] for m in municipios) or "nenhum município"
@@ -504,6 +511,10 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
                                   lambda id_: f"aviso {id_}: {nomes} ({p['linhas']} linhas), {tipos.ROTULOS[tipo].lower()}")
     resposta.update(id=g["id"], codigo=g["codigo"], criado_em=g["criado_em"].isoformat(), usuario=g["solicitante"],
                     usuario_perfil=PERFIS.get(g["solicitante_perfil"], ""), status="gerado")
+    if "{codigo}" in cfg["modelo_mensagem"]:   # o código só existe depois de gravado: a mensagem é refeita com ele
+        _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo, g["codigo"])
+        _mensagens(municipios, cfg, data, horario, idioma, motivo, g["codigo"])
+        banco_acesso.atualizar_municipios(g["id"], u["empresa_id"], municipios)
     return resposta
 
 
@@ -624,16 +635,6 @@ def mudar_data(id_: int, dados: NovaData, u: dict = Depends(exigir("gerar_aviso"
     banco_acesso.registrar("mudou a data do aviso", f"aviso {id_}: de {a['data']}, {a['horario']} para {data}, {horario}",
                            u["id"], u["empresa_id"])
     return _aviso_publico(banco_acesso.aviso(id_, u["empresa_id"]))
-
-
-@app.post("/api/historico/{id_}/municipios/{codigo}/pdf")
-def registrar_pdf(id_: int, codigo: str, u: dict = Depends(exigir("gerar_aviso"))) -> dict:
-    """Registra na auditoria o PDF do roteiro para a rádio (gerado na tela)."""
-    a = banco_acesso.aviso(id_, u["empresa_id"])
-    if not a or not any(m.get("codigo_ibge") == codigo for m in a["municipios"]):
-        raise HTTPException(404, "Aviso ou município não encontrado nesta empresa.")
-    banco_acesso.registrar("gerou PDF", f"aviso {id_}, município {codigo}", u["id"], u["empresa_id"])
-    return {"ok": True}
 
 
 @app.get("/api/verificar/{codigo}")

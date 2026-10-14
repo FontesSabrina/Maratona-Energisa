@@ -16,6 +16,10 @@ const estado = {
   mensagem: '', erro: false,
   resultado: null,         // resposta de /api/planilha (conferência), de /api/avisos (gerado) ou um aviso do histórico
   conferi: false,          // a caixa "Conferi os números e o mapa" do passo 3
+  radios: [],              // rádios da empresa (para o envio), com o valor sugerido
+  sugestao: {},            // codigo_ibge -> { radios: [{ radio_id, comunidades, municipio_inteiro }], sem_radio: [...] }
+  envios: [],              // envios do aviso aberto (e-mail, WhatsApp, cópia), com valor, economia e situação
+  escolha: {},             // codigo_ibge -> { radioId, valor, cobranca, antigo, nova: {...} }: o formulário de envio
   justificativa: '',       // obrigatória quando as rejeitadas passam do limite da empresa
   abas: [], aba: '',       // quando mais de uma aba da planilha serve, a escolhida
   origem: null,            // 'novo' | 'historico'
@@ -128,6 +132,42 @@ function problemaParaGerar() {
 }
 const pct = f => `${(f * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 
+// o texto da rádio: o final guardado, a mensagem pelo modelo da empresa ou (em outro idioma) o aviso do algoritmo
+const textoGerado = m => m.mensagem || m.aviso;
+const textoAviso = m => m.texto_final || textoGerado(m);
+
+// custo e economia do envio: a mesma conta do servidor (nucleo/economia.py); nunca inventa número
+function reaisNumero(t) {
+  const s = String(t ?? '').replace(/R\$|\s/g, '');
+  if (!s) return null;
+  const n = Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+  return Number.isFinite(n) && n >= 0 && n <= 100000 ? Math.round(n * 100) / 100 : NaN;
+}
+function previaEconomia({ cobranca, valor, segundosFarol, segundosHoje, custoAntigo }) {
+  const tempo = segundosHoje == null ? null : segundosHoje - segundosFarol;
+  if (cobranca === 'minuto') {
+    const custo = Math.round(valor * segundosFarol / 60 * 100) / 100;
+    if (segundosHoje != null) return { custo, economia: Math.round((segundosHoje - segundosFarol) * valor / 60 * 100) / 100, tipo: 'calculada', tempo };
+    if (custoAntigo != null) return { custo, economia: Math.round((custoAntigo - custo) * 100) / 100, tipo: 'informada', tempo };
+    return { custo, economia: null, tipo: null, tempo };
+  }
+  return { custo: valor, economia: custoAntigo != null ? Math.round((custoAntigo - valor) * 100) / 100 : null,
+    tipo: custoAntigo != null ? 'informada' : null, tempo };
+}
+const dinheiro = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const COBRANCA = { fechado: 'valor fechado pelo aviso', minuto: 'por minuto no ar' };
+const CANAL = { email: 'e-mail', whatsapp: 'WhatsApp', copia: 'cópia da mensagem' };
+const SITUACAO_ENVIO = { preparando: 'preparando', enviado: 'enviado', entregue: 'entregue ao servidor de e-mail', falhou: 'falhou',
+  confirmado: 'a rádio confirmou' };
+const tempoArTexto = s => s == null ? '' : s >= 0 ? `${tempoNoAr(s)} a menos no ar` : `${tempoNoAr(-s)} a mais no ar`;
+function economiaTexto(e) {
+  const partes = [`custo ${dinheiro(e.custo)}`];
+  if (e.economia != null) partes.push(`economia ${e.economia_tipo || e.tipo} ${dinheiro(e.economia)}`);
+  else partes.push('economia: só com o aviso de hoje ou o custo antigo informado');
+  if ((e.tempo_economizado ?? e.tempo) != null) partes.push(tempoArTexto(e.tempo_economizado ?? e.tempo));
+  return partes.join(' · ');
+}
+
 // histórico: busca por município ou comunidade (sem acento) e período pela data em que foi gerado
 const normalizar = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function historicoFiltrado() {
@@ -156,11 +196,6 @@ function doHistorico(a) {
     criado_em: a.criado_em, usuario: a.usuario, usuario_perfil: a.usuario_perfil, codigo: a.codigo, status: a.status,
     desligamento: a.desligamento,
   };
-}
-
-async function codigoVerificacao(texto) {
-  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
-  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
 // ======================= View: desenha a partir do estado (não muda o estado) =======================
@@ -291,17 +326,90 @@ function desenharMunicipios() {
       no('p', { classe: 'tempo', id: `tempo-${cod}`, texto: tempoTexto(texto) }),
       no('p', { id: `final-${cod}`, classe: 'ajuda' }),
       no('div', { classe: 'acoes' },
-        editavel && no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: 'Baixar PDF para a rádio' }),
+        editavel && estado.resultado.id && no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: 'Baixar PDF para a rádio' }),
         no('button', { type: 'button', 'data-acao': 'copiar', 'data-codigo': cod, texto: 'Copiar texto' }),
         temAudio() && no('button', { type: 'button', 'data-acao': 'ouvir', 'data-codigo': cod, texto: 'Ouvir' }),
         temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: 'Baixar áudio (MP3)' }),
         editavel && no('button', { type: 'button', 'data-acao': 'restaurar', 'data-codigo': cod, texto: 'Desfazer edição' })),
       no('div', { id: `tocador-${cod}`, classe: 'tocador' }),
       temAudio() || !pode('gerar_aviso') ? null : no('p', { classe: 'ajuda', texto: audioLigado() ? 'Áudio só para avisos em português, por enquanto.'
-        : 'O áudio do aviso está desligado neste servidor.' })));
+        : 'O áudio do aviso está desligado neste servidor.' }),
+      no('section', { id: `envio-${cod}`, classe: 'envio-radio', 'data-codigo': cod, 'aria-label': `Envio para a rádio: ${m.nome}` })));
   });
   $('municipios').replaceChildren(...cartoes);
-  for (const m of estado.resultado.municipios) { desenharFinal(m.codigo_ibge); desenharTocador(m.codigo_ibge); }
+  for (const m of estado.resultado.municipios) { desenharFinal(m.codigo_ibge); desenharTocador(m.codigo_ibge); desenharEnvio(m); }
+}
+
+// ---- Envio para a rádio (um município): a rádio, o valor, a economia e os envios já feitos ----
+function desenharEnvio(m) {
+  const cod = m.codigo_ibge, lugar = $(`envio-${cod}`), r = estado.resultado;
+  if (!lugar) return;
+  const feitos = estado.envios.filter(e => e.municipio === cod);
+  const lista = feitos.length ? [no('h4', { texto: 'Envios para a rádio' }), no('ul', { classe: 'envios' }, feitos.map(e => no('li', {},
+    no('span', { classe: `chip envio ${e.status}`, texto: SITUACAO_ENVIO[e.status] + (e.confirmado_em ? ` em ${dataHora(e.confirmado_em)}` : '') }),
+    no('span', { texto: `${e.radio_nome} · ${CANAL[e.canal]}${e.destino && e.canal !== 'copia' ? ` (${e.destino})` : ''}` }),
+    no('span', { classe: 'meta', texto: `${dinheiro(e.valor)} (${COBRANCA[e.cobranca]}) · ${economiaTexto(e)} · por ${e.por} em ${dataHora(e.criado_em)}` }),
+    e.arquivos.length ? no('span', { classe: 'acoes' }, e.arquivos.map(t => no('button', { type: 'button', 'data-arquivo': t, 'data-envio-id': e.id,
+      texto: t === 'pdf' ? 'PDF enviado' : 'MP3 enviado' }))) : null)))] : [];
+  if (!(r.id && pode('gerar_aviso') && r.status !== 'cancelado')) return lugar.replaceChildren(...lista);
+  const s = estado.sugestao[cod] || { radios: [], sem_radio: [] }, cobrem = new Map(s.radios.map(x => [x.radio_id, x]));
+  const ordem = [...estado.radios].sort((a, b) => (cobrem.has(b.id) - cobrem.has(a.id)) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const e = estado.escolha[cod] ||= escolhaPadrao(ordem[0]);
+  const alcance = x => cobrem.has(x.id) ? (cobrem.get(x.id).municipio_inteiro ? ' · alcança o município' : ` · alcança ${cobrem.get(x.id).comunidades} comunidade(s)`)
+    : ' · fora do alcance cadastrado';
+  const sel = no('select', { 'data-envio': 'radioId', id: `radio-${cod}` },
+    ordem.map(x => no('option', { value: String(x.id), texto: x.nome + alcance(x), selected: String(x.id) === String(e.radioId) })),
+    no('option', { value: 'nova', texto: '+ Nova rádio', selected: e.radioId === 'nova' }));
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { 'data-envio': nome, value: e[nome] ?? '', autocomplete: 'off', ...extra }));
+  const blocos = [no('h4', { texto: 'Enviar para a rádio' })];
+  if (s.sem_radio.length) blocos.push(no('p', { classe: 'alerta-amarelo', role: 'status', texto: `Sem rádio cadastrada para: ${s.sem_radio.join(', ')}.` }));
+  blocos.push(no('label', { for: `radio-${cod}`, texto: 'Rádio' }), sel);
+  if (e.radioId === 'nova') blocos.push(formNovaRadio(m, e));
+  else if (ordem.length) blocos.push(
+    no('div', { classe: 'campos' }, campo('Valor (R$)', 'valor', { inputmode: 'decimal', placeholder: '0,00' }),
+      no('label', { texto: 'Cobrança' }, no('select', { 'data-envio': 'cobranca' },
+        Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === e.cobranca })))),
+      campo('Quanto custaria do jeito antigo (R$, opcional)', 'antigo', { inputmode: 'decimal', placeholder: 'opcional' })),
+    no('p', { classe: 'economia', id: `previa-${cod}`, 'aria-live': 'polite' }),
+    no('div', { classe: 'acoes' },
+      estado.config?.email !== false ? no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'email', texto: 'Enviar por e-mail' }) : null,
+      no('button', { type: 'button', 'data-envio-acao': 'whatsapp', texto: 'Enviar por WhatsApp' }),
+      no('button', { type: 'button', 'data-envio-acao': 'copia', texto: 'Copiar mensagem' })),
+    estado.config?.email === false ? no('p', { classe: 'ajuda', texto: 'O envio por e-mail está desligado neste servidor.' }) : null);
+  else blocos.push(no('p', { classe: 'ajuda', texto: 'Nenhuma rádio cadastrada ainda: use "+ Nova rádio".' }));
+  lugar.replaceChildren(...blocos, ...lista);
+  desenharPrevia(cod);
+}
+
+function escolhaPadrao(radio) {
+  return radio ? { radioId: String(radio.id), valor: radio.valor_sugerido ? Number(radio.valor_sugerido).toFixed(2).replace('.', ',') : '',
+    cobranca: radio.cobranca_sugerida || 'fechado', antigo: '' } : { radioId: 'nova', valor: '', cobranca: 'fechado', antigo: '' };
+}
+
+function formNovaRadio(m, e) {
+  const n = e.nova ||= { nome: '', email: '', whatsapp: '', valor: '', cobranca: 'fechado', alcance: 'municipio' };
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { 'data-nova': nome, value: n[nome], autocomplete: 'off', ...extra }));
+  return no('div', { classe: 'nova-radio' },
+    campo('Nome da rádio', 'nome', { maxlength: '80' }), campo('E-mail da rádio', 'email', { type: 'email' }),
+    campo('WhatsApp da rádio (com DDD)', 'whatsapp', { inputmode: 'tel' }),
+    no('div', { classe: 'campos' }, campo('Valor padrão (R$)', 'valor', { inputmode: 'decimal' }),
+      no('label', { texto: 'Cobrança' }, no('select', { 'data-nova': 'cobranca' },
+        Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === n.cobranca }))))),
+    no('label', { texto: 'O que a rádio alcança' }, no('select', { 'data-nova': 'alcance' },
+      no('option', { value: 'municipio', texto: `${m.nome} inteiro`, selected: n.alcance === 'municipio' }),
+      no('option', { value: 'comunidades', texto: 'Só as comunidades deste aviso', selected: n.alcance === 'comunidades' }))),
+    no('p', { classe: 'ajuda', texto: 'Contato da rádio (empresa), nunca de cliente. Fica na lista da empresa e na auditoria.' }),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'salvar-radio', texto: 'Cadastrar rádio' })));
+}
+
+function desenharPrevia(cod) {
+  const lugar = $(`previa-${cod}`), e = estado.escolha[cod];
+  if (!lugar || !e) return;
+  const m = estado.resultado.municipios.find(x => x.codigo_ibge === cod), valor = reaisNumero(e.valor), antigo = reaisNumero(e.antigo);
+  if (valor === null || Number.isNaN(valor)) return lugar.textContent = 'Informe o valor do envio em R$.';
+  if (Number.isNaN(antigo)) return lugar.textContent = 'O custo antigo tem de ser um valor em R$.';
+  lugar.textContent = economiaTexto(previaEconomia({ cobranca: e.cobranca, valor, segundosFarol: segundos(estado.avisos[cod]),
+    segundosHoje: m.hoje?.segundos ?? null, custoAntigo: antigo }));
 }
 
 function desenharFinal(codigo) {
@@ -314,6 +422,7 @@ function desenharTempo(codigo) {
   $(`tempo-${codigo}`).textContent = tempoTexto(estado.avisos[codigo]);
   desenharFinal(codigo);
   desenharTocador(codigo);
+  desenharPrevia(codigo);
 }
 
 // o tocador aparece com o áudio do texto atual; se o texto mudou, some (o áudio antigo não vale mais)
@@ -801,35 +910,6 @@ function desenharUcs() {
   if (!camadaComunidades && marcas.length) mapa.fitBounds(L.featureGroup(marcas).getBounds(), { padding: [30, 30], maxZoom: 13 });
 }
 
-// ---- Roteiro (PDF) de um município ----
-async function desenharRoteiro(codigo) {
-  const m = estado.resultado.municipios.find(x => x.codigo_ibge === codigo);
-  const f = estado.formulario, texto = estado.avisos[codigo], g = grupos(m);
-  const codigoV = (await codigoVerificacao(texto)).slice(0, 16);
-  const lista = (titulo, cs) => cs.length ? [no('h2', { texto: titulo }), no('ul', {}, cs.map(c => no('li', { texto: nomeComDistrito(c, m) })))] : [];
-  const agora = new Date();
-  $('roteiro').replaceChildren(
-    no('div', { classe: 'rt-marca' }, no('img', { src: '/assets/marca/farol.svg', alt: '' }),
-      no('div', {}, no('p', { classe: 'rt-nome', texto: 'Farol' }), no('p', { classe: 'rt-slogan', texto: 'Cada comunidade avisada pelo nome' }))),
-    no('h1', { texto: 'Roteiro para a rádio' }),
-    no('p', { classe: 'rt-meta', texto: `${m.nome}/${m.uf} · desligamento programado em ${f.dataLonga}, das ${f.horario} · ${estado.usuario.empresa || estado.config.distribuidora}`
-      + (estado.resultado.desligamento ? ` · ${estado.resultado.desligamento.rotulo}` : '') }),
-    no('h2', { texto: 'Texto para leitura' }),
-    no('p', { classe: 'rt-aviso', texto }),
-    no('p', { classe: 'rt-tempo', texto: tempoTexto(texto) }),
-    lista('Comunidades inteiras', g.inteira), lista('Parte da comunidade', g.parte),
-    g.vizinha.length ? [no('h2', { texto: 'Localidades vizinhas (citadas em conjunto)' }), no('p', { texto: g.vizinha.map(c => nomeComDistrito(c, m)).join(', ') })] : [],
-    no('h2', { texto: 'Prazo' }),
-    no('p', { texto: `Antecedência mínima: ${estado.resultado.prazo.antecedencia_minima} (${estado.resultado.prazo.norma}).` }),
-    no('p', { texto: `Unidades com equipamento vital: ${fmt(m.equipamento_vital.sim)}` + (m.equipamento_vital.a_confirmar ? ` (${fmt(m.equipamento_vital.a_confirmar)} a confirmar)` : '') + '.' }),
-    no('div', { classe: 'rt-rodape' },
-      no('p', { classe: 'rt-solicitado', texto: `${solicitadoTexto(estado.resultado)}${estado.resultado.id ? ` · aviso nº ${estado.resultado.id}` : ''}.` }),
-      no('p', { texto: `PDF gerado em ${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-        + ` por ${estado.usuario.nome}. Código do texto (SHA-256): ` },
-        no('span', { classe: 'rt-codigo', texto: codigoV })),
-      no('p', { texto: estado.resultado.aviso_ficticio })));
-}
-
 // ======================= Controller: eventos e chamadas à API (atualiza o estado e redesenha) =======================
 class ErroApi extends Error {
   constructor(status, mensagem, dados = {}) { super(mensagem); this.status = status; this.dados = dados; }
@@ -846,6 +926,93 @@ async function api(url, opcoes = {}) {
 }
 
 // pedido que devolve um arquivo (CSV, JSON): baixa com o nome que o servidor sugere; nada fica na página
+// rádios sugeridas e envios do aviso aberto (só depois de gerado; quem só consulta vê os envios)
+async function carregarEnvios() {
+  const r = estado.resultado;
+  if (!r?.id) return;
+  try {
+    const [envs, sug] = await Promise.all([pode('ver_historico') ? api(`/api/historico/${r.id}/envios`) : { envios: [] },
+      pode('gerar_aviso') ? api(`/api/historico/${r.id}/radios`) : null]);
+    estado.envios = envs.envios;
+    if (sug) { estado.radios = sug.radios; estado.sugestao = Object.fromEntries(sug.municipios.map(x => [x.codigo_ibge, x])); }
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+  for (const m of r.municipios) desenharEnvio(m);
+}
+
+function editarEnvio(evento) {
+  const alvo = evento.target, sec = alvo.closest('section.envio-radio');
+  if (!sec || !(alvo.dataset.envio || alvo.dataset.nova)) return;
+  const cod = sec.dataset.codigo, e = estado.escolha[cod];
+  if (alvo.dataset.nova) { e.nova[alvo.dataset.nova] = alvo.value; return; }
+  e[alvo.dataset.envio] = alvo.value;
+  if (alvo.dataset.envio === 'radioId' && evento.type === 'change') {   // outra rádio: o valor sugerido dela
+    const radio = estado.radios.find(x => String(x.id) === alvo.value);
+    Object.assign(e, alvo.value === 'nova' ? {} : escolhaPadrao(radio));
+    return desenharEnvio(estado.resultado.municipios.find(x => x.codigo_ibge === cod));
+  }
+  desenharPrevia(cod);
+}
+
+async function acaoEnvio(evento) {
+  const b = evento.target.closest('button[data-envio-acao], button[data-arquivo]');
+  if (!b) return;
+  if (b.dataset.arquivo) {
+    try { await baixarDaApi(`/api/envios/${b.dataset.envioId}/arquivos/${b.dataset.arquivo}`, { method: 'GET' }, `farol-envio.${b.dataset.arquivo}`); }
+    catch (e) { if (e.status !== 401) avisar(e.message, true); }
+    return;
+  }
+  const cod = b.closest('section.envio-radio').dataset.codigo, m = estado.resultado.municipios.find(x => x.codigo_ibge === cod);
+  b.disabled = true;
+  try {
+    if (b.dataset.envioAcao === 'salvar-radio') await cadastrarRadio(m);
+    else await enviarParaRadio(m, b.dataset.envioAcao);
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    b.disabled = false;
+  }
+}
+
+async function cadastrarRadio(m) {
+  const n = estado.escolha[m.codigo_ibge].nova;
+  const alcance = n.alcance === 'municipio' ? { municipios: [m.codigo_ibge] }
+    : { comunidades: m.comunidades.map(c => ({ municipio: m.codigo_ibge, nome: semSufixo(c.nome), distrito: c.distrito })) };
+  const j = await api('/api/radios', { method: 'POST', json: { nome: n.nome, email: n.email || null, whatsapp: n.whatsapp || null,
+    valor_padrao: n.valor || null, cobranca: n.cobranca, alcance } });
+  avisar(`${j.radio.nome} cadastrada (registrado na auditoria).`);
+  estado.escolha[m.codigo_ibge] = escolhaPadrao(j.radio);
+  await carregarEnvios();
+}
+
+async function enviarParaRadio(m, canal) {
+  const cod = m.codigo_ibge, e = estado.escolha[cod], radio = estado.radios.find(x => String(x.id) === String(e.radioId));
+  if (!radio) return avisar('Escolha a rádio.', true);
+  const valor = reaisNumero(e.valor), texto = estado.avisos[cod];
+  if (valor === null || Number.isNaN(valor)) return avisar('Informe o valor do envio em R$.', true);
+  if (canal === 'email') {
+    if (!radio.email) return avisar(`${radio.nome} não tem e-mail cadastrado.`, true);
+    if (!confirm(`Enviar para ${radio.nome} (${radio.email})?`)) return;
+    avisar(`Gerando o PDF${temAudio() ? ' e o MP3' : ''} e enviando para ${radio.nome}…`);
+  } else if (canal === 'whatsapp') {
+    if (!radio.whatsapp) return avisar(`${radio.nome} não tem WhatsApp cadastrado.`, true);
+    if (!confirm(`Abrir o WhatsApp para ${radio.nome} (${radio.whatsapp}) com a mensagem?`)) return;
+    const numero = radio.whatsapp.length > 11 ? radio.whatsapp : `55${radio.whatsapp}`;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+  } else {
+    if (!confirm(`Copiar a mensagem para mandar para ${radio.nome}?`)) return;
+    try { await navigator.clipboard.writeText(texto); } catch (x) { return avisar('Não foi possível copiar; selecione o texto e use Ctrl+C.', true); }
+  }
+  const j = await api(`/api/historico/${estado.resultado.id}/envios`, { method: 'POST', json: { municipio: cod, radio_id: radio.id, canal, texto,
+    valor: e.valor, cobranca: e.cobranca, custo_antigo: e.antigo || null } });
+  avisar(j.erro || { email: `E-mail entregue ao servidor para ${radio.nome} (${radio.email}). A rádio confirma pelo link do e-mail.`,
+    whatsapp: `WhatsApp aberto para ${radio.nome}; o envio ficou registrado.`, copia: `Mensagem copiada para ${radio.nome}; o envio ficou registrado.` }[canal], !!j.erro);
+  estado.finais[cod] = texto;
+  desenharFinal(cod);
+  await carregarEnvios();
+}
+
 async function baixarDaApi(url, opcoes, nomePadrao) {
   const r = await fetch(url, { method: 'POST', credentials: 'same-origin', ...opcoes });
   if (r.status === 401) { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou.'); }
@@ -938,7 +1105,8 @@ function limparTela() {
     conferi: false, justificativa: '', abas: [], aba: '',
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
-  for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro', 'roteiro',
+  Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {} });
+  for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
     'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria'])
     $(id).replaceChildren();
   $('arquivo').value = '';
@@ -1025,13 +1193,15 @@ function escolherPlanilha(arquivo) {
 
 async function mostrarResultado(resultado, origem, formulario) {
   estado.resultado = resultado; estado.origem = origem; estado.formulario = formulario;
-  estado.avisos = Object.fromEntries(resultado.municipios.map(m => [m.codigo_ibge, m.texto_final || m.aviso]));
+  Object.assign(estado, { envios: [], sugestao: {}, escolha: {} });
+  estado.avisos = Object.fromEntries(resultado.municipios.map(m => [m.codigo_ibge, textoAviso(m)]));
   estado.finais = Object.fromEntries(resultado.municipios.filter(m => m.texto_final).map(m => [m.codigo_ibge, m.texto_final]));
   desenharResultado(); desenharConcessao();
   await Promise.all(resultado.municipios.filter(m => !estado.territorios[m.codigo_ibge]).map(async m => {
     estado.territorios[m.codigo_ibge] = await api(`/api/municipios/${m.codigo_ibge}/comunidades`);
   }));
   desenharComunidades(); desenharUcs(); desenharBase(); desenharNomes();
+  await carregarEnvios();
 }
 
 // 1º passo (Conferir): a planilha vai ao servidor, que devolve a conferência e o pacote assinado (15 min).
@@ -1208,8 +1378,8 @@ async function acao(evento) {
     catch (e) { avisar('Não foi possível copiar; selecione o texto e use Ctrl+C.', true); }
     await guardarFinal(codigo);
   } else if (b.dataset.acao === 'restaurar') {
-    estado.avisos[codigo] = m.aviso;
-    $(`aviso-${codigo}`).value = m.aviso;
+    estado.avisos[codigo] = textoGerado(m);
+    $(`aviso-${codigo}`).value = textoGerado(m);
     desenharTempo(codigo);
   } else if (b.dataset.acao === 'ouvir' || b.dataset.acao === 'audio') {
     b.disabled = true;
@@ -1227,17 +1397,18 @@ async function acao(evento) {
     } finally {
       b.disabled = false;
     }
-  } else if (b.dataset.acao === 'pdf') {
-    await desenharRoteiro(codigo);
-    await guardarFinal(codigo);
-    if (estado.resultado.id) {   // o PDF fica registrado na auditoria
-      try { await api(`/api/historico/${estado.resultado.id}/municipios/${codigo}/pdf`, { method: 'POST' }); }
-      catch (e) { if (e.status !== 401) avisar(e.message, true); return; }
+  } else if (b.dataset.acao === 'pdf') {   // o PDF é gerado no servidor, com o texto editado, e fica na auditoria
+    b.disabled = true;
+    try {
+      await baixarDaApi(`/api/historico/${estado.resultado.id}/municipios/${codigo}/pdf`, { headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: estado.avisos[codigo] }) }, `farol-aviso-${codigo}.pdf`);
+      await guardarFinal(codigo);
+      avisar(`PDF de ${m.nome} baixado (registrado na auditoria).`);
+    } catch (e) {
+      if (e.status !== 401) avisar(e.message, true);
+    } finally {
+      b.disabled = false;
     }
-    const titulo = document.title;
-    document.title = `Farol - aviso ${m.nome} ${estado.formulario.data.replace('/', '-')}`;  // nome sugerido do PDF
-    window.print();
-    document.title = titulo;
   }
 }
 
@@ -1267,22 +1438,24 @@ async function acaoAviso(evento) {
   if (!b) return;
   const r = estado.resultado;
   try {
-    let a;
+    let a, feito;
     if (b.dataset.aviso === 'data') {
       const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
       if (!d || !i || !f || f <= i) return avisar('Informe a nova data e um horário de fim depois do início.', true);
       a = await api(`/api/historico/${r.id}/data`, { method: 'POST', json: { data: dataTexto(d), horario: `${horaTexto(i)} às ${horaTexto(f)}` } });
-      avisar(`Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`);
+      feito = `Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`;
     } else {
       const motivo = $('motivoCancelar').value.trim();
       if (motivo.length < 3) return avisar('Escreva o motivo do cancelamento.', true);
       if (!confirm(`Cancelar o desligamento do aviso nº ${r.id}? O aviso fica no histórico, marcado como cancelado.`)) return;
       a = await api(`/api/historico/${r.id}/cancelar`, { method: 'POST', json: { motivo } });
-      avisar(`Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`);
+      feito = `Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`;
     }
-    await mostrarResultado(doHistorico(a), 'historico', { data: a.data, dataLonga: a.data, horario: a.horario, idioma: a.idioma });
+    // a lista e o aviso aberto primeiro; a mensagem de pronto só depois de tudo redesenhado
     estado.historico = estado.historico.map(x => x.id === a.id ? a : x);
     desenharHistorico();
+    await mostrarResultado(doHistorico(a), 'historico', { data: a.data, dataLonga: a.data, horario: a.horario, idioma: a.idioma });
+    avisar(feito);
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   }
@@ -1387,6 +1560,9 @@ async function abrir() {
   $('buscaHistorico').addEventListener('input', e => { estado.filtroHistorico.busca = e.target.value; desenharHistorico(); });
   $('periodoHistorico').addEventListener('change', e => { estado.filtroHistorico.periodo = e.target.value; desenharHistorico(); });
   $('municipios').addEventListener('click', acao);
+  $('municipios').addEventListener('click', acaoEnvio);
+  $('municipios').addEventListener('input', editarEnvio);
+  $('municipios').addEventListener('change', editarEnvio);
   $('municipios').addEventListener('input', editar);
   $('listaHistorico').addEventListener('click', abrirHistorico);
   $('formUsuario').addEventListener('submit', cadastrarUsuario);

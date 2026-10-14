@@ -18,6 +18,8 @@ PERMISSOES = {
     "gerenciar_empresas": {"admin_farol"},
     "ver_registro": {"admin_farol", "admin_empresa"},
     "baixar_json": {"admin_empresa", "operador"},   # o JSON da planilha com os números de UC (auditado)
+    "gerenciar_radios": {"admin_empresa"},          # alterar e desativar rádios (o Operador só acrescenta, no envio)
+    "configurar_empresa": {"admin_empresa"},        # modelo da mensagem, telefone, limite de rejeição, fuso UTM, antecedência
 }
 
 SENHA_MIN, SENHA_MAX = 12, 128

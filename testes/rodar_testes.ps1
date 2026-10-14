@@ -26,6 +26,7 @@ $testes = @(
     @{ Nome = "Acesso (login, perfis)";        Cmd = "uv run python -W ignore testes/api/teste_acesso.py" },
     @{ Nome = "Matriz rota x perfil";          Cmd = "uv run python -W ignore testes/api/teste_matriz.py" },
     @{ Nome = "Auditoria encadeada";           Cmd = "uv run python -W ignore testes/api/teste_auditoria.py" },
+    @{ Nome = "Rádio, envio e cofre (Mailpit)"; Cmd = "uv run python -W ignore testes/api/teste_radio.py" },
     @{ Nome = "Áudio (MP3)";                   Cmd = "uv run python -W ignore testes/api/teste_audio.py" },
     @{ Nome = "Admin (modelo, Node)";          Cmd = "node testes/admin/teste_modelo.mjs" },
     @{ Nome = "Minimização Leopoldina";        Cmd = "uv run python -m comunidades.validacao.minimizacao" },

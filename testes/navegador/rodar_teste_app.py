@@ -40,7 +40,7 @@ for email in ("admin@emg.example", "consulta@emg.example", "admin@farol.example"
     senhas[email] = f"Teste-{secrets.token_urlsafe(9)}"
     banco.definir_senha(banco.usuario_por_email(email)["id"], hash_senha(senhas[email]), trocar_senha=False)
 
-env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+env = {**os.environ, "PYTHONIOENCODING": "utf-8", "FAROL_EMAIL": "0"}   # o e-mail ligado é testado em testes/api/teste_radio.py
 api = subprocess.Popen([sys.executable, "-m", "uvicorn", "comunidades.api.app:app", "--host", "127.0.0.1", "--port", str(PORTA), "--no-proxy-headers"],
                        env=env, cwd=RAIZ, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:

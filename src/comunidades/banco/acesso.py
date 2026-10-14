@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from psycopg.rows import dict_row
 
 from ..nucleo import auditoria
+from . import radios
 from .conexao import conectar, esquema
 
 ESQUEMA = """
@@ -111,6 +112,7 @@ def criar_esquema() -> None:
         c.execute(ESQUEMA)
         _encadear_antigas(c)
         c.execute(SO_INCLUSAO)
+        radios.criar_esquema(c)   # rádios, configuração da empresa e envios (dependem de empresa, usuário e aviso)
 
 
 def _encadear_antigas(c) -> None:
@@ -324,6 +326,12 @@ def avisos(empresa_id: int, limite: int = 100) -> list[dict]:
 def aviso(id_: int, empresa_id: int) -> dict | None:
     return _um(f"SELECT {AVISO} FROM aviso a LEFT JOIN usuario u ON u.id = a.usuario_id"
                " WHERE a.id = %s AND a.empresa_id = %s", (id_, empresa_id))
+
+
+def atualizar_municipios(id_: int, empresa_id: int, municipios: list) -> None:
+    """Os municípios do aviso com a mensagem final (que só tem o código depois de gravado o aviso)."""
+    _executar("UPDATE aviso SET municipios = %s WHERE id = %s AND empresa_id = %s",
+              (json.dumps(municipios, ensure_ascii=False), id_, empresa_id))
 
 
 def cancelar_aviso(id_: int, empresa_id: int) -> bool:

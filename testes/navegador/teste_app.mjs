@@ -12,6 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import { abrir } from './cdp.mjs';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -33,6 +34,14 @@ const registrarRede = lista => async pg => { await pg.send('Network.enable'); pg
 // blob: do próprio site é o MP3 já baixado, tocado da memória (não sai pela rede)
 const externa = u => !u.startsWith(BASE + '/') && !u.startsWith('https://server.arcgisonline.com/') && !u.startsWith('data:') && !u.startsWith('blob:' + BASE + '/');
 // espera uma condição na página (expressão JS), até 60 s
+// o texto de um PDF do fpdf2: os fluxos comprimidos (zlib) e os textos entre parênteses (Latin-1)
+function textoDoPdf(buf) {
+  const s = buf.toString('latin1'), partes = [];
+  for (const m of s.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try { partes.push(inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1')); } catch (e) { /* imagem ou fluxo sem zlib */ }
+  }
+  return partes.join('\n').split('\n').map(l => [...l.matchAll(/\(((?:\\.|[^\\)])*)\)/g)].map(x => x[1].replace(/\\(.)/g, '$1')).join('')).filter(Boolean).join(' ');
+}
 const ate = (p, expr) => p.avaliar(`new Promise(ok => { const t0 = Date.now(), ver = () => {
   let v; try { v = (${expr}); } catch (e) { v = false; }
   if (v || Date.now() - t0 > 60000) ok(!!v); else setTimeout(ver, 100); }; ver(); })`);
@@ -68,10 +77,10 @@ const login = await fetch(`${BASE}/api/entrar`, { method: 'POST', headers: { 'Co
 const cookie = login.headers.get('set-cookie').split(';')[0];
 const fd = new FormData();
 fd.append('arquivo', new Blob([readFileSync(PLANILHA)]), 'planilha_CF-0066.csv');
-fd.append('data', '20/11'); fd.append('horario', '8h às 14h'); fd.append('idioma', 'pt-BR');
+fd.append('data', '20/11'); fd.append('horario', '8h às 14h'); fd.append('idioma', 'pt-BR'); fd.append('tipo', 'poda');
 const conf = await (await fetch(`${BASE}/api/planilha`, { method: 'POST', body: fd, headers: { cookie, origin: BASE } })).json();
 const esperado = await (await fetch(`${BASE}/api/avisos`, { method: 'POST', headers: { cookie, origin: BASE, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ pacote: conf.pacote, data: '20/11', horario: '8h às 14h', idioma: 'pt-BR', conferi: true }) })).json();
+  body: JSON.stringify({ pacote: conf.pacote, data: '20/11', horario: '8h às 14h', idioma: 'pt-BR', conferi: true, tipo: 'poda' }) })).json();
 const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boolean).map(l => l.split(';'));
 
 // ---------- 1. Operador: entrar, trocar a senha, gerar o aviso, PDF e histórico ----------
@@ -177,8 +186,9 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const tela = await p.avaliar(`({ avisos: [...document.querySelectorAll('#municipios textarea')].map(t => t.value),
     titulos: [...document.querySelectorAll('.mun-cab h3')].map(h => h.textContent),
     comunidades: camadaComunidades ? camadaComunidades.getLayers().length : 0, resumo: $('resumo').textContent.replace(/\\s+/g, ' ') })`);
-  conferir('o aviso de cada município é idêntico ao da API', JSON.stringify(tela.avisos) === JSON.stringify(esperado.municipios.map(m => m.aviso)),
-    `\n  tela: ${JSON.stringify(tela.avisos)}\n  API:  ${JSON.stringify(esperado.municipios.map(m => m.aviso))}`);
+  conferir('a mensagem da rádio de cada município é idêntica à da API (modelo da empresa)',
+    JSON.stringify(tela.avisos) === JSON.stringify(esperado.municipios.map(m => m.mensagem)) && esperado.municipios.every(m => /^Atenção, ouvintes\./.test(m.mensagem)),
+    `\n  tela: ${JSON.stringify(tela.avisos)}\n  API:  ${JSON.stringify(esperado.municipios.map(m => m.mensagem))}`);
   conferir('municípios na ordem da API', JSON.stringify(tela.titulos) === JSON.stringify(esperado.municipios.map(m => `${m.nome}/${m.uf}`)), JSON.stringify(tela.titulos));
   conferir('mapa: comunidades afetadas desenhadas', tela.comunidades >= 8, String(tela.comunidades));
   const contornos = await p.avaliar(`camadaComunidades.getLayers().filter(l => !l.feature.properties.c).length`);
@@ -230,7 +240,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     economia: document.querySelector('#comparativo .comp .comp-economia')?.textContent, numeros: document.querySelector('#comparativo .comp-lado.hoje .comp-numeros')?.textContent })`);
   const m0 = esperado.municipios[0];
   conferir('comparativo: o aviso de hoje igual ao da API, ao lado do aviso por comunidade, com a economia de tempo',
-    comp.textos[0]?.[0] === m0.hoje?.texto && comp.textos[0]?.[1] === m0.aviso && /^\d+% menos tempo no ar$/.test(comp.economia || '')
+    comp.textos[0]?.[0] === m0.hoje?.texto && comp.textos[0]?.[1] === m0.mensagem && /^\d+% menos tempo no ar$/.test(comp.economia || '')
     && comp.numeros?.startsWith(`${m0.hoje.locais} locais`), JSON.stringify({ economia: comp.economia, numeros: comp.numeros, hoje: comp.textos[0]?.[0]?.slice(0, 80) }));
   await captura(p, '7_comparativo.png');
   await p.avaliar(`(document.querySelector('#comparativo [data-comp="hoje"]').click(), 0)`);
@@ -267,21 +277,53 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     estado.config.audio = true; desenharResultado(); desenharComparativo(); return r; })()`);
   conferir('sem a voz no servidor: nenhum botão de áudio e o aviso na tela', !semVoz.botoes && semVoz.aviso, JSON.stringify(semVoz));
 
-  // PDF: o que o botão faz antes de abrir a impressão (roteiro + texto final no histórico)
-  await p.avaliar(`desenharRoteiro('${cod}').then(() => guardarFinal('${cod}'))`);
-  const roteiro = await p.avaliar(`$('roteiro').textContent`);
+  // PDF: gerado no servidor com o texto editado (o arquivo é baixado; o texto final vai para o histórico)
+  let nomePdf = '';
+  p.navegador.on('Browser.downloadWillBegin', e => { if (e.suggestedFilename.endsWith('.pdf')) nomePdf = e.suggestedFilename; });
+  await p.avaliar(`(document.querySelector('[data-acao=pdf][data-codigo="${cod}"]').click(), 0)`);
+  await ate(p, `/PDF de .* baixado/.test($('estado').textContent)`);
+  await espera(800);
+  const bytesPdf = nomePdf ? readFileSync(join(CAP, nomePdf)) : Buffer.alloc(0);
+  const roteiro = textoDoPdf(bytesPdf);
+  writeFileSync(join(CAP, 'roteiro_leopoldina.txt'), roteiro);
   conferir('roteiro: "Solicitado por" com o código FRL e o tipo do desligamento', /Solicitado por Operador da EMG \(Operador\) em .* código de verificação FRL-/.test(roteiro)
-    && roteiro.includes('Poda de árvores'), roteiro.slice(0, 300));
+    && roteiro.includes('poda de árvores'), roteiro.slice(-400));
   conferir('roteiro: texto editado, município, data, nº do aviso e código de verificação', roteiro.includes('Mais informações pelo telefone')
-    && roteiro.includes('Leopoldina/MG') && roteiro.includes('20/11/2026') && /aviso nº \d+/.test(roteiro) && /SHA-256\): [0-9a-f]{16}/.test(roteiro), roteiro.slice(0, 200));
+    && roteiro.includes('Leopoldina/MG') && roteiro.includes('em 20/11, das 8h às 14h') && /aviso nº \d+/.test(roteiro) && /SHA-256\): [0-9a-f]{16}/.test(roteiro), roteiro.slice(-300));
   const repetido = roteiro.match(/\(([^()]+)\) \(\1\)/);
   conferir('roteiro: homônimos com o distrito uma vez só', !repetido, repetido?.[0]);
   conferir('texto final guardado no histórico (selo na tela)', /guardado no histórico/.test(await p.avaliar(`$('final-${cod}').textContent`)));
-  await p.send('Emulation.setEmulatedMedia', { media: 'print' });
-  const pdf = await p.send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
-  await p.send('Emulation.setEmulatedMedia', { media: '' });
-  writeFileSync(join(CAP, 'roteiro_leopoldina.pdf'), Buffer.from(pdf.data, 'base64'));
-  conferir('PDF do roteiro gerado', pdf.data.length > 10_000, `${Math.round(pdf.data.length * .75 / 1024)} KB`);
+  conferir('PDF do roteiro gerado no servidor e baixado', bytesPdf.subarray(0, 5).toString() === '%PDF-' && /^farol-aviso-leopoldina-20-11\.pdf$/.test(nomePdf),
+    `${nomePdf} ${bytesPdf.length} bytes`);
+
+  // envio para a rádio: sem rádio cadastrada, o alerta; "+ Nova rádio"; valor e economia; WhatsApp e cópia (e-mail desligado aqui)
+  const semRadio = await p.avaliar(`document.querySelector('#envio-${cod} .alerta-amarelo')?.textContent || ''`);
+  conferir('envio: sem rádio cadastrada, o alerta lista as comunidades', /^Sem rádio cadastrada para: .+\(.+\)/.test(semRadio), semRadio.slice(0, 120));
+  await p.avaliar(`(() => { const s = document.querySelector('#envio-${cod} select[data-envio=radioId]'); s.value = 'nova'; s.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
+  await p.avaliar(`(() => { const f = (n, v) => { const i = document.querySelector('#envio-${cod} [data-nova=' + n + ']'); i.value = v; i.dispatchEvent(new Event(i.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
+    f('nome', 'Rádio Leopoldina FM (demonstração)'); f('email', 'leopoldina.fm@example.com'); f('whatsapp', '(32) 99999-0001'); f('valor', '150,00'); f('cobranca', 'minuto');
+    document.querySelector('#envio-${cod} [data-envio-acao=salvar-radio]').click(); return 0; })()`);
+  await ate(p, `/cadastrada/.test($('estado').textContent) && document.querySelector('#envio-${cod} [data-envio=valor]')`);
+  conferir('envio: sem SMTP neste servidor, sem o botão de e-mail e com o aviso', await p.avaliar(`!document.querySelector('#envio-${cod} [data-envio-acao=email]')
+    && /desligado neste servidor/.test($('envio-${cod}').textContent)`));
+  const previa = await p.avaliar(`$('previa-${cod}').textContent`);
+  conferir('"+ Nova rádio": cadastrada, sugerida com o valor padrão; prévia com a economia calculada pelo tempo no ar',
+    await p.avaliar(`document.querySelector('#envio-${cod} [data-envio=valor]').value === '150,00' && !document.querySelector('#envio-${cod} .alerta-amarelo')`)
+    && /^custo R\$\s?[\d.,]+ · economia calculada R\$\s?[\d.,]+ · .+ a menos no ar$/.test(previa), previa);
+  await p.avaliar(`(() => { const i = document.querySelector('#envio-${cod} [data-envio=cobranca]'); i.value = 'fechado'; i.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
+  const previaFechado = await p.avaliar(`$('previa-${cod}').textContent`);
+  conferir('valor fechado sem o custo antigo: a prévia não inventa economia', /economia: só com o aviso de hoje ou o custo antigo informado/.test(previaFechado), previaFechado);
+  await p.avaliar(`(() => { const i = document.querySelector('#envio-${cod} [data-envio=cobranca]'); i.value = 'minuto'; i.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
+  await p.avaliar(`(window.__aberto = [], window.open = u => { window.__aberto.push(u); return null; }, window.confirm = () => true,
+    navigator.clipboard.writeText = async () => {}, document.querySelector('#envio-${cod} [data-envio-acao=whatsapp]').click(), 0)`);
+  await ate(p, `/WhatsApp aberto/.test($('estado').textContent) && document.querySelectorAll('#envio-${cod} .envios li').length === 1`);
+  const wa = await p.avaliar(`window.__aberto[0] || ''`);
+  conferir('WhatsApp: abre wa.me com o número da rádio e a mensagem; o envio fica na lista com valor e economia',
+    wa.startsWith('https://wa.me/5532999990001?text=Aten%C3%A7%C3%A3o%2C%20ouvintes.') && /economia calculada/.test(await p.avaliar(`$('envio-${cod}').textContent`)), wa.slice(0, 80));
+  await p.avaliar(`(document.querySelector('#envio-${cod} [data-envio-acao=copia]').click(), 0)`);
+  await ate(p, `document.querySelectorAll('#envio-${cod} .envios li').length === 2`);
+  conferir('copiar a mensagem: o envio fica registrado', /cópia da mensagem/.test(await p.avaliar(`$('envio-${cod}').textContent`)));
+  await captura(p, '2e_envio_radio.png');
   await p.avaliar(`($('novoAviso').click(), 0)`);
   conferir('Novo desligamento: volta ao passo 1, sem o resultado anterior na tela nem no mapa', await p.avaliar(`estado.passo === 1
     && !estado.resultado && $('resultado').hidden && !camadaUcs && !camadaComunidades && !$('municipios').children.length && !estado.arquivo`));
@@ -324,8 +366,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('histórico: quem gera aviso vê "Mudar a data" e "Cancelar"', await p.avaliar(`!$('acoesAviso').hidden && !!document.querySelector('[data-aviso=cancelar]')`));
   await p.avaliar(`($('novaData').value = '2026-11-21', $('novoInicio').value = '09:00', $('novoFim').value = '15:00', document.querySelector('[data-aviso=data]').click(), 0)`);
   await ate(p, `$('estado').textContent.includes('mudada para 21/11')`);
-  conferir('mudar a data: o aviso e o cartão do histórico com a data nova', await p.avaliar(`estado.resultado.municipios.length > 0
-    && $('tituloResultado').textContent.includes('21/11, 9h às 15h') && $('listaHistorico').textContent.includes('21/11, 9h às 15h')`));
+  const md = await p.avaliar(`({ n: estado.resultado.municipios.length, titulo: $('tituloResultado').textContent, lista: $('listaHistorico').textContent.slice(0, 300), estado: $('estado').textContent })`);
+  conferir('mudar a data: o aviso e o cartão do histórico com a data nova', md.n > 0 && md.titulo.includes('21/11, 9h às 15h') && md.lista.includes('21/11, 9h às 15h'), JSON.stringify(md));
   await p.avaliar(`(window.confirm = () => true, $('motivoCancelar').value = 'chuva forte prevista', document.querySelector('[data-aviso=cancelar]').click(), 0)`);
   await ate(p, `/cancelado/.test($('estado').textContent)`);
   conferir('cancelar: marcado como cancelado, sem as ações, o chip no histórico', await p.avaliar(`estado.resultado.status === 'cancelado'
@@ -379,6 +421,9 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('Consulta: aviso só para ler (sem editar, desfazer nem PDF para a rádio)', leitura.readonly && !leitura.desfazer && leitura.pdf === 0, JSON.stringify(leitura));
   conferir('Consulta: vê quem pediu e o código, sem mudar a data nem cancelar', /^Solicitado por .+ código de verificação FRL-/.test(await p.avaliar(`$('solicitado').textContent`))
     && await p.avaliar(`$('acoesAviso').hidden`));
+  await ate(p, `document.querySelectorAll('.envio-radio .envios li').length || document.querySelectorAll('[data-historico]').length > 1`);
+  const envCon = await p.avaliar(`({ lista: document.querySelectorAll('.envio-radio .envios li').length, form: document.querySelectorAll('.envio-radio select, [data-envio-acao]').length })`);
+  conferir('Consulta: vê os envios do aviso, sem o formulário de envio', envCon.form === 0, JSON.stringify(envCon));
   conferir('Consulta: nenhum ponto de UC no mapa', await p.avaliar(`!camadaUcs && $('botaoUcs').closest('li').hidden`));
   conferir('Consulta: a API recusa gerar aviso (403)', await p.avaliar(`fetch('/api/avisos', { method: 'POST' }).then(r => r.status === 403)`));
   const semAudio = await p.avaliar(`(() => { desenharComparativo();
@@ -403,6 +448,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await ate(p, `document.querySelectorAll('#listaRegistro tbody tr').length`);
   const reg = await p.avaliar(`[...document.querySelectorAll('#listaRegistro tbody tr')].map(t => t.textContent).join(' | ')`);
   conferir('registro da empresa: cadastro de usuário, aviso gerado e texto final', /cadastrou usuário/.test(reg) && /gerou aviso/.test(reg) && /guardou o texto final/.test(reg), reg.slice(0, 200));
+  conferir('auditoria da empresa: PDF, rádio cadastrada, valor informado e envio por WhatsApp', /gerou PDF/.test(reg) && /cadastrou rádio/.test(reg)
+    && /informou o valor do envio/.test(reg) && /enviou por WhatsApp/.test(reg), reg.slice(0, 300));
   conferir('auditoria da empresa: importou, conferiu, mudou a data e cancelou, com o nome e o perfil de quem fez',
     /importou planilha/.test(reg) && /conferiu os números e o mapa/.test(reg) && /Operador da EMG \(Operador\)/.test(reg)
     && /mudou a data do aviso/.test(reg) && /cancelou o aviso/.test(reg) && /FRL-[0-9A-F]{4}/.test(reg), reg.slice(0, 300));

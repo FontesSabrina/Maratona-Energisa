@@ -188,7 +188,7 @@ conferir("Admin do Farol acha o código de qualquer empresa", far.get(f"/api/ver
 
 # renomear o usuário depois não muda o passado
 sql("UPDATE usuario SET nome = 'Operador Renomeado' WHERE email = 'operador@emg.example'")
-op.post(f"/api/historico/{j['id']}/municipios/3138401/pdf")
+op.post(f"/api/historico/{j['id']}/municipios/3138401/pdf", json={"texto": "Texto do aviso para a rádio."})
 nomes = [n for (n,) in sql("SELECT usuario_nome FROM registro WHERE usuario_id = (SELECT id FROM usuario WHERE email = 'operador@emg.example') ORDER BY id")]
 conferir("renomear o usuário: linhas antigas com o nome antigo; a nova (gerou PDF) com o nome novo",
          nomes[0] == "Operador da EMG" and nomes[-1] == "Operador Renomeado" and op.get(f"/api/historico/{j['id']}").json()["usuario"] == "Operador da EMG",
