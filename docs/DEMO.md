@@ -4,7 +4,7 @@ Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádi
 
 ## Antes de começar (uma vez, na véspera)
 
-1. Banco e dados prontos (README, passos 3 a 5), inclusive `uv run python -m comunidades.semente_demo` (para os relatórios terem um mês e meio de histórico).
+1. Banco e dados prontos (README, passos 3 a 5), inclusive `uv run python -m comunidades.semente_demo` (para os relatórios terem o ano inteiro de histórico fictício: o mês e meio recente e, de janeiro até ali, uns 3 avisos por mês, uma rádio cara, um mês com preço fora da curva, repetições, avisos fora do prazo, envios sem confirmação e um orçamento anual de rádio de R$ 15.000). Banco antigo: rode antes `uv run python -m comunidades.semente` (cria as colunas e a tabela novas; não mexe no que existe).
 2. Senhas: a semente mostra as senhas temporárias uma vez. Entre com cada usuário e crie a senha de cada um antes da apresentação. Senha perdida: `uv run python -m comunidades.semente --nova-senha EMAIL`.
 
 | Perfil | E-mail |
@@ -28,11 +28,12 @@ Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádi
 | 1:15 | Volte ao passo 1 → `2_coordenadas_corrigidas.xlsx` → Conferir | 6 linhas corrigidas em roxo no mapa; os "?" explicam corrigida e rejeitada. Marque **Conferi os números e o mapa** → **Gerar aviso**. |
 | 1:45 | Passo 4 (Avisos): a mensagem pelo modelo da empresa, **Ouvir**, **Baixar PDF para a rádio** | "Solicitado por Operador da EMG (Operador) · código FRL-…": tudo fica na auditoria. |
 | 2:10 | **Enviar para a rádio** → Rádio Leopoldina FM (sugerida pelo alcance), valor por minuto → prévia da economia → **Enviar por e-mail** (confirmação) | Na aba do Mailpit: o e-mail com PDF e MP3 → **Confirmar recebimento** → de volta ao Farol, o envio aparece como "a rádio confirmou". |
-| 3:00 | **Relatórios**: Painel do mês, Do período (custo, economia calculada x informada, % no prazo, fora do prazo) → **Baixar PDF** | "Nenhum número inventado: sem o aviso de hoje ou o custo antigo, não há economia." |
+| 3:00 | **Relatórios** → **Custos por rádio** (período: ano): gasto mês a mês com a projeção até dezembro (a conta escrita), orçamento usado, a rádio cara no ranking e o alerta de preço → **Baixar PDF** (rodapé com o seu nome, o código FRL e "página X de Y"; a última página é "Como calculamos") | "Nenhum número inventado: a projeção é o acumulado mais a média dos meses fechados vezes os meses que faltam, e a conta está no relatório." |
+| 3:25 | No mapa, aproxime em Leopoldina → **Mapa de calor (12 meses)** → clique numa comunidade vermelha (ex.: Braúna) | A ficha da comunidade: desligamentos, horas sem luz, rádios que alcançam, último e próximo → **Relatório desta comunidade (PDF)**. "Na hora de gerar um aviso, o Farol avisa em amarelo se a comunidade já teve 3 desligamentos em 30 dias." |
 | 3:40 | Entre como **Admin da empresa**: **Rádios** (alcance por comunidade com o distrito), **Configurações** (modelo da mensagem com a prévia), **Auditoria** → **Conferir a integridade** | "A auditoria não se apaga nem se edita: cada linha guarda o código da anterior." |
-| 4:20 | Entre como **Consulta**: **Mapa**, um aviso do **Histórico** → **Comprovante (PDF)** | "Quem só consulta vê os comprovantes, mas não gera nem envia nada." |
+| 4:20 | Entre como **Consulta**: **Mapa**, um aviso do **Histórico** → **Comprovante (PDF)** e **Linha do tempo** | "Quem só consulta baixa comprovantes e relatórios, mas não gera aviso nem envia nada. A linha do tempo mostra tudo o que aconteceu com o aviso, com nome e perfil." |
 | 4:40 | Entre como **Admin do Farol**: **Empresas** (CNPJ, suspender), **Auditoria geral** | "Várias distribuidoras no mesmo Farol, cada uma isolada." |
-| 5:00 | Fim | "Tudo testado: 21 baterias, 980 verificações, a matriz de cada rota com cada perfil." |
+| 5:00 | Fim | "Tudo testado: 23 baterias de teste, a matriz de cada rota com cada perfil e um teste que confere que toda rota que muda, baixa ou gera grava na auditoria." |
 
 ## Se sobrar tempo ou alguém perguntar
 
@@ -40,4 +41,8 @@ Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádi
 - `5_maliciosa_macro.xlsx`: um .xlsx com macro, recusado na porta. Nada é lido nem gravado.
 - `1_correta.xlsx`: nenhum alerta. O caminho feliz em 30 segundos.
 - **Tema escuro**: botão no topo; o fundo do mapa acompanha.
-- **Código de verificação**: copie o FRL-… de um relatório. Na API, `/api/verificar/FRL-...` mostra quem gerou e quando.
+- **Código de verificação**: copie o FRL-… de um relatório. Na API, `/api/verificar/FRL-...` mostra quem gerou, quando e o SHA-256 do PDF.
+- **Segunda via**: em Relatórios, "Segundas vias" → **Baixar a via**: o mesmo PDF (mesmo SHA-256), guardado cifrado.
+- **Enviar um relatório por e-mail** (Operador ou Admin da empresa): só para endereços `@emg.example`, até 5, com confirmação; chega no Mailpit com o PDF anexo e fica na auditoria com os destinatários. Um endereço de fora (ex.: `@gmail.com`) é recusado.
+- **Outros relatórios**: Mensal (diretoria, com ↑↓ % contra o mês anterior e o mesmo mês do ano passado), Comunidades mais afetadas (rankings, repetição, evolução das 10 mais) e Prazos (% no prazo por mês, município, tipo e pessoa; atrasados e em risco).
+- **Auditoria** (Admin da empresa): filtro por tipo de ação e pessoa, **Ver o relatório** (logins, antes → depois, resumo por pessoa, verificação da corrente), PDF, CSV, JSON e **Enviar**.

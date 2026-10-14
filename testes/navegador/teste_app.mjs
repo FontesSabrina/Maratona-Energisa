@@ -12,7 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inflateSync } from 'node:zlib';
+import { constants as zlibConst, inflateSync } from 'node:zlib';
 import { abrir } from './cdp.mjs';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -37,8 +37,9 @@ const externa = u => !u.startsWith(BASE + '/') && !u.startsWith('https://server.
 // o texto de um PDF do fpdf2: os fluxos comprimidos (zlib) e os textos entre parênteses (Latin-1)
 function textoDoPdf(buf) {
   const s = buf.toString('latin1'), partes = [];
-  for (const m of s.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
-    try { partes.push(inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1')); } catch (e) { /* imagem ou fluxo sem zlib */ }
+  // até endstream, sem exigir o \r\n antes (um \r no fim dos dados comprimidos não corta o fluxo); o que sobra depois do zlib é ignorado
+  for (const m of s.matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
+    try { partes.push(inflateSync(Buffer.from(m[1], 'latin1'), { finishFlush: zlibConst.Z_SYNC_FLUSH }).toString('latin1')); } catch (e) { /* imagem ou fluxo sem zlib */ }
   }
   return partes.join('\n').split('\n').map(l => [...l.matchAll(/\(((?:\\.|[^\\)])*)\)/g)].map(x => x[1].replace(/\\(.)/g, '$1')).join('')).filter(Boolean).join(' ');
 }
@@ -406,16 +407,24 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const relTela = await p.avaliar(`({ titulo: document.querySelector('#relatorio .subtitulo')?.textContent, kpi: document.querySelector('#relatorio .kpi-valor')?.textContent,
     blocos: [...document.querySelectorAll('#relatorio .dash-bloco h2')].map(h => h.textContent), radios: $('relRadio').options.length,
     texto: $('relatorio').textContent })`);
-  conferir('relatórios: o do mês na tela (resumo, por tipo, por rádio, comunidades, prazo, como a economia foi calculada e a lista)',
-    relTela.kpi === '1' && /1 cancelado/.test(relTela.texto) && relTela.blocos.includes('Por rádio') && relTela.blocos.includes('Como a economia foi calculada') && relTela.blocos.includes('Lista detalhada')
-    && relTela.radios === 2 && /Rádio Leopoldina FM/.test(relTela.texto) && !/\b3\d{9}\b/.test(relTela.texto), JSON.stringify({ ...relTela, texto: relTela.texto.slice(0, 120) }));
+  conferir('relatórios: o mensal na tela (resumo com comparações, gráficos, por rádio, ocorrências, Como calculamos e o anexo)',
+    relTela.kpi === '1' && /Relatório mensal/.test(relTela.titulo) && /cancel/i.test(relTela.texto) && relTela.blocos.includes('Resumo por rádio')
+    && relTela.blocos.includes('Como calculamos') && relTela.blocos.some(b => /^Anexo/.test(b)) && relTela.blocos.some(b => /^Gasto mês a mês/.test(b))
+    && relTela.radios === 2 && /Rádio Leopoldina FM/.test(relTela.texto) && !/\b3\d{9}\b/.test(relTela.texto),
+    JSON.stringify({ radios: relTela.radios, leo: /Rádio Leopoldina FM/.test(relTela.texto), uc: /\b3\d{9}\b/.exec(relTela.texto)?.[0],
+      fim: relTela.blocos.slice(-2) }));
+  const largura = await p.avaliar(`(() => { const pn = document.querySelector('.painel');
+    const largos = [...pn.querySelectorAll('*')].filter(e => e.getBoundingClientRect().right > pn.getBoundingClientRect().right + 1 && !e.closest('.rolagem'))
+      .slice(0, 4).map(e => e.tagName + '.' + e.className + ' ' + Math.round(e.getBoundingClientRect().width));
+    return { sobra: pn.scrollWidth - pn.clientWidth, largos }; })()`);
+  conferir('relatórios: nada passa da largura do painel (sem rolagem lateral; tabelas rolam dentro do quadro)', largura.sobra <= 0, JSON.stringify(largura));
   let nomeRel = '';
-  p.navegador.on('Browser.downloadWillBegin', e => { if (/relatorio/.test(e.suggestedFilename)) nomeRel = e.suggestedFilename; });
+  p.navegador.on('Browser.downloadWillBegin', e => { if (/farol-mensal/.test(e.suggestedFilename)) nomeRel = e.suggestedFilename; });
   await p.avaliar(`(document.querySelector('[data-rel=pdf]').click(), 0)`);
   await ate(p, `/Relatório baixado em PDF/.test($('estado').textContent)`);
   await espera(600);
   const relPdf = nomeRel ? textoDoPdf(readFileSync(join(CAP, nomeRel))) : '';
-  conferir('relatório em PDF: gerado pelo Operador, com o código de verificação', /Gerado por Operador da EMG \(Operador\) .* código de verificação FRL-/.test(relPdf),
+  conferir('relatório em PDF: gerado pelo Operador, com o código de verificação', /Gerado por Operador da EMG \(Operador\) em .* Código FRL-.* página 1 de \d+/.test(relPdf),
     `${nomeRel} ${relPdf.slice(0, 160)}`);
   await captura(p, '6b_relatorios.png');
   await p.avaliar(`irPara('historico')`);

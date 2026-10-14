@@ -138,10 +138,21 @@
     <!-- Relatórios: o do período (mensal), com filtros, PDF e CSV -->
     <section id="vista-relatorios" class="vista" hidden aria-labelledby="tituloRelatorios">
       <h1 id="tituloRelatorios">Relatórios</h1>
-      <p class="ajuda">Desligamentos, avisos, envios às rádios, custo e economia do período. Só números agregados: nenhuma UC nem
-        nome de cliente. Ao baixar em PDF ou CSV, o relatório ganha o seu nome e um código de verificação (fica na auditoria).</p>
+      <p class="ajuda">Desligamentos, avisos, envios às rádios, custo, prazo e comunidades. Só números agregados: nenhuma UC nem
+        nome de cliente. Cada relatório (na tela, em PDF, em CSV ou por e-mail) fica na auditoria com o seu nome; o PDF ganha um
+        código de verificação e uma segunda via guardada.</p>
       <form id="formRelatorio" class="cartao filtros-relatorio" novalidate>
-        <label>Mês <select id="relMes"></select></label>
+        <label>Relatório <select id="relQual">
+          <option value="mensal">Mensal (diretoria)</option>
+          <option value="custos">Custos por rádio</option>
+          <option value="comunidades">Comunidades mais afetadas</option>
+          <option value="prazos">Prazos</option>
+        </select></label>
+        <label>Período <select id="relModo"><option value="mes">Mês</option><option value="ano">Ano</option><option value="intervalo">Intervalo</option></select></label>
+        <label id="relMesRotulo">Mês <select id="relMes"></select></label>
+        <label id="relAnoRotulo" hidden>Ano <select id="relAno"></select></label>
+        <label id="relInicioRotulo" hidden>De <input type="date" id="relInicio"></label>
+        <label id="relFimRotulo" hidden>Até <input type="date" id="relFim"></label>
         <label>Município <select id="relMunicipio"><option value="">Todos</option></select></label>
         <label>Tipo <select id="relTipo"><option value="">Todos</option></select></label>
         <label>Rádio <select id="relRadio"><option value="">Todas</option></select></label>
@@ -151,8 +162,18 @@
           <button type="button" data-rel="pdf">Baixar PDF</button>
           <button type="button" data-rel="csv">Baixar CSV</button>
         </div>
+        <div id="relEnviar" class="enviar-relatorio" hidden>
+          <label>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)
+            <input id="relDestinos" maxlength="400" autocomplete="off" inputmode="email" placeholder="diretoria@empresa"></label>
+          <button type="button" data-rel="enviar">Enviar</button>
+        </div>
       </form>
       <div id="relatorio" class="relatorio"></div>
+      <section class="cartao dash-bloco">
+        <h2>Segundas vias</h2>
+        <p class="ajuda">O PDF de cada relatório fica guardado cifrado; a via baixada é idêntica (mesmo SHA-256 do código de verificação).</p>
+        <div id="listaVias"></div>
+      </section>
     </section>
 
     <!-- Comparativo: o aviso de hoje (fazenda a fazenda) x o aviso por comunidade -->
@@ -170,6 +191,7 @@
       <p id="solicitado" class="solicitado"></p>
       <!-- Aviso do histórico: mudar a data ou cancelar (quem gera aviso; tudo vai para a auditoria) -->
       <div id="acoesAviso" class="cartao acoes-aviso" hidden></div>
+      <section id="linhaTempo" class="cartao" hidden aria-label="Linha do tempo do aviso"></section>
       <!-- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" -->
       <div id="conferencia" class="cartao conferencia" hidden></div>
       <div id="resumo" class="cartao resumo"></div>
@@ -242,6 +264,13 @@
           <label>Fuso UTM <select id="cfgFuso"></select></label>
           <label>Antecedência interna (dias) <input type="number" id="cfgAntecedencia" min="1" max="90" step="1"></label>
         </div>
+        <h2>Relatórios e alertas</h2>
+        <div class="campos">
+          <label>Orçamento anual de rádio (R$; vazio: sem orçamento) <input type="number" id="cfgOrcamento" min="0" step="0.01" inputmode="decimal"></label>
+          <label>Alerta de preço (% acima da média da rádio) <input type="number" id="cfgAlertaPreco" min="0" max="500" step="1"></label>
+          <label>Repetição: desligamentos <input type="number" id="cfgRepN" min="2" max="50" step="1"></label>
+          <label>Repetição: em quantos dias <input type="number" id="cfgRepDias" min="7" max="365" step="1"></label>
+        </div>
         <div class="acoes"><button type="submit" class="prim">Salvar</button><button type="button" id="cfgPadrao">Voltar ao modelo padrão</button></div>
         <p id="estadoConfig" class="estado" role="status" aria-live="polite"></p>
       </form>
@@ -278,9 +307,21 @@
         <label>Mês <select id="audMes"></select></label>
         <label id="audEmpresaRotulo" hidden>Empresa (sigla) <input id="audEmpresa" maxlength="10" autocomplete="off" placeholder="todas"></label>
         <label>Pessoa (nome) <input id="audPessoa" maxlength="120" autocomplete="off" placeholder="todas"></label>
+        <label>Tipo de ação <select id="audCategoria">
+          <option value="">Todas</option><option value="acesso">Acessos</option><option value="planilha">Planilha</option>
+          <option value="aviso">Avisos</option><option value="radio">Rádios e envios</option><option value="cadastro">Cadastros e configuração</option>
+          <option value="relatorio">Relatórios</option><option value="outros">Outras</option>
+        </select></label>
         <label class="confirmar" for="audAcessos"><input type="checkbox" id="audAcessos"><span>Só acessos (entrar, sair, senha)</span></label>
-        <div class="acoes"><button type="button" data-aud="pdf">Baixar PDF</button><button type="button" data-aud="csv">Baixar CSV</button></div>
+        <div class="acoes"><button type="button" data-aud="tela" class="prim">Ver o relatório</button><button type="button" data-aud="pdf">Baixar PDF</button>
+          <button type="button" data-aud="csv">Baixar CSV</button><button type="button" data-aud="json">Baixar JSON</button></div>
+        <div id="audEnviar" class="enviar-relatorio" hidden>
+          <label>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)
+            <input id="audDestinos" maxlength="400" autocomplete="off" inputmode="email" placeholder="auditoria@empresa"></label>
+          <button type="button" data-aud="enviar">Enviar</button>
+        </div>
       </form>
+      <div id="docAuditoria" class="relatorio"></div>
       <div id="listaRegistro" class="lista"></div>
     </section>
   </section>
@@ -304,6 +345,9 @@
         <span id="legendaRede" hidden><span><span class="amostra rede"></span>Média tensão (fictícia)</span>
           <span><span class="amostra chave"></span>Chave (fictícia)</span><span><span class="amostra subestacao-amostra"></span>Subestação (fictícia)</span></span>
         <button type="button" id="botaoRede" aria-pressed="true">Esconder rede fictícia</button></li>
+      <li id="itemCalor" hidden><button type="button" id="botaoCalor" aria-pressed="false">Mapa de calor (12 meses)</button>
+        <span id="legendaCalor" class="legenda-calor" hidden><span>1</span><span class="escala" aria-hidden="true"></span>
+          <span id="calorMax"></span> desligamento(s) por comunidade · clique numa comunidade para ver a ficha</span></li>
       <li class="legenda-ucs" hidden>
         <span><span class="amostra uc"></span>UC da planilha</span>
         <span><span class="amostra uc corrigida"></span>UC com coordenada corrigida</span>

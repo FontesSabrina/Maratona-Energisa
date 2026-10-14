@@ -52,9 +52,10 @@ def sql(q, args=()):
 
 def texto_pdf(b: bytes) -> str:
     partes = []
-    for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", b, re.S):
+    # decompressobj ignora o que sobra depois do fim do zlib (o \r\n antes de endstream; um \r no fim dos dados não quebra)
+    for m in re.finditer(rb"stream\r?\n(.*?)endstream", b, re.S):
         try:
-            partes.append(zlib.decompress(m.group(1)).decode("latin-1"))
+            partes.append(zlib.decompressobj().decompress(m.group(1)).decode("latin-1"))
         except zlib.error:
             pass
     return " ".join("".join(x.replace("\\(", "(").replace("\\)", ")") for x in re.findall(r"\(((?:\\.|[^\\)])*)\)", ln))

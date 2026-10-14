@@ -11,16 +11,16 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - [x] Fase E: telas por perfil, visual único Farol, Ajuda
 - [x] Fase F: só se sobrar tempo (filtros do mapa, polígono pronto, UTM/GMS na simulação, transformador/circuito) — parcial, ver resumo
 - [x] Fase G: README, SEGURANCA.md, ORIGEM.md, docs/DEMO.md, testes/rodar_testes.ps1, PR para a melhorias
-- [ ] Fase H: relatórios completos, registro total, ficha da comunidade
-  - [ ] H0 regras dos relatórios (rodapé, segunda via, comparações, Como calculamos, PDF/CSV/Enviar, filtros, permissões)
-  - [ ] H1 mensal (diretoria)
-  - [ ] H2 custos por rádio
-  - [ ] H3 comunidades mais afetadas
-  - [ ] H4 prazos
-  - [ ] H5 auditoria e auditoria geral
-  - [ ] H6 registro total e linha do tempo do aviso
-  - [ ] H7 ficha da comunidade, mapa de calor, alerta de repetição
-  - [ ] Semente do ano, DEMO.md, PR atualizado
+- [x] Fase H: relatórios completos, registro total, ficha da comunidade
+  - [x] H0 regras dos relatórios (rodapé, segunda via, comparações, Como calculamos, PDF/CSV/Enviar, filtros, permissões)
+  - [x] H1 mensal (diretoria)
+  - [x] H2 custos por rádio
+  - [x] H3 comunidades mais afetadas
+  - [x] H4 prazos
+  - [x] H5 auditoria e auditoria geral
+  - [x] H6 registro total e linha do tempo do aviso
+  - [x] H7 ficha da comunidade, mapa de calor, alerta de repetição
+  - [x] Semente do ano, DEMO.md, PR atualizado
 
 ## Resumos por fase
 
@@ -73,3 +73,10 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Confirmação de recebimento pela rádio (link do e-mail) fica na auditoria sem usuário: quem confirma é a rádio, não alguém do Farol.
 - Alerta de repetição (padrão: 3 desligamentos em 30 dias, configurável): amarelo, não bloqueia; aparece na conferência e, ao gerar, vai para a auditoria.
 - Registro total (H6) é conferido lendo o código das rotas (teste_registro_total.py) e, no banco, pelo teste_relatorios_h (nenhuma linha com usuário sem nome e perfil).
+- Envio de aviso cancelado continua no gasto, nos pedidos e no tempo no ar (a rádio foi paga); o aviso cancelado não conta como desligamento nem entra no prazo.
+- Semente do ano separada da semente de demonstração (semear_ano, marca "semente de demonstração (ano)"): os testes que contam a semente de demonstração não mudam; o comando da semente_demo roda as duas.
+- O banco ganha as colunas e a tabela da Fase H pela semente (como nas fases anteriores), não na subida da API: no deploy, rodar a semente de novo (DEPLOY.md).
+- Na tela, o relatório mensal antigo (por tipo, por rádio, lista) deu lugar ao documento da Fase H, o mesmo do PDF e do CSV; o JSON da API mantém os campos antigos para quem já os usa (painel do mês).
+- Os testes que leem o texto dos PDFs passam a ler o fluxo até o "endstream" com zlib tolerante: antes, um \r no fim dos dados comprimidos (acaso do conteúdo) fazia o teste falhar de vez em quando.
+- Bateria final da Fase H: rodar_testes.ps1 com 23 de 23 testes OK (Relatórios completos 69/69, Registro total 5/5, Tela do app 109/109, minimização 0 nas duas cidades); --so-algoritmo igual ao passo 12 (835 cenários, cobertura 88.3%, precisão 95.0%, aviso 44s -> 14s).
+- Na tela, a coluna do painel ficou presa à largura dele (minmax(0, 1fr)); o teste da tela confere que nada passa da largura do painel.

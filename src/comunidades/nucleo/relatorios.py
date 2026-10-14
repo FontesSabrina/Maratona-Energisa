@@ -167,7 +167,7 @@ def _no_periodo(avisos, inicio: date, fim: date):
 def numeros(avisos, envios, inicio, fim, filtros, horas_legais=72, dias_vital=5) -> dict:
     av, en = filtrar(_no_periodo(avisos, inicio, fim), envios, filtros or {})
     ativos = [a for a in av if a.get("status") != "cancelado"]
-    ids = {a["id"] for a in ativos}
+    ids = {a["id"] for a in av}           # envio de aviso cancelado também conta: a rádio foi paga
     en = [e for e in en if e["aviso_id"] in ids]
     por = _envios_por_aviso(en)
     prazos = [_prazo(a, por[a["id"]], horas_legais, dias_vital) for a in ativos]
@@ -199,7 +199,7 @@ def _item(rotulo, valor, atual=None, anterior=None, ano_anterior=None):
 
 def _gasto_por_mes(avisos_ano, envios_ano, ano, filtros):
     por_mes = [Decimal("0")] * 12
-    av, en = filtrar([a for a in avisos_ano if a["criado_em"].astimezone(P.BRASILIA).year == ano and a.get("status") != "cancelado"],
+    av, en = filtrar([a for a in avisos_ano if a["criado_em"].astimezone(P.BRASILIA).year == ano],
                      envios_ano, filtros or {})
     ids = {a["id"]: a for a in av}
     for e in en:
@@ -513,7 +513,7 @@ def comunidades(avisos, envios, radios_cobertura, inicio: date, fim: date, filtr
     secoes = [
         {"titulo": "Ranking por número de desligamentos", "tipo": "tabela",
          "colunas": ["Comunidade (distrito)", "Município", "Desligamentos", "Horas sem luz", "UCs afetadas", "Intervalo médio"],
-         "linhas": [[x["k"][0], x["k"][1], x["n"], horas_txt(x["horas"]), x["ucs"], f"{x['intervalo']} dias" if x["intervalo"] else "—"]
+         "linhas": [[x["k"][0], x["k"][1], x["n"], horas_txt(x["horas"]), x["ucs"], f"{x['intervalo']:.1f} dias".replace(".", ",") if x["intervalo"] else "—"]
                     for x in rank[:30]]},
         {"titulo": "Ranking por horas sem luz", "tipo": "tabela", "colunas": ["Comunidade (distrito)", "Município", "Horas sem luz", "Desligamentos"],
          "linhas": [[x["k"][0], x["k"][1], horas_txt(x["horas"]), x["n"]] for x in rank_h[:30]]},
@@ -523,8 +523,8 @@ def comunidades(avisos, envios, radios_cobertura, inicio: date, fim: date, filtr
          "colunas": ["Comunidade"] + [f"{MESES_CURTOS[m - 1]}/{str(a)[2:]}" for a, m in meses],
          "linhas": [[x["k"][0]] + [sum(1 for dd in x["dias"] if (dd.year, dd.month) == am) for am in meses] for x in top10]},
         {"titulo": f"Repetição: {n_rep} ou mais desligamentos em {janela} dias", "tipo": "tabela",
-         "colunas": ["Comunidade", "Município", "Maior número em {janela} dias".replace("{janela}", str(janela)), "Intervalo médio"],
-         "linhas": [[x["k"][0], x["k"][1], x["rep"], f"{x['intervalo']} dias" if x["intervalo"] else "—"] for x in repetidas]},
+         "colunas": ["Comunidade", "Município", f"Maior número em {janela} dias", "Intervalo médio"],
+         "linhas": [[x["k"][0], x["k"][1], x["rep"], f"{x['intervalo']:.1f} dias".replace(".", ",") if x["intervalo"] else "—"] for x in repetidas]},
         {"titulo": "Rádios que cobrem e confirmação", "tipo": "tabela", "colunas": ["Comunidade", "Rádios que alcançam", "Confirmação dos envios"],
          "linhas": [[x["k"][0], ", ".join(radios_cobertura.get(x["k"], [])) or "sem rádio cadastrada", pct_txt(x["conf"])] for x in top10]},
         {"titulo": "Equipamento vital (contagem por município; o histórico não guarda por comunidade)", "tipo": "tabela",

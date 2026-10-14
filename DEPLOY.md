@@ -52,6 +52,7 @@ O `render.yaml` já declara todas; nenhum valor vai para o git.
 | `FAROL_SMTP_HOST`, `_PORTA`, `_USUARIO`, `_SENHA`, `_REMETENTE` (e `FAROL_SMTP_SEGURANCA`: starttls, ssl ou nenhuma) | Servidor de e-mail para mandar o aviso às rádios | Do provedor de e-mail da empresa; sem `FAROL_SMTP_HOST`, o envio por e-mail fica desligado (WhatsApp e cópia continuam) |
 
 - O banco ganha as tabelas novas (auditoria encadeada, rádios, configuração da empresa, envios e arquivos cifrados) ao rodar a semente (passo 1.5), que pode rodar de novo.
+- **Fase H** (relatórios completos): depois do deploy, rode a semente de novo no banco de produção para criar as colunas de orçamento, alerta de preço e repetição em `empresa_config` e a tabela `relatorio_via` (segunda via dos relatórios, cifrada com a mesma `FAROL_CHAVE_ARQUIVOS`); sem a chave, o PDF de relatório não é gerado (503). O usuário do app precisa de `SELECT` e `INSERT` em `relatorio_via`.
 - **Histórico de demonstração** para os relatórios (avisos, rádios e envios fictícios, uma vez só):
-  `$env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente_demo` (precisa de `data/sintetico/` na máquina local).
+  `$env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente_demo` (precisa de `data/sintetico/` na máquina local). Roda as duas sementes: o mês e meio recente e o ano (de janeiro até ali), cada uma uma vez só.
 - No banco de produção, o usuário do app deve poder só `SELECT` e `INSERT` na tabela `registro` (sem `UPDATE`, `DELETE` nem `TRUNCATE`), além dos gatilhos que já recusam essas operações.

@@ -72,9 +72,10 @@ def sql(q, args=()):
 
 def texto_pdf(b: bytes) -> str:
     partes = []
-    for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", b, re.S):
+    # decompressobj ignora o que sobra depois do fim do zlib (o \r\n antes de endstream; um \r no fim dos dados não quebra)
+    for m in re.finditer(rb"stream\r?\n(.*?)endstream", b, re.S):
         try:
-            partes.append(zlib.decompress(m.group(1)).decode("latin-1"))
+            partes.append(zlib.decompressobj().decompress(m.group(1)).decode("latin-1"))
         except zlib.error:
             pass
     return " ".join("".join(x.replace("\\(", "(").replace("\\)", ")") for x in re.findall(r"\(((?:\\.|[^\\)])*)\)", ln))
@@ -109,6 +110,15 @@ conferir("intervalo médio entre desligamentos: 15 dias", RH.intervalo_medio([d0
 conferir("diferenças antes → depois (só o que mudou)", diferencas({"a": 1, "b": "x"}, {"a": 2, "b": "x"}, {"a": "valor", "b": "nome"}) == "valor: 1 → 2"
          and diferencas({"a": 1}, {"a": 1}, {"a": "valor"}) == "nada mudou")
 conferir("reais: R$ 1.234,50", RH.brl(Decimal("1234.5")) == "R$ 1.234,50")
+_q = datetime(2026, 3, 10, 10, 0, tzinfo=BR)
+_av = [{"id": 1, "criado_em": _q, "data": "20/03", "horario": "8h às 10h", "tipo": "poda", "status": "cancelado", "usuario": "Ana", "resumo": {},
+        "municipios": [{"codigo_ibge": "1", "nome": "A", "ucs": 3, "equipamento_vital": {"sim": 0}, "comunidades": [{"nome": "X", "afetadas": 3}]}]}]
+_en = [{"id": 1, "aviso_id": 1, "municipio": "1", "radio_id": 7, "radio_nome": "R", "canal": "email", "valor": Decimal("80"), "custo": Decimal("80"),
+        "economia": Decimal("0"), "economia_tipo": "calculada", "segundos": 20, "status": "confirmado", "criado_em": _q, "criado_por_nome": "Ana"}]
+_n = RH.numeros(_av, _en, date(2026, 3, 1), date(2026, 3, 31), {})
+conferir("aviso cancelado: não conta como desligamento, mas o envio pago entra no gasto",
+         _n["desligamentos"] == 0 and _n["cancelados"] == 1 and _n["gasto"] == Decimal("80") and RH._gasto_por_mes(_av, _en, 2026, {})[0][2] == 80,
+         str({k: _n[k] for k in ("desligamentos", "cancelados", "gasto")}))
 doc_f = {"titulo": "t", "resumo": [], "secoes": [{"tipo": "tabela", "titulo": "s", "colunas": ["a"], "linhas": [["=1+1"], ["@SOMA(A1)"]]}],
          "como_calculamos": ["x"]}
 cf = RH.csv_documento(doc_f, "sub", "Ana (Operador)", "FRL-AAAA-BBBB-CCCC")
@@ -178,7 +188,9 @@ try:
                  f"{j.status_code} {p.status_code} {cv.status_code} {p.text[:120] if p.status_code != 200 else ''}")
         conferir(f"{tipo}: rodapé com quem gerou, data, código e 'página 1 de N'; 'Como calculamos'",
                  p.content[:5] == b"%PDF-" and f"Gerado por {quem} em" in txt and cod in txt and re.search(r"página 1 de \d+", txt)
-                 and "Como calculamos" in txt, txt[:300])
+                 and "Como calculamos" in txt,
+                 str([f"Gerado por {quem} em" in txt, cod in txt, bool(re.search(r"página 1 de \d+", txt)), "Como calculamos" in txt,
+                      re.findall(r"página \d+ de ?\d*", txt)[:3]]))
         conferir(f"{tipo}: X-Sha256 = SHA-256 do PDF; CSV com o código e quem gerou",
                  sha == hashlib.sha256(p.content).hexdigest() and cv.headers.get("x-codigo", "!") in cv.text and quem in cv.text)
         conferir(f"{tipo}: o código está na auditoria com nome e perfil",

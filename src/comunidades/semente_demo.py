@@ -9,7 +9,13 @@ Cria (uma vez só; rodar de novo não duplica):
 Os avisos e envios recebem datas passadas (é demonstração); a auditoria registra a semente com a data
 de hoje ("semente de demonstração"). Nada de cliente real: rede, clientes e rádios são fictícios.
 
-Uso (depois de uv run python -m comunidades.semente): uv run python -m comunidades.semente_demo
+semear_ano() (Fase H) completa o ano, de janeiro até o começo do mês e meio acima, para os relatórios de custos,
+comunidades e prazos: uns 3 avisos por mês, valores que variam de um envio para outro, uma rádio cara, um mês com
+preço fora da curva (alerta de preço), a mesma comunidade 3 vezes em 30 dias (março e julho: repetição), alguns
+fora do prazo, alguns envios não confirmados e um orçamento anual de rádio na configuração. Marca própria na
+auditoria ("semente de demonstração (ano)"): rodar de novo não duplica.
+
+Uso (depois de uv run python -m comunidades.semente): uv run python -m comunidades.semente_demo (as duas)
 """
 
 import sys
@@ -30,6 +36,9 @@ from .nucleo.tipos_desligamento import TIPOS
 from .simulacao import planilhas_teste
 
 MARCA = "semente de demonstração"
+MARCA_ANO = "semente de demonstração (ano)"
+CARA = "Rádio Serra Alta FM (demonstração)"       # a rádio cara do ano (valor fechado alto)
+ORCAMENTO_DEMO = 15000.0                            # orçamento anual de rádio da demonstração (R$), se não houver um
 TIPOS_CICLO = ["manutencao_preventiva", "poda", "obra", "troca_equipamento", "corretiva_programada", "poda", "manutencao_preventiva"]
 
 
@@ -86,6 +95,25 @@ def _aviso(u: dict, chave: str, tipo: str, data: str, horario: str) -> dict:
     return api._guardar(resposta, u, data, horario, "pt-BR", tipo, motivo, cfg)
 
 
+def _envio(empresa_id: int, aviso_id: int, m: dict, rad: dict, canal: str, status: str, valor: Decimal, antigo: Decimal | None,
+           quem: dict, enviado: datetime, k: int) -> int:
+    """Um envio FICTÍCIO à rádio, com custo e economia pelo mesmo cálculo da API, na data passada."""
+    texto = m.get("mensagem") or m["aviso"]
+    seg, seg_hoje = segundos(texto), (m.get("hoje") or {}).get("segundos")
+    eco = economia.calcular(rad["cobranca"], valor, seg, seg_hoje, antigo)
+    envio_id = banco_radios.criar_envio({
+        "empresa_id": empresa_id, "aviso_id": aviso_id, "municipio": m["codigo_ibge"], "municipio_nome": m["nome"],
+        "radio_id": rad["id"], "radio_nome": rad["nome"], "canal": canal,
+        "destino": rad["email"] if canal == "email" else rad["whatsapp"] if canal == "whatsapp" else "", "texto": texto,
+        "valor": valor, "cobranca": rad["cobranca"], "custo": eco["custo"], "custo_antigo": antigo,
+        "economia": eco["economia"], "economia_tipo": eco["economia_tipo"], "segundos": seg, "segundos_hoje": seg_hoje,
+        "tempo_economizado": eco["tempo_economizado"], "status": status, "criado_por": quem["id"], "criado_por_nome": quem["nome"]})
+    with conectar() as c:
+        c.execute("UPDATE envio SET criado_em = %s, confirmado_em = %s WHERE id = %s",
+                  (enviado, enviado + timedelta(hours=2, minutes=13 * k) if status == "confirmado" else None, envio_id))
+    return envio_id
+
+
 def semear_demo(n_avisos: int = 16) -> dict:
     emp = banco.empresa_por_sigla("EMG")
     if not emp:
@@ -124,26 +152,85 @@ def semear_demo(n_avisos: int = 16) -> dict:
             for k, radio_id in enumerate(alvo):
                 rad = banco_radios.radio(radio_id, emp["id"])
                 canal = "email" if rad["email"] and k == 0 else "whatsapp" if rad["whatsapp"] else "copia"
-                texto = m.get("mensagem") or m["aviso"]
-                seg, seg_hoje = segundos(texto), (m.get("hoje") or {}).get("segundos")
-                antigo = Decimal("420.00") if rad["cobranca"] == "fechado" and i % 2 == 0 else None
-                eco = economia.calcular(rad["cobranca"], rad["valor_padrao"], seg, seg_hoje, antigo)
-                enviado = gerado + timedelta(minutes=20 + 7 * k)
                 status = "falhou" if i == 3 and k == 0 else "confirmado" if canal == "email" else "enviado"
-                envio_id = banco_radios.criar_envio({
-                    "empresa_id": emp["id"], "aviso_id": r["id"], "municipio": m["codigo_ibge"], "municipio_nome": m["nome"],
-                    "radio_id": radio_id, "radio_nome": rad["nome"], "canal": canal,
-                    "destino": rad["email"] if canal == "email" else rad["whatsapp"] if canal == "whatsapp" else "", "texto": texto,
-                    "valor": rad["valor_padrao"], "cobranca": rad["cobranca"], "custo": eco["custo"], "custo_antigo": antigo,
-                    "economia": eco["economia"], "economia_tipo": eco["economia_tipo"], "segundos": seg, "segundos_hoje": seg_hoje,
-                    "tempo_economizado": eco["tempo_economizado"], "status": status, "criado_por": quem["id"], "criado_por_nome": quem["nome"]})
-                with conectar() as c:
-                    c.execute("UPDATE envio SET criado_em = %s, confirmado_em = %s WHERE id = %s",
-                              (enviado, enviado + timedelta(hours=2, minutes=13 * k) if status == "confirmado" else None, envio_id))
+                antigo = Decimal("420.00") if rad["cobranca"] == "fechado" and i % 2 == 0 else None
+                _envio(emp["id"], r["id"], m, rad, canal, status, rad["valor_padrao"], antigo, quem, gerado + timedelta(minutes=20 + 7 * k), k)
                 envios += 1
     banco.registrar(MARCA, f"{criados} avisos fictícios, {envios} envios fictícios e {len(radios)} rádios de demonstração", adm["id"], emp["id"])
     return {"criados": criados, "envios": envios, "radios": len(radios)}
 
 
+def semear_ano() -> dict:
+    """O ano FICTÍCIO, de janeiro até 44 dias atrás (onde começa a semear_demo). Não duplica."""
+    emp = banco.empresa_por_sigla("EMG")
+    if not emp:
+        raise SystemExit("Rode antes: uv run python -m comunidades.semente")
+    with conectar() as c:
+        if c.execute("SELECT 1 FROM registro WHERE acao = %s AND empresa_id = %s", (MARCA_ANO, emp["id"])).fetchone():
+            return {"criados": 0, "motivo": "a semente do ano já foi aplicada nesta empresa"}
+    op = banco.usuario_por_email("operador@emg.example")
+    adm = banco.usuario_por_email("admin@emg.example")
+    radios = _radios(emp["id"], adm["id"])
+    if CARA not in radios:
+        radios[CARA] = banco_radios.criar_radio(emp["id"], adm["id"], {
+            "nome": CARA, "email": "serraalta@example.com", "whatsapp": None, "alcance": {"municipios": [_codigo("Leopoldina")], "comunidades": []},
+            "valor_padrao": Decimal("480.00"), "cobranca": "fechado", "ativa": True})
+    cfg = config_empresa(emp["id"])
+    if cfg["orcamento_radio"] is None:
+        banco_radios.salvar_config(emp["id"], adm["id"], {**cfg, "orcamento_radio": ORCAMENTO_DEMO})
+    agora = datetime.now(BRASILIA).replace(second=0, microsecond=0)
+    limite = agora - timedelta(days=44)
+    pool = _chaves(8)
+    plano, d, n = [], datetime(agora.year, 1, 6, 9, 0, tzinfo=BRASILIA), 0
+    while d < limite:                                          # uns 3 por mês, de 9 a 14 dias entre um e outro
+        plano.append((d, pool[n % len(pool)]))
+        n += 1
+        d += timedelta(days=9 + (n * 5) % 6, hours=(n * 3) % 7)
+    for mes in (3, 7):                                         # repetição: a mesma chave 3 vezes em 30 dias
+        for dia in (4, 14, 25):
+            quando = datetime(agora.year, mes, dia, 10, 0, tzinfo=BRASILIA)
+            if quando < limite:
+                plano.append((quando, pool[0]))
+    plano.sort()
+    criados, envios = 0, 0
+    for i, (gerado, chave) in enumerate(plano):
+        quem = adm if i % 4 == 3 else op
+        u = {**quem, "empresa_nome": emp["nome"]}
+        antecedencia = 2 if i % 6 == 2 else 8 + i % 5             # alguns em cima da hora: fora do prazo
+        desl = gerado + timedelta(days=antecedencia)
+        tipo = TIPOS_CICLO[(i + 3) % len(TIPOS_CICLO)]
+        r = _aviso(u, chave, tipo, f"{desl:%d/%m}", ["8h às 14h", "9h às 15h", "8h às 12h", "13h às 17h", "7h às 16h"][i % 5])
+        with conectar() as c:
+            c.execute("UPDATE aviso SET criado_em = %s WHERE id = %s", (gerado, r["id"]))
+        criados += 1
+        if i == 11:                                            # um cancelado
+            banco.cancelar_aviso(r["id"], emp["id"])
+            banco.registrar("cancelou o aviso", f"aviso {r['id']}: obra adiada pela prefeitura ({MARCA_ANO})", op["id"], emp["id"])
+            continue
+        if i == 17:                                            # um sem envio registrado
+            continue
+        for m in r["municipios"]:
+            if m["nome"] != "Leopoldina":
+                continue
+            alvo = ["Rádio Leopoldina FM (demonstração)"] + (["Rádio Vale do Pomba (demonstração)"] if i % 3 == 0 else []) \
+                + ([CARA] if i % 4 == 1 else []) \
+                + (["Rádio Comunitária Piacatuba (demonstração)"] if any(c["distrito"] in ("Piacatuba", "Tebas") for c in m["comunidades"]) else [])
+            for k, nome in enumerate(alvo):
+                rad = banco_radios.radio(radios[nome], emp["id"])
+                canal = "email" if rad["email"] and k != 2 else "whatsapp" if rad["whatsapp"] else "copia"
+                variacao = Decimal(str(1 + ((i + k) % 5 - 2) * 0.04))  # valores de -8% a +8% em volta do padrão
+                if gerado.month == 7 and nome == "Rádio Vale do Pomba (demonstração)":
+                    variacao = Decimal("1.6")                      # julho: preço fora da curva (alerta de preço)
+                valor = (rad["valor_padrao"] * variacao).quantize(Decimal("0.01"))
+                status = "confirmado" if canal == "email" and (i + k) % 5 != 2 else "entregue" if canal == "email" else "enviado"
+                antigo = Decimal("420.00") if rad["cobranca"] == "fechado" and i % 2 == 0 else None
+                _envio(emp["id"], r["id"], m, rad, canal, status, valor, antigo, quem, gerado + timedelta(minutes=25 + 9 * k), k)
+                envios += 1
+    banco.registrar(MARCA_ANO, f"{criados} avisos fictícios de janeiro a {limite:%d/%m}, {envios} envios fictícios, rádio cara ({CARA})"
+                    f" e orçamento de rádio de demonstração", adm["id"], emp["id"])
+    return {"criados": criados, "envios": envios, "radios": len(radios)}
+
+
 if __name__ == "__main__":
     print(semear_demo(int(sys.argv[1]) if len(sys.argv) > 1 else 16))
+    print(semear_ano())

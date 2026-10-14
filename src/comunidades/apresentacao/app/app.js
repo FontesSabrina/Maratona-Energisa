@@ -40,7 +40,11 @@ const estado = {
   radioEditando: null,     // a rádio no formulário (null: nova)
   alcanceComunidades: [],  // comunidades escolhidas no formulário da rádio: { municipio, nome, distrito }
   configuracao: null,      // /api/empresa/configuracao
-  relatorio: null,         // /api/relatorios/mensal: o relatório do período com os filtros
+  relatorio: null,         // /api/relatorios/{tipo}: o documento do relatório (o mesmo do PDF) com os filtros
+  opcoesRelatorio: null,   // municípios, tipos, rádios e pessoas do ano (do relatório mensal), para os filtros
+  vias: [],                // segundas vias dos relatórios em PDF (só título, quem, quando e código)
+  ficha: null,             // ficha da comunidade clicada no mapa (só contagens)
+  calor: null,             // mapa de calor: desligamentos por comunidade em 12 meses
 };
 
 // o menu de cada perfil (a matriz de perfis do plano); quem decide o que pode é o servidor, a tela só mostra o que serve
@@ -222,8 +226,12 @@ function ultimosMeses(hoje = new Date()) {
   }
   return saida;
 }
-const filtrosRelatorio = () => Object.fromEntries([['mes', $('relMes').value], ['municipio', $('relMunicipio').value], ['tipo', $('relTipo').value],
+// período do relatório: um mês, um ano ou um intervalo (início e fim)
+const periodoRelatorio = () => ({ mes: [['mes', $('relMes').value]], ano: [['ano', $('relAno').value]],
+  intervalo: [['inicio', $('relInicio').value], ['fim', $('relFim').value]] })[$('relModo').value] || [];
+const filtrosRelatorio = () => Object.fromEntries([...periodoRelatorio(), ['municipio', $('relMunicipio').value], ['tipo', $('relTipo').value],
   ['radio', $('relRadio').value], ['pessoa', $('relPessoa').value]].filter(([, v]) => v));
+const TIPOS_RELATORIO = { mensal: 'mes', custos: 'ano', comunidades: 'ano', prazos: 'mes' };   // tipo -> período padrão
 const consulta = f => new URLSearchParams(f).toString();
 const COBRANCA = { fechado: 'valor fechado pelo aviso', minuto: 'por minuto no ar' };
 const CANAL = { email: 'e-mail', whatsapp: 'WhatsApp', copia: 'cópia da mensagem' };
@@ -308,6 +316,7 @@ function desenharTela() {
   $('telaSenha').hidden = estado.tela !== 'senha';
   $('telaApp').hidden = estado.tela !== 'app';
   $('conta').hidden = !estado.usuario;
+  $('itemCalor').hidden = !estado.usuario || !pode('ver_historico');
   if (estado.usuario) {
     const u = estado.usuario;
     $('contaNome').textContent = `${u.nome} · ${u.perfil_nome}${u.empresa_sigla ? ' · ' + u.empresa_sigla : ''}`;
@@ -563,7 +572,8 @@ function desenharConferencia() {
     no('p', { texto: 'Quem usa equipamento vital tem de ser avisado com certeza. Corrija essas linhas na planilha e importe de novo.' })));
   if (c.suspeitos.length) blocos.push(no('div', { classe: 'alerta-amarelo' },
     no('strong', { texto: 'Pontos suspeitos: confira no mapa antes de marcar "Conferi"' }),
-    no('ul', {}, c.suspeitos.map(x => no('li', { texto: `${x.texto}${x.municipio ? ` · ${x.municipio} (a maioria em ${x.maioria})` : ''}: `
+    no('ul', {}, c.suspeitos.map(x => no('li', { texto: x.tipo === 'repeticao' ? `${x.texto}: ${x.comunidades.join('; ')}`
+      : `${x.texto}${x.municipio ? ` · ${x.municipio} (a maioria em ${x.maioria})` : ''}: `
       + `${fmt(x.ucs)} UC(s), linha(s) ${x.linhas.slice(0, 30).join(', ')}${x.linhas.length > 30 ? '…' : ''}` })))));
   for (const [campo, rotulo] of [['circuito', 'circuito'], ['transformador', 'transformador']]) {
     const g = r.rede?.[campo];
@@ -604,7 +614,9 @@ function desenharSolicitado() {
   const partes = r ? [solicitadoTexto(r), r.desligamento ? `Tipo: ${r.desligamento.rotulo} (${r.desligamento.motivo})` : ''].filter(Boolean) : [];
   $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })), r?.codigo ? dica('codigo', 'código de verificação') : '',
     r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Desligamento cancelado' }) : '');
-  if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: 'Comprovante (PDF)' }));
+  if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: 'Comprovante (PDF)' }),
+    no('button', { type: 'button', id: 'verLinhaTempo', 'aria-controls': 'linhaTempo', texto: 'Linha do tempo' }));
+  if (!r?.id || estado.linhaTempo?.aviso !== r.id) { estado.linhaTempo = null; $('linhaTempo').hidden = true; $('linhaTempo').replaceChildren(); }
   const lugar = $('acoesAviso');
   lugar.hidden = !(r && estado.origem === 'historico' && pode('gerar_aviso') && r.status !== 'cancelado');
   if (lugar.hidden) return lugar.replaceChildren();
@@ -703,8 +715,16 @@ function desenharComparativo() {
 
 // ---- Relatório do período (mensal) ----
 function desenharFiltrosRelatorio() {
-  const r = estado.relatorio, op = r?.opcoes;
+  const op = estado.opcoesRelatorio;
   if (!$('relMes').options.length) $('relMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
+  if (!$('relAno').options.length) {
+    const ano = new Date().getFullYear();
+    $('relAno').replaceChildren(...[ano, ano - 1, ano - 2].map(a => no('option', { value: String(a), texto: String(a) })));
+  }
+  const modo = $('relModo').value;
+  $('relMesRotulo').hidden = modo !== 'mes'; $('relAnoRotulo').hidden = modo !== 'ano';
+  $('relInicioRotulo').hidden = $('relFimRotulo').hidden = modo !== 'intervalo';
+  $('relEnviar').hidden = !pode('enviar_relatorio');
   if (!op) return;
   const preencher = (id, todos, itens) => {
     const atual = $(id).value;
@@ -716,45 +736,59 @@ function desenharFiltrosRelatorio() {
   preencher('relPessoa', 'Todas', op.pessoas.map(p => [p, p]));
 }
 
+// o documento do relatório (o mesmo do PDF e do CSV): alertas, resumo com as comparações (↑↓ %), seções e "Como calculamos"
+function documentoNaTela(doc, subtitulo) {
+  const tabela = (cab, linhas) => linhas.length
+    ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, cab.map(t => no('th', { texto: t })))),
+      no('tbody', {}, linhas.map(l => no('tr', {}, l.map(v => no('td', { texto: v == null || v === '' ? '—' : String(v) })))))))
+    : no('p', { classe: 'ajuda', texto: 'Nada neste período.' });
+  const grafico = s => {
+    const f = v => s.formato === 'dinheiro' ? dinheiro(v) : fmt(v);
+    const itens = s.rotulos.map((r, i) => {
+      const projetado = s.valores[i] == null && s.projecao?.[i] != null;
+      return { r, v: Number((projetado ? s.projecao[i] : s.valores[i]) || 0), projetado };
+    });
+    const max = Math.max(1, ...itens.map(x => x.v));
+    if (!itens.length) return no('p', { classe: 'ajuda', texto: 'Nada neste período.' });
+    return no('div', { classe: 'barras grafico-doc', estilo: { gridTemplateColumns: `repeat(${itens.length}, minmax(0, 1fr))` }, role: 'img',
+      'aria-label': itens.map(x => `${x.r}: ${f(x.v)}${x.projetado ? ' (projeção)' : ''}`).join(', ') },
+      itens.map(x => no('div', { classe: 'barra-mes', title: `${x.r}: ${f(x.v)}${x.projetado ? ' (projeção)' : ''}` },
+        no('span', { classe: 'barra-valor', texto: x.v && s.formato !== 'dinheiro' ? f(x.v) : '' }),
+        no('span', { classe: `barra${x.projetado ? ' barra-projecao' : ''}`, estilo: { height: `${Math.round(x.v / max * 100)}%` } }),
+        no('span', { classe: 'barra-mes-rotulo', texto: x.r }))));
+  };
+  const conteudo = s => s.tipo === 'tabela' ? tabela(s.colunas, s.linhas) : s.tipo === 'grafico' ? grafico(s)
+    : s.tipo === 'lista' ? (s.itens.length ? no('ul', { classe: 'como' }, s.itens.map(t => no('li', { texto: t }))) : no('p', { classe: 'ajuda', texto: 'Nada.' }))
+    : no('p', { texto: s.texto });
+  const chip = c => no('span', { classe: `chip comp ${c.texto[0] === '↑' ? 'sobe' : c.texto[0] === '↓' ? 'desce' : ''}`, texto: `${c.texto} vs ${c.contra}` });
+  return [
+    no('h2', { classe: 'subtitulo', texto: doc.titulo }),
+    subtitulo ? no('p', { classe: 'ajuda', texto: subtitulo }) : null,
+    ...(doc.alertas || []).map(a => no('div', { classe: 'alerta-amarelo', role: 'status' }, no('strong', { texto: a }))),
+    no('div', { classe: 'kpis' }, doc.resumo.map(i => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: i.rotulo }),
+      no('strong', { classe: 'kpi-valor', texto: i.valor }),
+      i.comparacoes?.length ? no('span', { classe: 'kpi-extra comps' }, i.comparacoes.map(chip)) : null))),
+    ...doc.secoes.map(s => no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: s.titulo }), conteudo(s))),
+    no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: 'Como calculamos' }),
+      no('ul', { classe: 'como' }, doc.como_calculamos.map(t => no('li', { texto: t })))),
+  ];
+}
+
 function desenharRelatorio() {
   desenharFiltrosRelatorio();
   const r = estado.relatorio;
-  if (!r) return $('relatorio').replaceChildren();
-  const s = r.resumo, tabela = (cab, linhas, vazio = 'Nada neste período.') => linhas.length
-    ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, cab.map(t => no('th', { texto: t })))),
-      no('tbody', {}, linhas.map(l => no('tr', {}, l.map(v => no('td', { texto: v == null ? '—' : String(v) })))))))
-    : no('p', { classe: 'ajuda', texto: vazio });
-  const bloco = (titulo, ...filhos) => no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: titulo }), ...filhos);
-  const kpi = (rotulo, valor, extra) => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: rotulo }),
-    no('strong', { classe: 'kpi-valor', texto: valor }), extra ? no('span', { classe: 'kpi-extra', texto: extra }) : null);
-  const comp = r.comparacao ? bloco(`Comparação com ${r.comparacao.periodo}`, tabela(['Número', 'Este período', 'Anterior', 'Diferença'],
-    Object.entries(r.comparacao.numeros).map(([k, v]) => [{ desligamentos: 'Desligamentos', avisos: 'Avisos', ucs: 'UCs', envios: 'Envios',
-      confirmados: 'Confirmados', segundos_no_ar: 'Segundos no ar', custo: 'Custo (R$)', economia_calculada: 'Economia calculada (R$)',
-      economia_informada: 'Economia informada (R$)', tempo_economizado: 'Segundos economizados', pct_no_prazo: '% no prazo' }[k], v.atual, v.anterior, v.diferenca]))) : null;
-  $('relatorio').replaceChildren(
-    no('h2', { classe: 'subtitulo', texto: `${r.periodo.rotulo[0].toUpperCase()}${r.periodo.rotulo.slice(1)}` + (Object.keys(r.filtros).length ? ' (com filtros)' : '') }),
-    no('div', { classe: 'kpis' },
-      kpi('Desligamentos', fmt(s.desligamentos), `${fmt(s.cancelados)} cancelado(s)`),
-      kpi('Avisos e comunidades', `${fmt(s.avisos)} · ${fmt(s.comunidades)}`, `${fmt(s.ucs)} UCs, ${fmt(s.equipamento_vital)} com equipamento vital`),
-      kpi('Envios às rádios', fmt(s.envios), `${fmt(s.confirmados)} confirmado(s), ${fmt(s.falharam)} falha(s)`),
-      kpi('Tempo no ar', tempoNoAr(s.segundos_no_ar), tempoArTexto(s.tempo_economizado)),
-      kpi('Custo', dinheiro(s.custo)),
-      kpi('Economia', dinheiro(Number(s.economia_calculada) + Number(s.economia_informada)),
-        `${dinheiro(s.economia_calculada)} calculada · ${dinheiro(s.economia_informada)} informada`),
-      kpi('No prazo', s.pct_no_prazo == null ? '—' : `${s.pct_no_prazo.toLocaleString('pt-BR')}%`, `${fmt(s.no_prazo)} de ${fmt(s.com_envio)} com envio`)),
-    comp,
-    bloco('Por tipo de desligamento', tabela(['Tipo', 'Desligamentos', 'UCs'], r.por_tipo.map(x => [x.rotulo, fmt(x.desligamentos), fmt(x.ucs)]))),
-    bloco('Por rádio', tabela(['Rádio', 'Envios', 'Confirmados', 'Tempo no ar', 'Custo', 'Economia'],
-      r.por_radio.map(x => [x.radio, fmt(x.envios), fmt(x.confirmados), tempoNoAr(x.segundos), dinheiro(x.custo), dinheiro(x.economia)]))),
-    bloco('Comunidades mais afetadas', tabela(['Comunidade', 'Distrito', 'Município', 'Avisos', 'UCs'],
-      r.por_comunidade.map(x => [semSufixo(x.comunidade), x.distrito, x.municipio, fmt(x.avisos), fmt(x.ucs)]))),
-    bloco('Avisos fora do prazo', tabela(['Aviso', 'Desligamento', 'Municípios', 'Regra', 'Atraso'],
-      r.fora_do_prazo.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.municipios, x.regra, `${x.atraso_horas} h`]), 'Nenhum aviso fora do prazo.'),
-      r.sem_envio.length ? no('p', { classe: 'ajuda', texto: `Sem envio registrado (fora da conta do prazo): ${r.sem_envio.map(x => `nº ${x.aviso}`).join(', ')}.` }) : null),
-    bloco('Como a economia foi calculada', dica('economia', 'economia calculada e informada'), no('ul', { classe: 'como' }, r.como_calculado.map(t => no('li', { texto: t })))),
-    bloco('Lista detalhada', tabela(['Aviso', 'Desligamento', 'Tipo', 'Municípios', 'UCs', 'Rádios', 'Envios', 'Custo', 'No prazo', 'Pedido por', 'Situação'],
-      r.lista.map(x => [`nº ${x.aviso}`, `${x.data}, ${x.horario}`, x.tipo, x.municipios, fmt(x.ucs), x.radios, `${x.confirmados}/${x.envios}`,
-        dinheiro(x.custo), x.no_prazo == null ? '—' : x.no_prazo ? 'sim' : 'não', x.por, x.status]))));
+  $('relatorio').replaceChildren(...(r ? documentoNaTela(r.documento, r.subtitulo) : []));
+  desenharVias();
+}
+
+function desenharVias() {
+  const vias = estado.vias || [];
+  $('listaVias').replaceChildren(vias.length ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
+    no('thead', {}, no('tr', {}, ['Relatório', 'Gerado por', 'Quando', 'Código', ''].map(t => no('th', { texto: t })))),
+    no('tbody', {}, vias.slice(0, 30).map(v => no('tr', {}, no('td', { texto: v.titulo }), no('td', { texto: v.por }),
+      no('td', { texto: dataHora(v.criado_em) }), no('td', { texto: v.codigo }),
+      no('td', {}, no('button', { type: 'button', 'data-via': String(v.id), texto: 'Baixar a via' })))))))
+    : no('p', { classe: 'ajuda', texto: 'Nenhum relatório em PDF ainda. Cada PDF gerado ganha uma segunda via guardada, igual (mesmo SHA-256).' }));
 }
 
 // ---- Dashboard: só números do histórico da empresa ----
@@ -888,6 +922,10 @@ function desenharConfig() {
   $('cfgLimite').value = String(Math.round(c.limite_rejeicao * 1000) / 10);
   $('cfgFuso').value = String(c.epsg_utm);
   $('cfgAntecedencia').value = String(c.antecedencia_dias);
+  $('cfgOrcamento').value = c.orcamento_radio == null ? '' : String(c.orcamento_radio);
+  $('cfgAlertaPreco').value = String(Math.round((c.alerta_preco ?? 0.2) * 100));
+  $('cfgRepN').value = String(c.repeticao_n ?? 3);
+  $('cfgRepDias').value = String(c.repeticao_dias ?? 30);
   $('cfgCampos').textContent = `Campos: ${c.campos.map(x => `{${x}}`).join(' ')}. Trecho entre [colchetes] some se algum campo dentro dele ficar vazio.`;
   desenharPreviaConfig();
 }
@@ -955,12 +993,17 @@ function desenharBase() {
   if (!mapa || mapa.getZoom() < ZOOM_COMUNIDADES) return;
   const doAviso = new Set((estado.resultado?.municipios || []).map(m => m.codigo_ibge));
   const feicoes = municipiosNaTela().filter(m => !doAviso.has(m.codigo_ibge) && estado.territorios[m.codigo_ibge])
-    .flatMap(m => estado.territorios[m.codigo_ibge].features.map(f => ({ ...f, properties: { ...f.properties, municipio: m.nome } })));
+    .flatMap(m => estado.territorios[m.codigo_ibge].features.map(f => ({ ...f, properties: { ...f.properties, municipio: m.nome,
+      codigo_ibge: m.codigo_ibge } })));
   if (!feicoes.length) return;
   camadaBase = L.geoJSON({ type: 'FeatureCollection', features: feicoes }, {
-    style: { color: COR.cinza, weight: .8, fillOpacity: 0 },
-    onEachFeature: (f, l) => l.bindTooltip(() => no('span', {
-      texto: `${semSufixo(f.properties.nome)} (${distritoDe(f.properties.distrito, f.properties.municipio)}) · ${f.properties.municipio}` }), { sticky: true }),
+    style: f => ({ color: COR.cinza, weight: .8, ...estiloCalor(f.properties) }),
+    onEachFeature: (f, l) => {
+      l.bindTooltip(() => no('span', {
+        texto: `${semSufixo(f.properties.nome)} (${distritoDe(f.properties.distrito, f.properties.municipio)}) · ${f.properties.municipio}`
+          + (estado.calor ? ` · ${fmt(desligamentosDe(f.properties))} desligamento(s) em 12 meses` : '') }), { sticky: true });
+      l.on('click', e => abrirFicha(e.latlng, f.properties.codigo_ibge, f.properties.nome, f.properties.distrito));
+    },
   }).addTo(mapa);
   camadaBase.bringToBack();
   camadaConcessao?.bringToBack();
@@ -985,6 +1028,79 @@ function desenharNomes() {
       icon: L.divIcon({ className: 'rotulo', html: no('span', { texto: nome }), iconSize: null }) }));
   }
   if (marcas.length) camadaNomes = L.layerGroup(marcas).addTo(mapa);
+}
+
+// ---- Mapa de calor e ficha da comunidade (só contagens; quem vê o histórico) ----
+const chaveCalor = p => `${p.codigo_ibge}|${semSufixo(p.nome)}|${p.distrito || ''}`;
+const desligamentosDe = p => estado.calor?.comunidades[chaveCalor(p)] || 0;
+const ESCALA_CALOR = ['#FFF3C4', '#F5B83D', '#D9480F', '#8B1A1A'];
+function estiloCalor(p) {
+  const n = estado.calor ? desligamentosDe(p) : 0;
+  if (!n) return { fillOpacity: 0 };
+  const t = n / Math.max(1, estado.calor.maximo);
+  return { fillColor: ESCALA_CALOR[Math.min(3, Math.floor(t * 4 - 1e-9))], fillOpacity: .6 };
+}
+
+async function alternarCalor() {
+  try {
+    estado.calor = estado.calor ? null : await api('/api/comunidades/calor');
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+  $('botaoCalor').setAttribute('aria-pressed', String(!!estado.calor));
+  $('botaoCalor').textContent = estado.calor ? 'Esconder mapa de calor' : 'Mapa de calor (12 meses)';
+  $('legendaCalor').hidden = !estado.calor;
+  $('calorMax').textContent = estado.calor ? fmt(estado.calor.maximo) : '';
+  desenharBase(); desenharComunidades();
+  if (estado.calor && mapa.getZoom() < ZOOM_COMUNIDADES) avisar('O mapa de calor aparece de perto: aproxime num município (ou clique nele).');
+}
+
+// a ficha abre num balão do mapa: contagens, rádios que alcançam e os botões do relatório da comunidade
+async function abrirFicha(latlng, municipio, nome, distrito) {
+  if (!pode('ver_historico') || !municipio) return;
+  const filtros = { municipio, nome: semSufixo(nome), ...(distrito ? { distrito } : {}) };
+  const caixa = no('div', { classe: 'ficha', role: 'dialog', 'aria-label': `Ficha de ${semSufixo(nome)}` }, no('p', { texto: 'Carregando a ficha…' }));
+  L.popup({ maxWidth: 300 }).setLatLng(latlng).setContent(caixa).openOn(mapa);
+  try {
+    const f = estado.ficha = await api(`/api/comunidades/ficha?${consulta(filtros)}`);
+    const linha = (rotulo, valor) => [no('dt', { texto: rotulo }), no('dd', { texto: valor })];
+    caixa.replaceChildren(
+      no('h3', { texto: `${f.nome}${f.distrito ? ` (${f.distrito})` : ''}` }),
+      no('p', { classe: 'ajuda', texto: `${f.municipio || ''} · últimos 12 meses · dados de demonstração (fictícios)` }),
+      no('dl', {}, ...linha('Desligamentos', fmt(f.desligamentos)), ...linha('Horas sem luz', `${fmt(f.horas)} h`),
+        ...linha('UCs afetadas (soma)', fmt(f.ucs_afetadas)), ...linha('Endereços (IBGE)', f.enderecos == null ? '—' : fmt(f.enderecos)),
+        ...linha('No prazo', f.pct_no_prazo == null ? '—' : `${f.pct_no_prazo.toLocaleString('pt-BR')}%`),
+        ...linha('Este mês', `${fmt(f.mes_atual)}${f.comparacao ? ` (${f.comparacao} vs mês anterior)` : ''}`),
+        ...linha('Último', f.ultimo ? dataLonga(f.ultimo.dia) : '—'), ...linha('Próximo', f.proximo ? dataLonga(f.proximo.dia) : '—')),
+      no('p', { texto: f.radios.length ? `Rádios que alcançam: ${f.radios.join(', ')}` : 'Nenhuma rádio cadastrada alcança esta comunidade.' }),
+      no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'pdf', texto: 'Relatório desta comunidade (PDF)' })),
+      pode('enviar_relatorio') ? no('label', { texto: 'Enviar por e-mail (domínio da empresa) ' },
+        no('input', { 'data-ficha-destinos': '', maxlength: '400', autocomplete: 'off', inputmode: 'email' })) : null,
+      pode('enviar_relatorio') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'enviar', texto: 'Enviar' })) : null);
+    caixa.addEventListener('click', async evento => {
+      const b = evento.target.closest('button[data-ficha]');
+      if (!b) return;
+      b.disabled = true;
+      try {
+        if (b.dataset.ficha === 'pdf') {
+          await baixarDaApi(`/api/relatorios/comunidade.pdf?${consulta(filtros)}`, { method: 'GET' }, 'farol-comunidade.pdf');
+          avisar(`Relatório de ${f.nome} baixado, com o seu nome e o código de verificação (registrado na auditoria).`);
+        } else {
+          const destinos = destinatarios(caixa.querySelector('[data-ficha-destinos]').value);
+          if (!destinos.length) return avisar('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
+          if (!confirm(`Enviar o relatório de ${f.nome} (PDF) para ${destinos.join(', ')}?`)) return;
+          const r = await api('/api/relatorios/comunidade/enviar', { method: 'POST', json: { filtros, destinatarios: destinos } });
+          avisar(`Relatório de ${f.nome} enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
+        }
+      } catch (e) {
+        if (e.status !== 401) avisar(e.message, true);
+      } finally {
+        b.disabled = false;
+      }
+    });
+  } catch (e) {
+    caixa.replaceChildren(no('p', { texto: e.status === 401 ? 'A sessão acabou.' : e.message }));
+  }
 }
 
 // rede elétrica FICTÍCIA dos municípios na tela (de perto): média tensão por alimentador, subestação,
@@ -1133,18 +1249,19 @@ function desenharComunidades() {
     for (const f of terr.features) {
       const c = porNome.get(f.properties.nome);
       if (c) feicoes.push({ ...f, properties: { ...f.properties, m, c } });
-      else outras.push(f);
+      else outras.push({ ...f, properties: { ...f.properties, codigo_ibge: m.codigo_ibge } });
     }
   }
   if (!feicoes.length) return;
   camadaComunidades = L.geoJSON({ type: 'FeatureCollection', features: [...outras, ...feicoes] }, {
-    style: f => !f.properties.c ? { color: COR.cinza, weight: .8, fillOpacity: 0 } : ({
+    style: f => !f.properties.c ? { color: COR.cinza, weight: .8, ...estiloCalor(f.properties) } : ({
       inteira: { color: COR.ambarForte, weight: 1.5, fillColor: COR.ambar, fillOpacity: .55 },
       parte: { color: COR.ambarForte, weight: 1.5, dashArray: '5 4', fillColor: COR.ambar, fillOpacity: .22 },
       vizinha: { color: COR.cinza, weight: 1, fillColor: COR.cinza, fillOpacity: .25 },
     })[situacao(f.properties.c)],
     onEachFeature: (f, l) => {
       const { c, m } = f.properties;
+      l.on('click', e => abrirFicha(e.latlng, m?.codigo_ibge || f.properties.codigo_ibge, c?.nome || f.properties.nome, c ? c.distrito : f.properties.distrito));
       if (!c) return l.bindTooltip(() => no('span', { texto: `${semSufixo(f.properties.nome)} · fora do aviso` }), { sticky: true });
       l.bindTooltip(() => no('span', {}, no('strong', { texto: nomeComDistrito(c, m) }), ` · ${ROTULO[situacao(c)]}`, no('br'),
         `${fmt(c.afetadas)} UCs afetadas · ${fmt(c.total)} endereços na comunidade`), { sticky: true });
@@ -1381,13 +1498,18 @@ function limparTela() {
     conferi: false, justificativa: '', abas: [], aba: '',
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
-  Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null });
+  Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null, opcoesRelatorio: null, vias: [], ficha: null,
+    calor: null });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
     'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes',
-    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas'])
+    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo'])
     $(id).replaceChildren();
   Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null });
   $('caixaAjuda').hidden = true;
+  $('relDestinos').value = $('audDestinos').value = '';
+  $('linhaTempo').hidden = true; estado.linhaTempo = null;
+  mapa?.closePopup();
+  $('legendaCalor').hidden = true; $('botaoCalor').setAttribute('aria-pressed', 'false'); $('botaoCalor').textContent = 'Mapa de calor (12 meses)';
   $('dica').hidden = true;
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
@@ -1747,21 +1869,59 @@ async function acaoAviso(evento) {
 
 async function carregarRelatorio(evento) {
   evento?.preventDefault();
+  const tipo = $('relQual').value;
   try {
-    estado.relatorio = await api(`/api/relatorios/mensal?${consulta(filtrosRelatorio())}`);
+    const [r, v] = await Promise.all([api(`/api/relatorios/${tipo}?${consulta(filtrosRelatorio())}`), api('/api/relatorios/vias')]);
+    estado.relatorio = r; estado.vias = v.vias;
+    if (r.opcoes) estado.opcoesRelatorio = r.opcoes;
     desenharRelatorio();
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   }
 }
 
+// trocar o tipo de relatório: o período volta ao padrão dele (mês ou ano)
+function trocarTipoRelatorio() {
+  $('relModo').value = TIPOS_RELATORIO[$('relQual').value] || 'mes';
+  desenharFiltrosRelatorio();
+  carregarRelatorio();
+}
+
+// destinatários do "Enviar": separados por vírgula, ponto e vírgula ou espaço
+const destinatarios = texto => [...new Set(texto.split(/[\s,;]+/).map(d => d.trim().toLowerCase()).filter(Boolean))];
+
 async function exportarRelatorio(evento) {
   const b = evento.target.closest('button[data-rel]');
   if (!b) return;
+  const tipo = $('relQual').value;
   b.disabled = true;
   try {
-    await baixarDaApi(`/api/relatorios/mensal.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-relatorio.${b.dataset.rel}`);
-    avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
+    if (b.dataset.rel === 'enviar') {
+      const destinos = destinatarios($('relDestinos').value);
+      if (!destinos.length) return avisar('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
+      if (!confirm(`Enviar o relatório por e-mail (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
+      const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: filtrosRelatorio(), destinatarios: destinos } });
+      avisar(`Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}; registrado na auditoria).`);
+    } else {
+      await baixarDaApi(`/api/relatorios/${tipo}.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-${tipo}.${b.dataset.rel}`);
+      avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
+    }
+    estado.vias = (await api('/api/relatorios/vias')).vias;
+    desenharVias();
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    b.disabled = false;
+  }
+}
+
+async function baixarVia(evento) {
+  const b = evento.target.closest('button[data-via]');
+  if (!b) return;
+  b.disabled = true;
+  try {
+    await baixarDaApi(`/api/relatorios/vias/${b.dataset.via}.pdf`, { method: 'GET' }, 'farol-via.pdf');
+    avisar('Segunda via baixada: o mesmo PDF (SHA-256 conferido no servidor; registrado na auditoria).');
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   } finally {
@@ -1776,20 +1936,39 @@ function prepararAuditoria() {
   $('tituloRelAuditoria').textContent = geral ? 'Auditoria geral de acessos (todas as empresas)' : 'Relatório de auditoria da empresa';
   $('audEmpresaRotulo').hidden = !geral;
   $('audAcessos').checked = geral;
+  $('audEnviar').hidden = geral || !pode('relatorio_auditoria');
   if (!$('audMes').options.length) $('audMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
 }
 
 async function exportarAuditoria(evento) {
   const b = evento.target.closest('button[data-aud]');
   if (!b) return;
-  const f = { mes: $('audMes').value, so_acessos: String($('audAcessos').checked) };
+  const f = { mes: $('audMes').value };
+  if ($('audAcessos').checked) f.so_acessos = 'true';
   if ($('audPessoa').value.trim()) f.pessoa = $('audPessoa').value.trim();
+  if ($('audCategoria').value) f.categoria = $('audCategoria').value;
   if (pode('auditoria_geral') && $('audEmpresa').value.trim()) f.empresa = $('audEmpresa').value.trim().toUpperCase();
+  const tipo = pode('auditoria_geral') ? 'acessos' : 'auditoria', acao = b.dataset.aud;
   b.disabled = true;
   try {
-    await baixarDaApi(`/api/relatorios/${pode('auditoria_geral') ? 'acessos' : 'auditoria'}.${b.dataset.aud}?${consulta(f)}`, { method: 'GET' },
-      `farol-auditoria.${b.dataset.aud}`);
-    mensagemEm('estadoAuditoria', `Relatório baixado em ${b.dataset.aud.toUpperCase()}, com o seu nome e o código de verificação.`);
+    if (acao === 'tela') {
+      const r = await api(`/api/relatorios/${tipo}?${consulta(f)}`);
+      $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo));
+      mensagemEm('estadoAuditoria', `${fmt(r.total)} linha(s) no período (a consulta fica na auditoria com o seu nome).`);
+    } else if (acao === 'enviar') {
+      const destinos = destinatarios($('audDestinos').value);
+      if (!destinos.length) return mensagemEm('estadoAuditoria', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
+      if (!confirm(`Enviar o relatório de auditoria (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
+      const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: f, destinatarios: destinos } });
+      mensagemEm('estadoAuditoria', `Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
+    } else if (acao === 'json') {
+      // as linhas filtradas, como a tela as recebe (a consulta fica na auditoria)
+      await baixarDaApi(`/api/relatorios/${tipo}?${consulta(f)}`, { method: 'GET' }, `farol-${tipo}-${f.mes}.json`);
+      mensagemEm('estadoAuditoria', 'Relatório baixado em JSON (registrado na auditoria com o seu nome).');
+    } else {
+      await baixarDaApi(`/api/relatorios/${tipo}.${acao}?${consulta(f)}`, { method: 'GET' }, `farol-auditoria.${acao}`);
+      mensagemEm('estadoAuditoria', `Relatório baixado em ${acao.toUpperCase()}, com o seu nome e o código de verificação.`);
+    }
   } catch (e) {
     if (e.status !== 401) mensagemEm('estadoAuditoria', e.message, true);
   } finally {
@@ -1797,7 +1976,23 @@ async function exportarAuditoria(evento) {
   }
 }
 
+// tudo o que aconteceu com o aviso, da auditoria: quando, quem (nome e perfil), o quê e o código da linha
+async function verLinhaTempo() {
+  try {
+    estado.linhaTempo = await api(`/api/historico/${estado.resultado.id}/linha-do-tempo`);
+    const lt = estado.linhaTempo.linhas;
+    $('linhaTempo').replaceChildren(no('h3', { texto: `Linha do tempo do aviso nº ${estado.linhaTempo.aviso}` }),
+      lt.length ? no('ol', { classe: 'linha-tempo' }, lt.map(x => no('li', {}, no('strong', { texto: dataHora(x.quando) }), ` · ${x.acao}`,
+        no('span', { classe: 'quem', texto: ` · ${x.usuario || 'sem login (rádio)'}${x.perfil ? ` (${x.perfil})` : ''} · ${x.codigo}` }))))
+        : no('p', { classe: 'ajuda', texto: 'Nada registrado para este aviso.' }));
+    $('linhaTempo').hidden = false;
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
 async function baixarComprovante(evento) {
+  if (evento.target.id === 'verLinhaTempo') return verLinhaTempo();
   if (evento.target.id !== 'baixarComprovante') return;
   try {
     await baixarDaApi(`/api/historico/${estado.resultado.id}/comprovante.pdf`, { method: 'GET' }, 'farol-comprovante.pdf');
@@ -1949,7 +2144,9 @@ async function salvarConfig(evento) {
   try {
     estado.configuracao = await api('/api/empresa/configuracao', { method: 'PUT', json: { modelo_mensagem: $('cfgModelo').value, nome_mensagem: $('cfgNome').value,
       telefone: $('cfgTelefone').value, limite_rejeicao: Number($('cfgLimite').value) / 100, epsg_utm: Number($('cfgFuso').value),
-      antecedencia_dias: Number($('cfgAntecedencia').value) } });
+      antecedencia_dias: Number($('cfgAntecedencia').value),
+      orcamento_radio: $('cfgOrcamento').value.trim() === '' ? null : Number($('cfgOrcamento').value),
+      alerta_preco: Number($('cfgAlertaPreco').value) / 100, repeticao_n: Number($('cfgRepN').value), repeticao_dias: Number($('cfgRepDias').value) } });
     desenharConfig();
     mensagemEm('estadoConfig', 'Configurações salvas (registrado na auditoria). Valem para os próximos avisos.');
   } catch (e) {
@@ -2008,6 +2205,9 @@ async function abrir() {
   $('verificarAuditoria').addEventListener('click', verificarAuditoria);
   $('formRelatorio').addEventListener('submit', carregarRelatorio);
   $('formRelatorio').addEventListener('click', exportarRelatorio);
+  $('relQual').addEventListener('change', trocarTipoRelatorio);
+  $('relModo').addEventListener('change', desenharFiltrosRelatorio);
+  $('listaVias').addEventListener('click', baixarVia);
   $('formAuditoria').addEventListener('click', exportarAuditoria);
   $('solicitado').addEventListener('click', baixarComprovante);
   $('conferencia').addEventListener('change', editarConferencia);
@@ -2016,6 +2216,7 @@ async function abrir() {
   $('form').addEventListener('submit', enviar);
   $('botaoUcs').addEventListener('click', () => { estado.verUcs = !estado.verUcs; desenharUcs(); });
   $('botaoRede').addEventListener('click', alternarRede);
+  $('botaoCalor').addEventListener('click', alternarCalor);
   $('botaoLegenda').addEventListener('click', alternarLegenda);
   try { estado.legendaMinimizada = localStorage.getItem('farol.legenda') === 'minimizada'; } catch (e) { /* sem armazenamento */ }
   desenharLegenda();
