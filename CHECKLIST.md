@@ -21,6 +21,23 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   - [x] H6 registro total e linha do tempo do aviso
   - [x] H7 ficha da comunidade, mapa de calor, alerta de repetição
   - [x] Semente do ano, DEMO.md, PR atualizado
+- [ ] Fase J: verificação geral (todo botão funciona, tudo salva)
+  - [ ] J1 inventário (docs/VERIFICACAO.md)
+  - [ ] J2 teste de ponta a ponta por item e por perfil
+  - [ ] J3 erros corrigidos com teste
+  - [ ] J4 cadastro de rádio só do Admin da empresa + pedidos de rádio
+- [ ] Fase K: idiomas (pt-BR, en, es)
+  - [ ] K1 aviso, mensagem, tipos, PDF, e-mail, comprovante e áudio nos 3 idiomas
+  - [ ] K2 telas nos 3 idiomas
+- [ ] Fase I: acessibilidade e todos os equipamentos
+  - [ ] I1 layout por tamanho de tela
+  - [ ] I2 texto, cor e movimento
+  - [ ] I3 teclado e leitor de tela
+  - [ ] I4 tempo e trabalho perdido
+  - [ ] I5 testes automáticos (axe, teclado, reflow, contraste)
+  - [ ] I6 botão Acessibilidade (prioridade 2)
+  - [ ] I7 Libras e voz (prioridade 2)
+  - [ ] I8 declaração e retorno (prioridade 2)
 
 ## Resumos por fase
 

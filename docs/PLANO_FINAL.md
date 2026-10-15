@@ -128,3 +128,62 @@ H7 — Ficha da comunidade e incrementos (se der tempo depois de H0–H6)
 Semente de demonstração: completar com dados fictícios de janeiro até hoje (avisos, envios com valores variados, uma rádio com preço acima da média, comunidades com repetição, alguns fora do prazo, alguns sem confirmação), para todos os relatórios terem conteúdo. Atualizar docs/DEMO.md com um passo dos relatórios (custos com projeção e orçamento) e da ficha da comunidade.
 
 Testes: unidade das contas (projeção, orçamento, economia, % no prazo, frequência, duração, comparações), PDF gerado para cada relatório com rodapé e código, segunda via idêntica (mesmo SHA-256), envio só para o domínio permitido, matriz de perfis, varredura de minimização em todos os PDFs/CSV/e-mails, teste "toda rota que altera grava auditoria". Métricas do algoritmo iguais. Ao fim: resumo curto + atualizar o PR.
+
+======== FASES J, K e I — Verificação geral, idiomas e acessibilidade ========
+(acrescentadas em 15/10/2026; mesmo modo de trabalho: execute do início ao fim sem interromper, decida pela opção mais segura e mais simples quando houver dúvida (registre no CHECKLIST.md), commit + push por etapa, só pare se um teste falhar sem solução ou as métricas do algoritmo mudarem. Branch sabrina/plano-final. ORDEM: J → K → I (prioridade 1) → I (prioridade 2).)
+
+==================== FASE J — Verificação geral: todo botão funciona, tudo salva ====================
+Objetivo: nenhum botão quebrado, nenhum "salvar" que não salva, nenhum erro calado, antes da apresentação.
+
+J1 — Inventário: liste em docs/VERIFICACAO.md TODAS as telas, botões, links, formulários e downloads do app, por perfil (Admin do Farol, Admin da empresa, Operador, Consulta), com a rota da API que cada um chama.
+
+J2 — Teste de ponta a ponta no navegador sem tela, para CADA item do inventário e CADA perfil que pode usá-lo:
+- o botão faz o que promete; formulários SALVAM e o dado continua lá depois de recarregar a página e de sair e entrar de novo;
+- editar e desativar funcionam e aparecem na lista; a auditoria registra com o nome de quem fez;
+- dados inválidos mostram erro claro no campo (sem perder o que foi digitado); campos obrigatórios avisados;
+- clique duplo não grava duas vezes (botão desabilitado enquanto salva, "Salvando...", e o servidor recusa duplicata);
+- falha de rede ou erro 500 mostra mensagem clara e nada fica pela metade;
+- console do navegador sem erros; nenhuma resposta 4xx/5xx inesperada.
+Itens obrigatórios: entrar, trocar senha, sair, tema, Ajuda; Novo aviso (planilha, aba, quando, tipo, conferir, justificativa, gerar, editar mensagem, Ouvir, PDF, MP3, Baixar JSON/CSV); Enviar para a rádio (e-mail, WhatsApp, copiar, valor, cobrança, custo antigo); confirmação de recebimento; Histórico (busca, filtros, linha do tempo, cancelar, mudar data, baixar de novo PDF/MP3, comprovante); Relatórios (cada um: ver, PDF, CSV, Enviar, segunda via); Mapa (Ir para, ficha da comunidade, relatório da comunidade, mapa de calor); Usuários (convidar, editar, perfil, municípios, bloquear, reativar, último admin); RÁDIOS (cadastrar, editar alcance por município e por comunidade, valor padrão, desativar, reativar); Configurações (modelo da mensagem com prévia, telefone, limites, orçamento, alertas, fuso, antecedência); Empresas (criar, editar, CNPJ, domínio, suspender, reativar); Auditoria (filtros, conferir integridade, exportar).
+
+J3 — Corrija todos os erros encontrados (com teste que reproduz o erro antes e passa depois) e liste em docs/VERIFICACAO.md: o que estava quebrado, a causa e a correção.
+
+J4 — Cadastro de rádio só do Admin da empresa:
+- Só o Admin da empresa cadastra, edita, desativa e define o valor padrão das rádios. Remover do Operador o "+ Nova rádio".
+- O Operador escolhe a rádio da lista no envio e continua informando o VALOR daquele envio (campo aberto, sugerido pelo último valor ou pelo padrão) e a forma de cobrança.
+- Se faltar rádio: botão "Pedir cadastro de rádio" para o Operador (nome da rádio, cidade, contato e observação, sem dado pessoal), que aparece para o Admin da empresa numa lista "Pedidos de rádio" (atender = abre o cadastro já preenchido; recusar com motivo); tudo na auditoria com nomes.
+- Atualizar a matriz de perfis (teste_matriz), a Ajuda, o README e o DEMO.md.
+
+==================== FASE K — Idiomas (português, inglês e espanhol) ====================
+K1 — Aviso em 3 idiomas (prioridade):
+- Na etapa "Quando" do Novo aviso, escolher o idioma do aviso: Português (Brasil), English, Español (padrão = idioma configurado da empresa).
+- O aviso do algoritmo já tem os 3 idiomas (nucleo/idiomas.py): usar no app. A MENSAGEM DA RÁDIO passa a ter um modelo por idioma na configuração da empresa (o Admin edita os 3, com prévia; padrões em inglês e espanhol bem escritos e naturais para rádio, com datas e horários no formato de cada idioma).
+- Tipos de desligamento, PDF da rádio, e-mail para a rádio e comprovante no idioma escolhido.
+- Áudio (MP3): voz em inglês e em espanhol com o Piper. Escolha vozes cuja licença permita o uso (confira o MODEL_CARD de cada uma), baixe só do repositório oficial conferindo o MD5, registre origem, licença e hash no ORIGEM.md. A leitura de datas e horas (nucleo/locucao.py) também para inglês e espanhol. Se uma voz não tiver licença adequada, deixe aquele idioma sem áudio e avise na tela.
+- O idioma escolhido fica gravado no aviso e aparece no histórico e nos relatórios.
+- Texto em outro idioma marcado com o atributo lang correto na tela (acessibilidade: leitor de tela pronuncia certo).
+- Testes: aviso, mensagem, PDF, e-mail e áudio nos 3 idiomas; a versão em português continua idêntica à atual; métricas do algoritmo iguais.
+
+K2 — Telas em 3 idiomas:
+- Seletor de idioma da interface no topo (também na tela Entrar), guardado no perfil do usuário; todos os textos das telas, mensagens de erro, Ajuda, "?" e títulos num dicionário (pt-BR, en, es), sem texto fixo espalhado no código; <html lang> muda junto.
+- Números, datas e moeda formatados pelo idioma (Intl), com o valor em R$ mantido.
+- Relatórios em PDF/CSV no idioma de quem gera.
+- Teste: nenhuma chave de tradução faltando nos 3 idiomas; cada tela abre nos 3 idiomas sem texto em português sobrando.
+
+==================== FASE I — Acessibilidade e todos os equipamentos ====================
+Meta: WCAG 2.2 nível AA e ABNT NBR 17225, no app (apresentacao/app), nas telas de entrar/trocar senha, na página de confirmação da rádio, nos e-mails e, por último, na página de entrada e no mapa estático (sem quebrar os testes de referência do passo 12). Público: pessoas com deficiência visual (cegueira e baixa visão), auditiva, motora, TDAH/neurodivergentes e dislexia. Termo correto: "pessoa com deficiência".
+
+PRIORIDADE 1
+I1 — Qualquer tela: layout mobile-first com quebras para celular pequeno (320–359), celular (360–599), tablet (600–1023, retrato e paisagem), computador (1024–1599) e telas grandes (1600+), com largura máxima de leitura. Sem rolagem horizontal da página em 320 px e com zoom de 400% (exceto dentro do mapa e de tabelas largas, que rolam dentro de si com a primeira coluna fixa). Tabelas viram cartões em telas estreitas. Menu vira botão "Menu" (aria-expanded) no celular. Janelas em tela cheia no celular, com Fechar sempre visível e env(safe-area-inset-*). Em toque (pointer: coarse), alvos ≥ 48 px; dicas de passar o mouse também no foco e no toque. Mapa com altura proporcional; nenhuma ação exige arrastar (WCAG 2.5.7). Folha de impressão para relatórios e comprovantes. Manifest de app instalável SEM service worker que guarde dados da API.
+I2 — Texto, cor e movimento: font-size em rem/em (texto acompanha o tamanho de letra do navegador e funciona a 200%); espaçamento de texto ajustável (WCAG 1.4.12); conferir e corrigir o contraste de todos os pares de cores nos dois temas (texto ≥ 4,5:1; texto grande, ícones e bordas ≥ 3:1; âmbar sobre branco nunca como texto), com teste automático; nunca só a cor (estados, alertas, mapa de calor e status com ícone + texto; mapa de calor com legenda numérica); prefers-reduced-motion (sem animações, inclusive no mapa), prefers-contrast e forced-colors (alto contraste do Windows).
+I3 — Teclado e leitor de tela: link "Pular para o conteúdo"; marcos e títulos em ordem; título da aba muda por tela; tudo por teclado, sem armadilha; foco visível e nunca escondido atrás do cabeçalho fixo (scroll-padding-top); ao trocar de tela o foco vai para o título; janelas devolvem o foco e fecham com Esc; nomes acessíveis em botões só com ícone; alt correto nas imagens; formulários com obrigatório em texto, erro ligado ao campo (aria-invalid + aria-describedby), resumo de erros no topo com links (role="alert"), autocomplete correto e colar senha permitido; tabelas com caption e th com scope; avisos importantes por aria-live. MAPA: região com nome, link "Pular o mapa", lista/tabela das comunidades sincronizada com o mapa (abrir a ficha pela lista e pelo teclado, anunciada), mapa de calor também na tabela.
+I4 — Tempo e trabalho perdido: aviso 2 minutos antes da sessão expirar com "Continuar conectado"; tempo restante do pacote da conferência com "Conferir de novo" sem perder data, horário, tipo, idioma e textos (a planilha continua sem ser guardada); rascunho do Novo aviso mantido na memória da página ao trocar de tela e aviso "Há alterações não salvas" antes de sair; confirmações curtas; uma ação principal por tela; nada piscando.
+I5 — Testes automáticos: axe-core (npm, versão fixada, MPL-2.0, só nos testes) em TODAS as telas × 4 perfis × tema claro e escuro × 3 idiomas da interface × viewports 320, 360×640, 390×844, 768×1024 (retrato e paisagem), 1280×800 e 1920×1080: zero violações serious e critical. Teste de teclado (Tab/Shift+Tab/Enter/Esc, foco visível e não escondido, sem armadilha). Reflow a 320 px e 400%; texto a 200%. Emulação de reduced-motion, forced-colors e prefers-contrast (CDP). Pares de contraste. Todos os testes antigos passando; métricas iguais.
+
+PRIORIDADE 2
+I6 — Botão "Acessibilidade" no topo (também em Entrar): tamanho do texto (100/125/150/200%), alto contraste, reduzir movimento, fonte para dislexia (Atkinson Hyperlegible ou OpenDyslexic, OFL, servida pelo Farol, hash no ORIGEM.md), espaçamento maior, "modo foco" (um passo por vez), ler em voz alta o texto principal (speechSynthesis do navegador, nada enviado a servidor) e vibração curta no celular (desligada por padrão). Guardado no perfil do usuário; antes do login, só na sessão do navegador. Não registrar motivo nem deficiência.
+I7 — Libras e voz: na Ajuda e na página Acessibilidade, como usar a extensão VLibras no navegador e o app VLibras no celular (vlibras.gov.br) e o ditado do próprio aparelho (Windows + H; microfone do teclado no celular). NÃO implementar ditado próprio. Widget VLibras só como opção desligada (FAROL_VLIBRAS=1), carregado ao clicar em "Libras", com a exceção de CSP documentada no SEGURANCA.md; confirmar o código oficial atual em vlibras.gov.br antes de usar.
+I8 — Declaração e retorno: página "Acessibilidade" (compromisso WCAG 2.2 AA e ABNT NBR 17225, o que foi testado, limitações, data) com o formulário "Relatar problema de acessibilidade" (até 1.000 caracteres, sem dado pessoal, no banco e na auditoria; o Admin do Farol vê a lista). PDFs com título, idioma e autor; se a biblioteca não gerar PDF marcado (tagged), registrar a limitação e manter tela e CSV como alternativa acessível. E-mails com versão em texto simples. docs/ACESSIBILIDADE.md com o roteiro de teste manual para eu fazer (NVDA, TalkBack, VoiceOver, só teclado, zoom 200%/400%, alto contraste do Windows).
+
+==================== Ao fim ====================
+Resumo curto: (1) lista de erros encontrados e corrigidos na Fase J; (2) o que mudou na rádio e nos perfis; (3) idiomas prontos (aviso, mensagem, PDF, e-mail, áudio e telas), e qualquer idioma sem voz; (4) resultado do axe por tela; (5) decisões e limitações. Atualizar README (seções Idiomas e Acessibilidade), SEGURANCA.md, ORIGEM.md, DEMO.md (passos: aviso em espanhol; navegação só com teclado/celular) e o PR.
