@@ -231,6 +231,54 @@ def semear_ano() -> dict:
     return {"criados": criados, "envios": envios, "radios": len(radios)}
 
 
+# ---------- A segunda empresa de demonstração: Distribuidora Exemplo (DEX), no Mato Grosso do Sul ----------
+# Fictícia: domínio reservado para teste (exemplo.example), sem CNPJ, área em alguns municípios do MS (o mapa das
+# empresas mostra duas empresas em estados diferentes). Nenhum dado de empresa real.
+EXEMPLO = {"nome": "Distribuidora Exemplo (demonstração)", "sigla": "DEX", "dominio": "exemplo.example"}
+AREA_EXEMPLO = ["5001102", "5002704", "5003207", "5003702", "5005707", "5006606", "5008305"]   # Aquidauana, Campo Grande,
+# Corumbá, Dourados, Naviraí, Ponta Porã e Três Lagoas
+REAIS = ("energisa.com.br",)   # domínios reais que já apareceram em cadastro de teste: viram a empresa fictícia
+
+
+def empresa_exemplo() -> dict:
+    """Garante a DEX com a área no MS. Uma empresa de teste com domínio real (ex.: a "Energisa" cadastrada à mão) vira a
+    DEX: nome, sigla, domínio e CNPJ trocados e os e-mails dos usuários passados para o domínio fictício; cada troca
+    vai para a auditoria com o antes e o depois (nada da auditoria é apagado)."""
+    from .senhas import hash_senha, senha_temporaria
+    feito = {"empresa": None, "trocada": None, "senha_admin": None}
+    e = banco.empresa_por_sigla(EXEMPLO["sigla"])
+    if not e:
+        with conectar() as c:
+            real = c.execute("SELECT id FROM empresa WHERE dominio = ANY(%s) ORDER BY id LIMIT 1", (list(REAIS),)).fetchone()
+        if real:
+            antes = banco.empresa(real[0])
+            with conectar() as c:
+                c.execute("UPDATE empresa SET nome = %s, sigla = %s, dominio = %s, cnpj = NULL WHERE id = %s",
+                          (EXEMPLO["nome"], EXEMPLO["sigla"], EXEMPLO["dominio"], real[0]))
+                usuarios = c.execute("SELECT id, email FROM usuario WHERE empresa_id = %s", (real[0],)).fetchall()
+                for uid, email in usuarios:
+                    c.execute("UPDATE usuario SET email = %s WHERE id = %s", (email.split("@")[0] + "@" + EXEMPLO["dominio"], uid))
+            banco.registrar("alterou empresa", f"{antes['nome']} ({antes['sigla']}) → {EXEMPLO['nome']} ({EXEMPLO['sigla']}): domínio "
+                            f"{antes['dominio']} → {EXEMPLO['dominio']}, CNPJ removido (empresa de teste com dados reais trocada pela "
+                            "fictícia da demonstração)", None, real[0])
+            for uid, email in usuarios:
+                banco.registrar("alterou usuário", f"e-mail {email} → {email.split('@')[0]}@{EXEMPLO['dominio']} (domínio fictício)", None, real[0])
+            feito["trocada"] = f"{antes['sigla']} → {EXEMPLO['sigla']}"
+        else:
+            temporaria = senha_temporaria()
+            banco.criar_empresa_com_admin(EXEMPLO["nome"], EXEMPLO["sigla"], EXEMPLO["dominio"], None, "admin@exemplo.example",
+                                          "Admin da Exemplo", hash_senha(temporaria), "semente de demonstração")
+            banco.registrar("semente: criou a empresa", f"{EXEMPLO['nome']} e o primeiro admin", None, banco.empresa_por_sigla("DEX")["id"])
+            feito["senha_admin"] = temporaria
+        e = banco.empresa_por_sigla(EXEMPLO["sigla"])
+    if not banco.area(e["id"]):
+        banco.salvar_area(e["id"], AREA_EXEMPLO, "área de atuação: carga da demonstração",
+                          f"{EXEMPLO['sigla']}: {len(AREA_EXEMPLO)} municípios do MS (fictício)", None)
+    feito["empresa"] = {"sigla": e["sigla"], "municipios": len(banco.area(e["id"]))}
+    return feito
+
+
 if __name__ == "__main__":
     print(semear_demo(int(sys.argv[1]) if len(sys.argv) > 1 else 16))
     print(semear_ano())
+    print(empresa_exemplo())

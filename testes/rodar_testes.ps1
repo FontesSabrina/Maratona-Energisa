@@ -27,6 +27,7 @@ $testes = @(
     @{ Nome = "Banco já existente (4 perfis)"; Cmd = "uv run python -W ignore testes/api/teste_migracao.py" },
     @{ Nome = "Área de atuação (empresas)";    Cmd = "uv run python -W ignore testes/api/teste_area_atuacao.py" },
     @{ Nome = "Sem True/False nas saídas";      Cmd = "uv run python -W ignore testes/api/teste_sem_booleanos.py" },
+    @{ Nome = "E-mail só para teste (demo)";   Cmd = "uv run python -W ignore testes/api/teste_correio_demo.py" },
     @{ Nome = "Matriz rota x perfil";          Cmd = "uv run python -W ignore testes/api/teste_matriz.py" },
     @{ Nome = "Auditoria encadeada";           Cmd = "uv run python -W ignore testes/api/teste_auditoria.py" },
     @{ Nome = "Rádio, envio e cofre (Mailpit)"; Cmd = "uv run python -W ignore testes/api/teste_radio.py" },

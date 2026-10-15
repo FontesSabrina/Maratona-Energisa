@@ -9,6 +9,7 @@ A senha do SMTP nunca vai para o código, o git ou o log.
 """
 
 import os
+from email.utils import getaddresses
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -41,8 +42,23 @@ def remetente() -> str:
     return c["remetente"] if c else "Farol <avisos@farol.example>"
 
 
+# domínios reservados para teste e documentação (RFC 2606 e 6761): na demonstração, só eles recebem
+DOMINIOS_TESTE = (".example", ".test", ".invalid", ".localhost", "example.com", "example.net", "example.org")
+
+
+def destino_real(endereco: str) -> bool:
+    d = endereco.rsplit("@", 1)[-1].strip().lower().rstrip(">")
+    return not any(d == x.lstrip(".") or d.endswith(x if x.startswith(".") else "." + x) or d == x for x in DOMINIOS_TESTE)
+
+
 def enviar(msg: EmailMessage) -> None:
-    """Entrega a mensagem ao servidor de e-mail; FalhaEnvio se ele recusar algum destinatário ou falhar."""
+    """Entrega a mensagem ao servidor de e-mail; FalhaEnvio se ele recusar algum destinatário ou falhar.
+    Demonstração (sem FAROL_EMAIL_REAL=1): só para domínios de teste (.example etc.), conferido antes de conectar;
+    um domínio real nunca recebe nada dos dados fictícios."""
+    if os.environ.get("FAROL_EMAIL_REAL") != "1":
+        destinos = [a for _, a in getaddresses(msg.get_all("To", []) + msg.get_all("Cc", []) + msg.get_all("Bcc", []))]
+        if any(destino_real(a) for a in destinos):
+            raise FalhaEnvio("ambiente de demonstração: só e-mails de domínios de teste (.example); nada foi enviado")
     c = configuracao()
     if not c:
         raise FalhaEnvio("envio por e-mail desligado neste servidor (sem FAROL_SMTP_HOST)")

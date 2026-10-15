@@ -57,3 +57,5 @@ O `render.yaml` já declara todas; nenhum valor vai para o git.
 - **Histórico de demonstração** para os relatórios (avisos, rádios e envios fictícios, uma vez só):
   `$env:FAROL_ENV=".env.producao"; uv run python -m comunidades.semente_demo` (precisa de `data/sintetico/` na máquina local). Roda as duas sementes: o mês e meio recente e o ano (de janeiro até ali), cada uma uma vez só.
 - No banco de produção, o usuário do app deve poder só `SELECT` e `INSERT` na tabela `registro` (sem `UPDATE`, `DELETE` nem `TRUNCATE`), além dos gatilhos que já recusam essas operações.
+
+- **E-mail só para domínios de teste** (15/10/2026): enquanto o Farol usa dados fictícios, deixe `FAROL_EMAIL_REAL` sem valor: o servidor só envia para domínios reservados (.example etc.) e recusa os outros antes de conectar ao SMTP. Só ligue (`FAROL_EMAIL_REAL=1`) quando entrarem dados e destinatários reais, depois da revisão LGPD.
