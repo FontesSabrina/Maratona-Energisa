@@ -37,6 +37,7 @@ $testes = @(
 )
 if (-not $Rapido) {
     $testes += @{ Nome = "Tela do app (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py" }
+    $testes += @{ Nome = "Verificação geral (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_verificacao.mjs --email" }
     if (-not $SemAlgoritmo) {
         $testes += @{ Nome = "Algoritmo (--so-algoritmo)"; Cmd = "uv run comunidades --so-algoritmo" }
     }

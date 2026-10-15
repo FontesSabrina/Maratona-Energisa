@@ -18,7 +18,8 @@ PERMISSOES = {
     "gerenciar_empresas": {"admin_farol"},
     "ver_registro": {"admin_farol", "admin_empresa"},
     "baixar_json": {"admin_empresa", "operador"},   # o JSON da planilha com os números de UC (auditado)
-    "gerenciar_radios": {"admin_empresa"},          # alterar e desativar rádios (o Operador só acrescenta, no envio)
+    "gerenciar_radios": {"admin_empresa"},          # cadastrar, alterar, desativar rádios e atender os pedidos (Fase J)
+    "pedir_radio": {"operador"},                    # pedir ao Admin da empresa o cadastro de uma rádio que falta
     "configurar_empresa": {"admin_empresa"},        # modelo da mensagem, telefone, limite de rejeição, fuso UTM, antecedência
     "enviar_relatorio": {"admin_empresa", "operador"},   # mandar um relatório por e-mail (Consulta só gera e baixa)
     "relatorio_auditoria": {"admin_empresa"},       # relatório de auditoria da empresa (PDF e CSV)

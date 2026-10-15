@@ -226,10 +226,11 @@
         comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
       <form id="formRadio" class="cartao formulario" novalidate>
         <h2 id="formRadioTitulo">Cadastrar rádio</h2>
-        <label>Nome da rádio <input id="radNome" maxlength="80" autocomplete="off"></label>
+        <label>Nome da rádio (obrigatório) <input id="radNome" maxlength="80" autocomplete="off" required></label>
+        <p class="ajuda">Informe o e-mail ou o WhatsApp da rádio (pelo menos um).</p>
         <div class="campos campos-2">
-          <label>E-mail <input type="email" id="radEmail" autocomplete="off"></label>
-          <label>WhatsApp (com DDD) <input id="radWhats" inputmode="tel" autocomplete="off"></label>
+          <label>E-mail da rádio <input type="email" id="radEmail" autocomplete="off"></label>
+          <label>WhatsApp da rádio (com DDD) <input id="radWhats" inputmode="tel" autocomplete="off"></label>
         </div>
         <div class="campos campos-2">
           <label>Valor padrão (R$) <input id="radValor" inputmode="decimal" autocomplete="off"></label>
@@ -243,6 +244,11 @@
           <button type="button" id="radCancelar" hidden>Cancelar a edição</button></div>
         <p id="estadoRadio" class="estado" role="status" aria-live="polite"></p>
       </form>
+      <section class="cartao" aria-labelledby="tituloPedidos">
+        <h2 id="tituloPedidos">Pedidos de rádio</h2>
+        <p class="ajuda">Rádios que o Operador pediu para cadastrar. Atender abre o cadastro já preenchido; recusar pede o motivo, que o Operador vê.</p>
+        <div id="listaPedidos" class="lista"></div>
+      </section>
       <div id="listaRadios" class="lista"></div>
     </section>
 
@@ -280,16 +286,17 @@
     <section id="vista-empresas" class="vista" hidden aria-labelledby="tituloEmpresas">
       <h1 id="tituloEmpresas">Empresas</h1>
       <form id="formEmpresa" class="cartao formulario" novalidate>
-        <h2>Cadastrar empresa</h2>
-        <label>Nome <input id="empNome" required maxlength="120"></label>
+        <h2 id="formEmpresaTitulo">Cadastrar empresa</h2>
+        <label>Nome (obrigatório) <input id="empNome" required maxlength="120" autocomplete="organization"></label>
         <label>CNPJ (opcional; aceita o alfanumérico) <input id="empCnpj" maxlength="18" autocomplete="off"></label>
         <div class="campos campos-2">
-          <label>Sigla <input id="empSigla" required maxlength="10"></label>
-          <label>Domínio dos e-mails <input id="empDominio" required placeholder="empresa.com.br"></label>
+          <label id="empSiglaRotulo">Sigla (obrigatória) <input id="empSigla" required maxlength="10" autocomplete="off"></label>
+          <label>Domínio dos e-mails (obrigatório) <input id="empDominio" required placeholder="empresa.com.br" autocomplete="off"></label>
         </div>
-        <label>Nome do primeiro admin <input id="empAdminNome" required maxlength="120"></label>
-        <label>E-mail do primeiro admin <input type="email" id="empAdminEmail" required></label>
-        <button type="submit" class="prim">Cadastrar empresa</button>
+        <label id="empAdminNomeRotulo">Nome do primeiro admin (obrigatório) <input id="empAdminNome" required maxlength="120" autocomplete="off"></label>
+        <label id="empAdminEmailRotulo">E-mail do primeiro admin (obrigatório) <input type="email" id="empAdminEmail" required autocomplete="off"></label>
+        <div class="acoes"><button type="submit" class="prim" id="empSalvar">Cadastrar empresa</button>
+          <button type="button" id="empCancelar" hidden>Cancelar a edição</button></div>
         <p id="estadoEmpresa" class="estado" role="status" aria-live="polite"></p>
       </form>
       <div id="listaEmpresas" class="lista"></div>

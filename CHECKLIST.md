@@ -21,11 +21,11 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   - [x] H6 registro total e linha do tempo do aviso
   - [x] H7 ficha da comunidade, mapa de calor, alerta de repetição
   - [x] Semente do ano, DEMO.md, PR atualizado
-- [ ] Fase J: verificação geral (todo botão funciona, tudo salva)
-  - [ ] J1 inventário (docs/VERIFICACAO.md)
-  - [ ] J2 teste de ponta a ponta por item e por perfil
-  - [ ] J3 erros corrigidos com teste
-  - [ ] J4 cadastro de rádio só do Admin da empresa + pedidos de rádio
+- [x] Fase J: verificação geral (todo botão funciona, tudo salva)
+  - [x] J1 inventário (docs/VERIFICACAO.md)
+  - [x] J2 teste de ponta a ponta por item e por perfil
+  - [x] J3 erros corrigidos com teste
+  - [x] J4 cadastro de rádio só do Admin da empresa + pedidos de rádio
 - [ ] Fase K: idiomas (pt-BR, en, es)
   - [ ] K1 aviso, mensagem, tipos, PDF, e-mail, comprovante e áudio nos 3 idiomas
   - [ ] K2 telas nos 3 idiomas
@@ -97,3 +97,24 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Os testes que leem o texto dos PDFs passam a ler o fluxo até o "endstream" com zlib tolerante: antes, um \r no fim dos dados comprimidos (acaso do conteúdo) fazia o teste falhar de vez em quando.
 - Bateria final da Fase H: rodar_testes.ps1 com 23 de 23 testes OK (Relatórios completos 69/69, Registro total 5/5, Tela do app 109/109, minimização 0 nas duas cidades); --so-algoritmo igual ao passo 12 (835 cenários, cobertura 88.3%, precisão 95.0%, aviso 44s -> 14s).
 - Na tela, a coluna do painel ficou presa à largura dele (minmax(0, 1fr)); o teste da tela confere que nada passa da largura do painel.
+
+### Fase J (15/10/2026)
+- Feito: inventário de telas, botões, formulários e downloads por perfil com a rota da API (docs/VERIFICACAO.md); teste de ponta a
+  ponta no navegador (testes/navegador/teste_verificacao.mjs, com Mailpit: e-mail, segunda via e confirmação de verdade) por
+  perfil: salva e continua depois de recarregar e de sair e entrar, editar/desativar na lista, auditoria com o nome, erro no
+  campo sem perder o digitado, clique duplo, duplicata recusada no servidor, sem conexão e erro 500, console e respostas sem erro.
+  Antes: 8 de 28 verificações; depois: 110 de 110. 13 problemas corrigidos (tabela em docs/VERIFICACAO.md, J3): aviso gerado duas
+  vezes com o mesmo pacote, nenhum "Salvando…", duplicatas aceitas, erro só na mensagem geral (e em inglês do Pydantic), "Failed
+  to fetch", empresa sem admin pela metade, desativar rádio só editando, empresa e nome de usuário sem edição, mensagens do
+  usuário anterior depois de sair, 404 da rede fictícia no console, rádio cadastrada com o aviso aberto sem valor sugerido.
+  J4: só o Admin da empresa cadastra rádio; o Operador pede (pedidos de rádio, atender = cadastro preenchido, recusar com motivo).
+- Testes: rodar_testes.ps1 24 de 24 (novo: Verificação geral 110/110; Tela do app 110/110; Rádio 79/79; API 78/78); --so-algoritmo
+  igual ao passo 12 (835 cenários, 88.3%/95.0%, 44s -> 14s).
+
+## Decisões da Fase J (tomadas sem perguntar: a opção mais segura e mais simples)
+- Duplicata de envio = mesmo aviso, município, rádio, canal, texto, valor e cobrança em menos de 1 minuto (409); envio que falhou pode ser repetido na hora.
+- Mudar a data para a mesma data e reativar o que já está ativo: 409 (nenhuma linha a mais na auditoria). Salvar rádio sem mudança: 200 sem linha na auditoria.
+- Pedido de rádio: só o Operador pede (o Admin cadastra direto); o Operador vê só os pedidos que fez; contato = e-mail ou telefone da rádio; observação recusa número longo, e-mail e site.
+- Editar empresa muda nome, domínio e CNPJ; a sigla e os e-mails já cadastrados não mudam.
+- Município da concessão sem rede fictícia: 200 com null (antes 404).
+- O banco ganha a coluna aviso.pacote_hash e a tabela pedido_radio pela semente (como nas fases anteriores): rodar `uv run python -m comunidades.semente` no banco local e no de produção.

@@ -21,10 +21,16 @@ BRASILIA = timezone(timedelta(hours=-3))  # sem horário de verão desde 2019
 MAX_TEXTO = 40                            # data e horário: o que vai no aviso, digitado pelo operador
 
 
+def erro(status: int, texto: str, campo: str | None = None) -> HTTPException:
+    """O erro da API com o campo do formulário que causou (cabeçalho X-Farol-Campo): a tela marca o erro
+    no campo certo (aria-invalid) em vez de só numa mensagem geral."""
+    return HTTPException(status, texto, headers={"X-Farol-Campo": campo} if campo else None)
+
+
 def texto_do_aviso(nome: str, v: str) -> str:
     v = " ".join(str(v).split())
     if not v or len(v) > MAX_TEXTO:
-        raise HTTPException(422, f"{nome}: informe de 1 a {MAX_TEXTO} caracteres.")
+        raise erro(422, f"{nome}: informe de 1 a {MAX_TEXTO} caracteres.", "horario" if nome == "horário" else nome)
     return v
 
 

@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -55,7 +56,7 @@ from ..nucleo.motivos import TEXTOS, Motivo
 from ..nucleo.planilha import MAX_LINHAS, PlanilhaInvalida, modelo_csv
 from . import conferencia, leitura
 from . import pacote as pacote_
-from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, DIST, MAX_TEXTO, config_empresa, segundos
+from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, DIST, MAX_TEXTO, config_empresa, erro, segundos
 from .comum import texto_do_aviso as _texto_do_aviso
 from .radio import rotas as radio_rotas
 from .relatorios import painel_do_mes
@@ -90,6 +91,28 @@ def _erro_inesperado(request, erro: Exception) -> JSONResponse:
     onde = " <- ".join(f"{Path(q.filename).name}:{q.lineno}" for q in traceback.extract_tb(erro.__traceback__)[-4:][::-1])
     _log.error("%s %s %s em %s", codigo, request.url.path, type(erro).__name__, onde)
     return JSONResponse({"detail": f"Ocorreu um erro e nada foi gerado (código {codigo})."}, status_code=500)
+
+
+_PYDANTIC = {   # tipo do erro de validação -> como a pessoa lê (a mensagem original vem em inglês)
+    "missing": lambda c: "preencha este campo.", "string_too_long": lambda c: f"no máximo {c.get('max_length')} caracteres.",
+    "string_too_short": lambda c: f"pelo menos {c.get('min_length')} caracteres.", "too_long": lambda c: f"no máximo {c.get('max_length')} itens.",
+    "less_than_equal": lambda c: f"no máximo {c.get('le')}.", "greater_than_equal": lambda c: f"no mínimo {c.get('ge')}.",
+    "less_than": lambda c: f"menor que {c.get('lt')}.", "greater_than": lambda c: f"maior que {c.get('gt')}.",
+    "int_parsing": lambda c: "tem de ser um número inteiro.", "float_parsing": lambda c: "tem de ser um número.",
+    "int_from_float": lambda c: "tem de ser um número inteiro.", "literal_error": lambda c: "valor fora das opções.",
+    "string_pattern_mismatch": lambda c: "formato inválido.", "bool_parsing": lambda c: "sim ou não.",
+}
+
+
+@app.exception_handler(RequestValidationError)
+def _validacao(request, e: RequestValidationError) -> JSONResponse:
+    """Dado com formato errado (número fora da faixa, campo faltando…): a mensagem em português e o
+    campo no cabeçalho X-Farol-Campo, para a tela marcar o erro nele. O valor digitado não volta."""
+    primeiro = (e.errors() or [{}])[0]
+    campo = next((str(x) for x in reversed(primeiro.get("loc", ())) if isinstance(x, str) and x not in ("body", "query", "path")), "")
+    texto = _PYDANTIC.get(primeiro.get("type"), lambda c: "valor inválido.")(primeiro.get("ctx") or {})
+    return JSONResponse({"detail": f"Confira o campo {campo or 'informado'}: {texto}", "campo": campo or None}, status_code=422,
+                        headers={"X-Farol-Campo": campo} if campo else None)
 
 
 @app.exception_handler(senhas.Ocupado)
@@ -164,8 +187,9 @@ def rede(codigo: str, u: dict = Depends(usuario_atual)) -> JSONResponse:
     if not (len(codigo) == 7 and codigo.isdigit()):
         raise HTTPException(422, "codigo: use o código IBGE do município (7 dígitos).")
     r = banco_rede.rede_mapa(codigo)
-    if r is None:
-        raise HTTPException(404, "Município sem rede fictícia no banco.")
+    if r is None and codigo not in {c for c, _, _, _ in banco.contornos(CRS_BASE)}:
+        raise HTTPException(404, "Município fora da base da concessão.")
+    # município da concessão ainda sem a rede fictícia: null (resposta normal; um 404 sujaria o console a cada movimento do mapa)
     return JSONResponse(r, headers={"Cache-Control": "private, max-age=3600"})
 
 
@@ -307,7 +331,7 @@ class PedidoAviso(BaseModel):
 def _formulario(data: str, horario: str, idioma: str) -> tuple[str, str, str]:
     data, horario = _texto_do_aviso("data", data), _texto_do_aviso("horário", horario)
     if idioma not in idiomas.IDIOMAS:
-        raise HTTPException(422, f"idioma: use um de {', '.join(idiomas.IDIOMAS)}.")
+        raise erro(422, f"idioma: use um de {', '.join(idiomas.IDIOMAS)}.", "idioma")
     return data, horario, idioma
 
 
@@ -316,7 +340,7 @@ def _motivo(tipo: str, outro: str | None) -> tuple[str, str]:
     try:
         return tipos.motivo(tipo, outro)
     except ValueError as e:
-        raise HTTPException(422, f"Tipo de desligamento: {e}") from None
+        raise erro(422, f"Tipo de desligamento: {e}", "tipo_outro" if tipo == "outro" else "tipo") from None
 
 
 class _PedeAba(Exception):
@@ -442,6 +466,9 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     trava de equipamento vital e, acima do limite de rejeição, a justificativa. Grava no histórico."""
     data, horario, idioma = _formulario(dados.data, dados.horario, dados.idioma)
     tipo, motivo = _motivo(dados.tipo, dados.tipo_outro)
+    pacote_hash = hashlib.sha256(dados.pacote.encode()).hexdigest()
+    if (ja := banco_acesso.aviso_do_pacote(u["empresa_id"], pacote_hash)):   # clique duplo ou reenvio: um aviso só
+        raise HTTPException(409, f"Este aviso já foi gerado com esta conferência (aviso nº {ja}). Para outro aviso, confira a planilha de novo.")
     try:
         modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
     except pacote_.PacoteRecusado as e:
@@ -465,7 +492,11 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
         banco_acesso.registrar("justificou rejeições acima do limite", f"{c['rejeicao']['rejeitadas']} de {c['rejeicao']['total']} "
                                f"linhas: {travas.limpar_justificativa(dados.justificativa)}", u["id"], u["empresa_id"])
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
-    return JSONResponse(_guardar(resposta, u, data, horario, idioma, tipo, motivo, cfg))
+    try:
+        return JSONResponse(_guardar(resposta, u, data, horario, idioma, tipo, motivo, cfg, pacote_hash))
+    except banco_acesso.AvisoRepetido as e:
+        raise HTTPException(409, f"Este aviso já foi gerado com esta conferência (aviso nº {e.args[0]}). "
+                            "Para outro aviso, confira a planilha de novo.") from None
 
 
 @app.post("/api/planilha/json")
@@ -531,7 +562,8 @@ def _mensagens(municipios: list[dict], cfg: dict, data: str, horario: str, idiom
         m["segundos_mensagem"] = segundos(m["mensagem"])
 
 
-def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str, cfg: dict) -> dict:
+def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str, cfg: dict,
+             pacote_hash: str | None = None) -> dict:
     """Grava no histórico da empresa só o agregado (sem as linhas com problema), com a linha "gerou aviso"
     na auditoria na mesma transação, e devolve a resposta com o id, o código de verificação e quem pediu."""
     p = resposta["planilha"]
@@ -545,7 +577,8 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
                   for m in resposta["municipios"]]
     nomes = ", ".join(m["nome"] for m in municipios) or "nenhum município"
     g = banco_acesso.gravar_aviso(u["empresa_id"], u["id"], data, horario, idioma, resumo, municipios, tipo, motivo,
-                                  lambda id_: f"aviso {id_}: {nomes} ({p['linhas']} linhas), {tipos.ROTULOS[tipo].lower()}")
+                                  lambda id_: f"aviso {id_}: {nomes} ({p['linhas']} linhas), {tipos.ROTULOS[tipo].lower()}",
+                                  pacote_hash)
     resposta.update(id=g["id"], codigo=g["codigo"], criado_em=g["criado_em"].isoformat(), usuario=g["solicitante"],
                     usuario_perfil=PERFIS.get(g["solicitante_perfil"], ""), status="gerado")
     if "{codigo}" in cfg["modelo_mensagem"]:   # o código só existe depois de gravado: a mensagem é refeita com ele
@@ -669,6 +702,8 @@ def mudar_data(id_: int, dados: NovaData, u: dict = Depends(exigir("gerar_aviso"
     """Muda a data ou o horário do desligamento; o antes e o depois vão para a auditoria."""
     a = _aviso_da_empresa(id_, u)
     data, horario = _texto_do_aviso("data", dados.data), _texto_do_aviso("horário", dados.horario)
+    if (data, horario) == (a["data"], a["horario"]):   # clique duplo ou nada mudou: nenhuma linha a mais na auditoria
+        raise erro(409, f"O aviso já está com a data {data}, {horario}.", "data")
     banco_acesso.mudar_data(id_, u["empresa_id"], data, horario)
     banco_acesso.registrar("mudou a data do aviso", f"aviso {id_}: de {a['data']}, {a['horario']} para {data}, {horario}",
                            u["id"], u["empresa_id"])

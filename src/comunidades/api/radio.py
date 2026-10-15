@@ -2,7 +2,9 @@
 
 - Configuração da empresa (modelo da mensagem, nome falado, telefone, limite de rejeição, fuso UTM,
   antecedência): só o Admin da empresa.
-- Rádios: o Admin da empresa cadastra e altera; o Operador só acrescenta ("+ Nova rádio" no envio).
+- Rádios: só o Admin da empresa cadastra, altera, desativa e define o valor padrão (Fase J). Se falta uma
+  rádio, o Operador pede o cadastro (nome, cidade, contato da rádio e observação); o Admin atende (cadastra a
+  rádio a partir do pedido, na mesma transação) ou recusa com motivo.
 - Envio: quem gera aviso escolhe a rádio, informa o valor (gravado no envio) e manda. Por e-mail, o
   servidor gera o PDF e o MP3, guarda os dois cifrados (cofre.py), manda pelo SMTP configurado e põe
   no e-mail o link "Confirmar recebimento" (token de uso único, 7 dias, só o hash no banco).
@@ -37,7 +39,7 @@ from ..nucleo.auditoria import diferencas
 from ..nucleo.tipos_desligamento import limpar
 from ..segredos import segredo
 from .acesso import exigir
-from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, config_empresa, segundos
+from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, config_empresa, erro, segundos
 
 rotas = APIRouter()
 LIMITE_EMAILS, JANELA_EMAILS = 30, 3600          # e-mails para rádios por usuário por hora
@@ -77,10 +79,10 @@ def ver_configuracao(u: dict = Depends(exigir("configurar_empresa"))) -> dict:
 @rotas.put("/api/empresa/configuracao")
 def salvar_configuracao(dados: Configuracao, u: dict = Depends(exigir("configurar_empresa"))) -> dict:
     if (p := mensagem.problema_modelo(dados.modelo_mensagem)):
-        raise HTTPException(422, p)
+        raise erro(422, p, "modelo_mensagem")
     nome = limpar(dados.nome_mensagem)
     if len(nome) < 2:
-        raise HTTPException(422, "Nome da empresa na mensagem: de 2 a 120 caracteres.")
+        raise erro(422, "Nome da empresa na mensagem: de 2 a 120 caracteres.", "nome_mensagem")
     antes = config_empresa(u["empresa_id"])
     novo = {"modelo_mensagem": dados.modelo_mensagem.strip(), "nome_mensagem": nome, "telefone": limpar(dados.telefone),
             "limite_rejeicao": round(dados.limite_rejeicao, 4), "epsg_utm": dados.epsg_utm, "antecedencia_dias": dados.antecedencia_dias,
@@ -103,6 +105,7 @@ class DadosRadio(BaseModel):
     valor_padrao: str | float | None = None
     cobranca: Literal["fechado", "minuto"] = "fechado"
     ativa: bool = True
+    pedido_id: int | None = None   # cadastro que atende um pedido de rádio do Operador
 
 
 def _radio_publica(r: dict) -> dict:
@@ -115,20 +118,23 @@ def _radio_publica(r: dict) -> dict:
 def _validar_radio(d: DadosRadio) -> dict:
     nome = limpar(d.nome)
     if not 2 <= len(nome) <= 80:
-        raise HTTPException(422, "Nome da rádio: de 2 a 80 caracteres.")
+        raise erro(422, "Nome da rádio: de 2 a 80 caracteres.", "nome")
     email = (d.email or "").strip().lower() or None
     if email and (p := problema_email(email)):
-        raise HTTPException(422, f"E-mail da rádio: {p}")
+        raise erro(422, f"E-mail da rádio: {p}", "email")
     whats = re.sub(r"\D", "", d.whatsapp or "") or None
     if whats and not 10 <= len(whats) <= 13:
-        raise HTTPException(422, "WhatsApp da rádio: de 10 a 13 algarismos, com o DDD (e o 55 do Brasil, se quiser).")
+        raise erro(422, "WhatsApp da rádio: de 10 a 13 algarismos, com o DDD (e o 55 do Brasil, se quiser).", "whatsapp")
     if not email and not whats:
-        raise HTTPException(422, "Informe o e-mail ou o WhatsApp da rádio.")
+        raise erro(422, "Informe o e-mail ou o WhatsApp da rádio.", "email")
     try:
         valor = economia.reais(d.valor_padrao)
+    except ValueError as e:
+        raise erro(422, f"Valor padrão: {e}.", "valor_padrao") from None
+    try:
         alcance = alcance_.normalizar_alcance(d.alcance, _municipios_concessao())
     except ValueError as e:
-        raise HTTPException(422, f"Rádio: {e}.") from None
+        raise erro(422, f"Alcance da rádio: {e}.", "alcance") from None
     return {"nome": nome, "email": email, "whatsapp": whats, "alcance": alcance, "valor_padrao": valor, "cobranca": d.cobranca,
             "ativa": d.ativa}
 
@@ -139,13 +145,26 @@ def listar_radios(u: dict = Depends(exigir("gerar_aviso"))) -> dict:
 
 
 @rotas.post("/api/radios")
-def criar_radio(dados: DadosRadio, u: dict = Depends(exigir("gerar_aviso"))) -> dict:
-    """Cadastra uma rádio da empresa (o Operador usa no envio: "+ Nova rádio")."""
+def criar_radio(dados: DadosRadio, u: dict = Depends(exigir("gerenciar_radios"))) -> dict:
+    """Cadastra uma rádio da empresa (só o Admin da empresa); com pedido_id, atende o pedido do Operador."""
     d = _validar_radio(dados)
     d["ativa"] = True
-    id_ = banco.criar_radio(u["empresa_id"], u["id"], d)
+    if banco.radio_com_nome(u["empresa_id"], d["nome"]):
+        raise erro(409, "Já existe uma rádio com este nome nesta empresa.", "nome")
+    pedido = None
+    if dados.pedido_id is not None:
+        pedido = banco.pedido(dados.pedido_id, u["empresa_id"])
+        if not pedido or pedido["status"] != "aberto":
+            raise erro(409, "Este pedido de rádio já foi atendido ou recusado.")
+    try:
+        id_ = banco.criar_radio(u["empresa_id"], u["id"], d, dados.pedido_id, u["nome"])
+    except banco.PedidoResolvido:
+        raise erro(409, "Este pedido de rádio já foi atendido ou recusado.") from None
     banco_acesso.registrar("cadastrou rádio", f"{d['nome']} ({len(d['alcance']['municipios'])} município(s), "
                            f"{len(d['alcance']['comunidades'])} comunidade(s))", u["id"], u["empresa_id"])
+    if pedido:
+        banco_acesso.registrar("atendeu pedido de rádio", f"pedido {pedido['id']}: {pedido['nome']} ({pedido['cidade']}), pedido por "
+                               f"{pedido['criado_por_nome']}; cadastrada como {d['nome']}", u["id"], u["empresa_id"])
     return {"radio": _radio_publica(banco.radio(id_, u["empresa_id"]))}
 
 
@@ -155,14 +174,93 @@ def alterar_radio(id_: int, dados: DadosRadio, u: dict = Depends(exigir("gerenci
     if not antes:
         raise HTTPException(404, "Rádio não encontrada nesta empresa.")
     d = _validar_radio(dados)
-    banco.alterar_radio(id_, u["empresa_id"], d)
+    if banco.radio_com_nome(u["empresa_id"], d["nome"], exceto=id_):
+        raise erro(409, "Já existe outra rádio com este nome nesta empresa.", "nome")
     resumo_alcance = lambda a: f"{len(a.get('municipios') or [])} município(s), {len(a.get('comunidades') or [])} comunidade(s)"
-    banco_acesso.registrar("alterou cadastro de rádio", f"{antes['nome']}: " + diferencas(
-        {**antes, "alcance": resumo_alcance(antes["alcance"]), "valor_padrao": _dinheiro(antes["valor_padrao"])},
-        {**d, "alcance": resumo_alcance(d["alcance"]), "valor_padrao": _dinheiro(d["valor_padrao"])},
-        {"nome": "nome", "email": "e-mail", "whatsapp": "WhatsApp", "alcance": "alcance", "valor_padrao": "valor padrão", "cobranca": "cobrança",
-         "ativa": "ativa"}), u["id"], u["empresa_id"])
+    campos = {"nome": "nome", "email": "e-mail", "whatsapp": "WhatsApp", "alcance": "alcance", "valor_padrao": "valor padrão",
+              "cobranca": "cobrança"}
+    comparavel = lambda r: {k: (resumo_alcance(r[k]) if k == "alcance" else _dinheiro(r[k]) if k == "valor_padrao" else r[k]) for k in campos}
+    mudou = diferencas(comparavel(antes), comparavel(d), campos) if comparavel(antes) != comparavel(d) else ""
+    if not mudou and d["ativa"] == antes["ativa"]:   # nada mudou: nenhuma linha a mais na auditoria
+        return {"radio": _radio_publica(antes), "nada_mudou": True}
+    banco.alterar_radio(id_, u["empresa_id"], d)
+    if mudou:
+        banco_acesso.registrar("alterou cadastro de rádio", f"{antes['nome']}: {mudou}", u["id"], u["empresa_id"])
+    if d["ativa"] != antes["ativa"]:
+        banco_acesso.registrar("reativou rádio" if d["ativa"] else "desativou rádio", d["nome"], u["id"], u["empresa_id"])
     return {"radio": _radio_publica(banco.radio(id_, u["empresa_id"]))}
+
+
+# ---------- Pedidos de cadastro de rádio (Operador pede; Admin da empresa atende ou recusa) ----------
+class PedidoRadio(BaseModel):
+    nome: str = Field(max_length=200)
+    cidade: str = Field(max_length=200)
+    contato: str = Field("", max_length=200)
+    observacao: str = Field("", max_length=1000)
+
+
+class Recusa(BaseModel):
+    motivo: str = Field(max_length=1000)
+
+
+def _texto_livre(texto: str, rotulo: str, campo: str, minimo: int, maximo: int) -> str:
+    """Texto digitado (observação, motivo): tamanho e nada que pareça dado pessoal (número longo, e-mail, site)."""
+    t = limpar(texto)
+    if not minimo <= len(t) <= maximo:
+        raise erro(422, f"{rotulo}: de {minimo} a {maximo} caracteres." if minimo else f"{rotulo}: até {maximo} caracteres.", campo)
+    if _NUMEROS.search(t) or "@" in t or re.search(r"https?://|www\.", t, re.I):
+        raise erro(422, f"{rotulo}: sem números longos (UC, CPF, telefone de cliente), e-mail nem site.", campo)
+    return t
+
+
+def _pedido_publico(p: dict) -> dict:
+    return {"id": p["id"], "nome": p["nome"], "cidade": p["cidade"], "contato": p["contato"], "observacao": p["observacao"],
+            "status": p["status"], "motivo_recusa": p["motivo_recusa"], "radio_id": p["radio_id"], "por": p["criado_por_nome"],
+            "criado_em": p["criado_em"].isoformat(), "resolvido_por": p["resolvido_por_nome"],
+            "resolvido_em": p["resolvido_em"].isoformat() if p["resolvido_em"] else None}
+
+
+@rotas.post("/api/radios/pedidos")
+def pedir_radio(dados: PedidoRadio, u: dict = Depends(exigir("pedir_radio"))) -> dict:
+    """O Operador pede ao Admin da empresa o cadastro de uma rádio (contato da rádio, nunca de cliente)."""
+    nome = limpar(dados.nome)
+    if not 2 <= len(nome) <= 80:
+        raise erro(422, "Nome da rádio: de 2 a 80 caracteres.", "nome")
+    cidade = limpar(dados.cidade)
+    if not 2 <= len(cidade) <= 80:
+        raise erro(422, "Cidade da rádio: de 2 a 80 caracteres.", "cidade")
+    contato = limpar(dados.contato)
+    if contato and problema_email(contato.lower()) and not 10 <= len(re.sub(r"\D", "", contato)) <= 13:
+        raise erro(422, "Contato da rádio: o e-mail ou o telefone da rádio, com o DDD.", "contato")
+    if len(contato) > 120:
+        raise erro(422, "Contato da rádio: até 120 caracteres.", "contato")
+    observacao = _texto_livre(dados.observacao, "Observação", "observacao", 0, 300)
+    if banco.pedido_aberto_igual(u["empresa_id"], nome, cidade):
+        raise erro(409, "Já existe um pedido aberto para esta rádio nesta cidade.", "nome")
+    id_ = banco.criar_pedido(u["empresa_id"], u["id"], u["nome"], {"nome": nome, "cidade": cidade, "contato": contato,
+                                                                    "observacao": observacao})
+    banco_acesso.registrar("pediu cadastro de rádio", f"{nome} ({cidade}), pedido {id_}", u["id"], u["empresa_id"])
+    return {"pedido": _pedido_publico(banco.pedido(id_, u["empresa_id"]))}
+
+
+@rotas.get("/api/radios/pedidos")
+def listar_pedidos(u: dict = Depends(exigir("gerar_aviso"))) -> dict:
+    """O Admin da empresa vê os pedidos da empresa; o Operador, os que ele fez."""
+    so_meus = None if u["perfil"] == "admin_empresa" else u["id"]
+    return {"pedidos": [_pedido_publico(p) for p in banco.pedidos(u["empresa_id"], so_meus)]}
+
+
+@rotas.post("/api/radios/pedidos/{id_}/recusar")
+def recusar_pedido(id_: int, dados: Recusa, u: dict = Depends(exigir("gerenciar_radios"))) -> dict:
+    p = banco.pedido(id_, u["empresa_id"])
+    if not p:
+        raise HTTPException(404, "Pedido não encontrado nesta empresa.")
+    motivo = _texto_livre(dados.motivo, "Motivo da recusa", "motivo", 3, 300)
+    if not banco.recusar_pedido(id_, u["empresa_id"], motivo, u["nome"]):
+        raise erro(409, "Este pedido de rádio já foi atendido ou recusado.")
+    banco_acesso.registrar("recusou pedido de rádio", f"pedido {id_}: {p['nome']} ({p['cidade']}), pedido por {p['criado_por_nome']}: {motivo}",
+                           u["id"], u["empresa_id"])
+    return {"pedido": _pedido_publico(banco.pedido(id_, u["empresa_id"]))}
 
 
 # ---------- Aviso: rádios sugeridas, PDF e envios ----------
@@ -196,13 +294,13 @@ def _texto_seguro(texto: str, cfg: dict, a: dict) -> str:
     O telefone de atendimento e o código do aviso são permitidos."""
     t = " ".join(str(texto).replace("\r", "").split())
     if not 1 <= len(t) <= mensagem.MAX_MENSAGEM:
-        raise HTTPException(422, "Texto do aviso: de 1 a 3.000 caracteres.")
+        raise erro(422, "Texto do aviso: de 1 a 3.000 caracteres.", "texto")
     resto = t
     for permitido in (cfg["telefone"], a.get("codigo") or ""):
         if permitido:
             resto = resto.replace(permitido, " ")
     if _NUMEROS.search(resto) or "@" in resto or re.search(r"https?://|www\.", resto, re.I):
-        raise HTTPException(422, "O texto não pode ter números longos (UC, CPF, telefone de cliente), e-mail nem site.")
+        raise erro(422, "O texto não pode ter números longos (UC, CPF, telefone de cliente), e-mail nem site.", "texto")
     return t
 
 
@@ -284,11 +382,18 @@ def enviar(id_: int, dados: PedidoEnvio, u: dict = Depends(exigir("gerar_aviso")
         raise HTTPException(422, f"Esta rádio não tem {'e-mail' if dados.canal == 'email' else 'WhatsApp'} cadastrado.")
     texto = _texto_seguro(dados.texto, cfg, a)
     try:
-        valor, custo_antigo = economia.reais(dados.valor), economia.reais(dados.custo_antigo)
+        valor = economia.reais(dados.valor)
     except ValueError as e:
-        raise HTTPException(422, f"Valor: {e}.") from None
+        raise erro(422, f"Valor: {e}.", "valor") from None
+    try:
+        custo_antigo = economia.reais(dados.custo_antigo)
+    except ValueError as e:
+        raise erro(422, f"Custo antigo: {e}.", "custo_antigo") from None
     if valor is None:
-        raise HTTPException(422, "Informe o valor do envio (R$).")
+        raise erro(422, "Informe o valor do envio (R$).", "valor")
+    if (ja := banco.envio_repetido({"aviso_id": a["id"], "municipio": m["codigo_ibge"], "radio_id": r["id"], "canal": dados.canal,
+                                    "texto": texto, "valor": valor, "cobranca": dados.cobranca})):
+        raise erro(409, f"Este envio acabou de ser registrado (envio nº {ja}). Para repetir, espere um minuto.")
     if dados.canal == "email":
         if not correio.ligado():
             raise HTTPException(503, "O envio por e-mail está desligado neste servidor. Use o WhatsApp ou copie a mensagem.")

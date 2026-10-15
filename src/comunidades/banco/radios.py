@@ -101,6 +101,25 @@ CREATE TABLE IF NOT EXISTS relatorio_via (
     cifrado       bytea NOT NULL,
     criado_em     timestamptz NOT NULL DEFAULT now()
 );
+-- Fase J: pedidos de cadastro de rádio (o Operador pede; o Admin da empresa atende, cadastrando a rádio, ou recusa com motivo).
+-- Contato da rádio (empresa), nunca de cliente.
+CREATE TABLE IF NOT EXISTS pedido_radio (
+    id                 bigserial PRIMARY KEY,
+    empresa_id         bigint NOT NULL REFERENCES empresa ON DELETE RESTRICT,
+    nome               text NOT NULL,
+    cidade             text NOT NULL,
+    contato            text NOT NULL DEFAULT '',
+    observacao         text NOT NULL DEFAULT '',
+    status             text NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'atendido', 'recusado')),
+    motivo_recusa      text,
+    radio_id           bigint REFERENCES radio ON DELETE RESTRICT,
+    criado_por         bigint REFERENCES usuario ON DELETE RESTRICT,
+    criado_por_nome    text NOT NULL,
+    criado_em          timestamptz NOT NULL DEFAULT now(),
+    resolvido_por_nome text,
+    resolvido_em       timestamptz
+);
+CREATE INDEX IF NOT EXISTS pedido_radio_empresa ON pedido_radio (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS relatorio_via_empresa ON relatorio_via (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS radio_empresa ON radio (empresa_id);
 CREATE INDEX IF NOT EXISTS envio_aviso ON envio (aviso_id);
@@ -158,11 +177,30 @@ def radio(id_: int, empresa_id: int) -> dict | None:
     return _um(f"SELECT {RADIO} FROM radio r WHERE r.id = %s AND r.empresa_id = %s", (id_, empresa_id))
 
 
-def criar_radio(empresa_id: int, usuario_id: int, d: dict) -> int:
-    return _um("INSERT INTO radio (empresa_id, nome, email, whatsapp, alcance, valor_padrao, cobranca, criada_por)"
-               " VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-               (empresa_id, d["nome"], d["email"], d["whatsapp"], json.dumps(d["alcance"], ensure_ascii=False),
-                d["valor_padrao"], d["cobranca"], usuario_id))["id"]
+def radio_com_nome(empresa_id: int, nome: str, exceto: int | None = None) -> dict | None:
+    """Outra rádio da empresa com o mesmo nome (sem diferença de maiúsculas e espaços): duplicata."""
+    return _um("SELECT id, nome FROM radio WHERE empresa_id = %s AND lower(regexp_replace(nome, '\\s+', ' ', 'g')) = lower(%s)"
+               " AND id IS DISTINCT FROM %s", (empresa_id, " ".join(nome.split()), exceto))
+
+
+class PedidoResolvido(Exception):
+    """O pedido de rádio já foi atendido ou recusado (por outra pessoa, ou num clique duplo)."""
+
+
+def criar_radio(empresa_id: int, usuario_id: int, d: dict, pedido_id: int | None = None, usuario_nome: str = "") -> int:
+    """Cadastra a rádio; vinda de um pedido, o pedido fica atendido na mesma transação (nada pela metade)."""
+    with conectar() as c, c.cursor(row_factory=dict_row) as cur:
+        cur.execute("INSERT INTO radio (empresa_id, nome, email, whatsapp, alcance, valor_padrao, cobranca, criada_por)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                    (empresa_id, d["nome"], d["email"], d["whatsapp"], json.dumps(d["alcance"], ensure_ascii=False),
+                     d["valor_padrao"], d["cobranca"], usuario_id))
+        id_ = cur.fetchone()["id"]
+        if pedido_id is not None:
+            cur.execute("UPDATE pedido_radio SET status = 'atendido', radio_id = %s, resolvido_por_nome = %s, resolvido_em = now()"
+                        " WHERE id = %s AND empresa_id = %s AND status = 'aberto' RETURNING id", (id_, usuario_nome, pedido_id, empresa_id))
+            if not cur.fetchone():
+                raise PedidoResolvido()
+        return id_
 
 
 def alterar_radio(id_: int, empresa_id: int, d: dict) -> None:
@@ -170,6 +208,39 @@ def alterar_radio(id_: int, empresa_id: int, d: dict) -> None:
         " WHERE id = %s AND empresa_id = %s",
         (d["nome"], d["email"], d["whatsapp"], json.dumps(d["alcance"], ensure_ascii=False), d["valor_padrao"],
          d["cobranca"], d["ativa"], id_, empresa_id))
+
+
+# ---------- Pedidos de cadastro de rádio ----------
+PEDIDO = ("p.id, p.nome, p.cidade, p.contato, p.observacao, p.status, p.motivo_recusa, p.radio_id, p.criado_por, p.criado_por_nome,"
+          " p.criado_em, p.resolvido_por_nome, p.resolvido_em")
+
+
+def criar_pedido(empresa_id: int, usuario_id: int, usuario_nome: str, d: dict) -> int:
+    return _um("INSERT INTO pedido_radio (empresa_id, nome, cidade, contato, observacao, criado_por, criado_por_nome)"
+               " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+               (empresa_id, d["nome"], d["cidade"], d["contato"], d["observacao"], usuario_id, usuario_nome))["id"]
+
+
+def pedidos(empresa_id: int, usuario_id: int | None = None, limite: int = 100) -> list[dict]:
+    """Os pedidos da empresa (os abertos primeiro); com usuario_id, só os que essa pessoa fez."""
+    filtro = " AND p.criado_por = %s" if usuario_id is not None else ""
+    return _todos(f"SELECT {PEDIDO} FROM pedido_radio p WHERE p.empresa_id = %s{filtro}"
+                  " ORDER BY (p.status = 'aberto') DESC, p.criado_em DESC LIMIT %s",
+                  (empresa_id, usuario_id, limite) if usuario_id is not None else (empresa_id, limite))
+
+
+def pedido(id_: int, empresa_id: int) -> dict | None:
+    return _um(f"SELECT {PEDIDO} FROM pedido_radio p WHERE p.id = %s AND p.empresa_id = %s", (id_, empresa_id))
+
+
+def pedido_aberto_igual(empresa_id: int, nome: str, cidade: str) -> dict | None:
+    return _um("SELECT id FROM pedido_radio WHERE empresa_id = %s AND status = 'aberto' AND lower(nome) = lower(%s) AND lower(cidade) = lower(%s)",
+               (empresa_id, nome, cidade))
+
+
+def recusar_pedido(id_: int, empresa_id: int, motivo: str, usuario_nome: str) -> bool:
+    return _um("UPDATE pedido_radio SET status = 'recusado', motivo_recusa = %s, resolvido_por_nome = %s, resolvido_em = now()"
+               " WHERE id = %s AND empresa_id = %s AND status = 'aberto' RETURNING id", (motivo, usuario_nome, id_, empresa_id)) is not None
 
 
 # ---------- Envios ----------
@@ -184,6 +255,15 @@ def criar_envio(d: dict) -> int:
               "valor", "cobranca", "custo", "custo_antigo", "economia", "economia_tipo", "segundos", "segundos_hoje",
               "tempo_economizado", "status", "criado_por", "criado_por_nome")
     return _um(f"INSERT INTO envio ({', '.join(campos)}) VALUES ({', '.join('%(' + c + ')s' for c in campos)}) RETURNING id", d)["id"]
+
+
+def envio_repetido(d: dict, segundos: int = 60) -> int | None:
+    """O mesmo envio (aviso, município, rádio, canal, texto, valor e cobrança) feito há menos de um minuto: clique duplo.
+    Um envio que falhou não conta: tentar de novo logo depois é o certo."""
+    r = _um("SELECT id FROM envio WHERE aviso_id = %(aviso_id)s AND municipio = %(municipio)s AND radio_id = %(radio_id)s"
+            " AND canal = %(canal)s AND texto = %(texto)s AND valor = %(valor)s AND cobranca = %(cobranca)s"
+            " AND status <> 'falhou' AND criado_em > now() - make_interval(secs => %(janela)s) ORDER BY id DESC LIMIT 1", {**d, "janela": segundos})
+    return r["id"] if r else None
 
 
 def definir_token(envio_id: int, token: str) -> datetime:

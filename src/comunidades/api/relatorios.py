@@ -36,7 +36,7 @@ from ..nucleo.auditoria import codigo_verificacao
 from ..nucleo.radios import alcanca
 from ..nucleo.tipos_desligamento import ROTULOS
 from .acesso import exigir, usuario_atual
-from .comum import AVISO_FICTICIO, BRASILIA, DIST, config_empresa
+from .comum import AVISO_FICTICIO, BRASILIA, DIST, config_empresa, erro
 
 rotas = APIRouter()
 MAX_DIAS = 400
@@ -317,10 +317,10 @@ def _rota_enviar(tipo: str, acao: str):
         emp = banco_acesso.empresa(u["empresa_id"])
         destinos = list(dict.fromkeys(str(d).strip().lower() for d in dados.destinatarios if str(d).strip()))
         if not 1 <= len(destinos) <= MAX_DESTINATARIOS:
-            raise HTTPException(422, f"Destinatários: de 1 a {MAX_DESTINATARIOS} e-mails.")
+            raise erro(422, f"Destinatários: de 1 a {MAX_DESTINATARIOS} e-mails.", "destinatarios")
         ruins = [d for d in destinos if problema_email(d, emp["dominio"])]
         if ruins:
-            raise HTTPException(422, f"Só e-mails @{emp['dominio']} podem receber relatórios: {', '.join(ruins)}.")
+            raise erro(422, f"Só e-mails @{emp['dominio']} podem receber relatórios: {', '.join(ruins)}.", "destinatarios")
         if not correio.ligado():
             raise HTTPException(503, "O envio por e-mail está desligado neste servidor.")
         _limite(u["id"])

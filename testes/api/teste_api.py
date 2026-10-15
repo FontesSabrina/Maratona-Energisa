@@ -246,8 +246,11 @@ if rr.status_code == 200:
              set(rd) == {"ficticia", "subestacao", "alimentadores", "chaves", "trafos"}
              and all(set(f["properties"]) == {"alimentador"} for f in rd["alimentadores"]["features"]))
 conferir("rede: sem login, 401", TestClient(app, base_url="http://farol.teste").get(f"/api/municipios/{cod_leo}/rede").status_code == 401)
-conferir("rede: município sem rede ou inválido, 404/422", cli.get("/api/municipios/0000000/rede").status_code == 404
+conferir("rede: município fora da concessão ou inválido, 404/422", cli.get("/api/municipios/0000000/rede").status_code == 404
          and cli.get("/api/municipios/abc/rede").status_code == 422)
+sem_rede = [c for c, _, _, _ in banco.contornos("EPSG:4674") if cli.get(f"/api/municipios/{c}/rede").json() is None][:1]
+conferir("rede: município da concessão sem a rede fictícia, 200 com null (sem 404 no console do navegador)",
+         all(cli.get(f"/api/municipios/{c}/rede").status_code == 200 for c in sem_rede), str(sem_rede))
 
 # ---------- 4. Problemas por linha ----------
 ruins = pd.DataFrame([
@@ -457,13 +460,15 @@ conferir("Baixar JSON: o mesmo arquivo dá o mesmo conteúdo (reprodutível) e o
 sem_erro = TestClient(app, base_url="http://farol.teste", raise_server_exceptions=False)
 sem_erro.cookies = cli.cookies
 bases_original = app_mod._bases
-app_mod._bases = lambda xy: (_ for _ in ()).throw(RuntimeError(f"vazou {t['uc'].iloc[0]}"))
 import logging  # noqa: E402
 _logs = []
 _h = logging.Handler(); _h.emit = lambda rec: _logs.append(rec.getMessage())
 logging.getLogger("farol.api").addHandler(_h)
+app_mod._envios.clear()
+pacote_novo = importar(csv_bytes(t)).json()["pacote"]   # uma conferência nova (o pacote já usado gera 409, Fase J)
+app_mod._bases = lambda xy: (_ for _ in ()).throw(RuntimeError(f"vazou {t['uc'].iloc[0]}"))
 antes = contar("aviso")
-re_ = sem_erro.post("/api/avisos", json={"pacote": ji["pacote"], "data": "12/11", "horario": "8h às 14h", "conferi": True})
+re_ = sem_erro.post("/api/avisos", json={"pacote": pacote_novo, "data": "12/11", "horario": "8h às 14h", "conferi": True})
 app_mod._bases = bases_original
 conferir("erro inesperado: 500 'nada foi gerado (código ERR-xxxx)', nada no histórico, nenhuma UC na resposta",
          re_.status_code == 500 and re.fullmatch(r"Ocorreu um erro e nada foi gerado \(código ERR-[0-9A-F]{6}\)\.", re_.json()["detail"])

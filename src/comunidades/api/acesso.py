@@ -25,6 +25,7 @@ from ..banco import acesso as banco
 from ..nucleo import acesso as regras
 from ..nucleo import auditoria
 from ..senhas import HASH_FALSO, hash_senha, senha_temporaria
+from .comum import erro
 
 COOKIE = "farol_sessao"
 PRODUCAO = os.environ.get("FAROL_PRODUCAO", "") == "1"   # no Render: cookie só por HTTPS
@@ -177,6 +178,7 @@ class AlteraUsuario(BaseModel):
     perfil: str
     status: str
     municipios: list[str] | None = Field(None, max_length=200)
+    nome: str | None = Field(None, max_length=200)
 
 
 def _municipios(codigos: list[str] | None) -> list[str] | None:
@@ -187,7 +189,7 @@ def _municipios(codigos: list[str] | None) -> list[str] | None:
     validos = {c for c, _, _, _ in base_territorial.contornos("EPSG:4674")}
     saida = sorted({str(c) for c in codigos})
     if any(c not in validos for c in saida):
-        raise HTTPException(422, "Municípios: use códigos IBGE de municípios da concessão.")
+        raise erro(422, "Municípios: use códigos IBGE de municípios da concessão.", "municipios")
     return saida
 
 
@@ -197,10 +199,10 @@ def _linha_usuario(x: dict) -> dict:
             "ultimo_acesso": x["ultimo_acesso"].isoformat() if x["ultimo_acesso"] else None}
 
 
-def _nome(nome: str) -> str:
+def _nome(nome: str, campo: str = "nome") -> str:
     n = " ".join(str(nome).split())
     if not 2 <= len(n) <= 120:
-        raise HTTPException(422, "Nome: de 2 a 120 caracteres.")
+        raise erro(422, "Nome: de 2 a 120 caracteres.", campo)
     return n
 
 
@@ -215,14 +217,17 @@ def criar_usuario(dados: NovoUsuario, u: dict = Depends(exigir("gerenciar_usuari
     emp = banco.empresa(u["empresa_id"])
     email, nome = regras.normalizar_email(dados.email), _nome(dados.nome)
     if (p := regras.problema_email(email, emp["dominio"])):
-        raise HTTPException(422, p)
+        raise erro(422, p, "email")
     if dados.perfil not in regras.PERFIS_EMPRESA:
-        raise HTTPException(422, "Perfil inválido.")
+        raise erro(422, "Perfil inválido.", "perfil")
     if banco.usuario_por_email(email):
-        raise HTTPException(409, "Já existe um usuário com este e-mail.")
+        raise erro(409, "Já existe um usuário com este e-mail.", "email")
     municipios = _municipios(dados.municipios)
     temporaria = senha_temporaria()
-    novo = banco.criar_usuario(u["empresa_id"], email, nome, dados.perfil, hash_senha(temporaria), municipios=municipios)
+    try:
+        novo = banco.criar_usuario(u["empresa_id"], email, nome, dados.perfil, hash_senha(temporaria), municipios=municipios)
+    except banco.errors.UniqueViolation:   # clique duplo: a outra requisição gravou primeiro
+        raise erro(409, "Já existe um usuário com este e-mail.", "email") from None
     banco.registrar("cadastrou usuário", f"{nome} ({regras.PERFIS[dados.perfil]})", u["id"], u["empresa_id"])
     # a senha temporária aparece só nesta resposta, para o admin passar ao usuário
     return {"usuario": _linha_usuario(banco.usuario(novo["id"])), "senha_temporaria": temporaria}
@@ -238,19 +243,25 @@ def _da_empresa(id_: int, u: dict) -> dict:
 @rotas.patch("/usuarios/{id_}")
 def alterar_usuario(id_: int, dados: AlteraUsuario, u: dict = Depends(exigir("gerenciar_usuarios"))) -> dict:
     alvo = _da_empresa(id_, u)
-    if dados.perfil not in regras.PERFIS_EMPRESA or dados.status not in ("ativo", "bloqueado"):
-        raise HTTPException(422, "Perfil ou situação inválidos.")
+    if dados.perfil not in regras.PERFIS_EMPRESA:
+        raise erro(422, "Perfil inválido.", "perfil")
+    if dados.status not in ("ativo", "bloqueado"):
+        raise erro(422, "Situação: ativo ou bloqueado.", "status")
+    nome = _nome(dados.nome) if dados.nome is not None else alvo["nome"]
     antes = alvo["perfil"] == "admin_empresa" and alvo["status"] == "ativo"
     depois = dados.perfil == "admin_empresa" and dados.status == "ativo"
     if regras.deixa_sem_admin(banco.admins_ativos(u["empresa_id"]), antes, depois):
-        raise HTTPException(409, "Este é o último admin ativo da empresa: cadastre outro admin antes de mudar o perfil ou bloquear.")
+        raise erro(409, "Este é o último admin ativo da empresa: cadastre outro admin antes de mudar o perfil ou bloquear.",
+                   "status" if dados.status != "ativo" else "perfil")
     municipios = _municipios(dados.municipios)
-    banco.alterar_usuario(id_, dados.perfil, dados.status, municipios)
-    banco.registrar("alterou usuário", f"{alvo['nome']}: " + auditoria.diferencas(
-        {"perfil": regras.PERFIS[alvo["perfil"]], "status": alvo["status"], "municipios": ", ".join(alvo.get("municipios") or []) or "todos"},
-        {"perfil": regras.PERFIS[dados.perfil], "status": dados.status,
+    mudou = auditoria.diferencas(
+        {"nome": alvo["nome"], "perfil": regras.PERFIS[alvo["perfil"]], "status": alvo["status"],
+         "municipios": ", ".join(alvo.get("municipios") or []) or "todos"},
+        {"nome": nome, "perfil": regras.PERFIS[dados.perfil], "status": dados.status,
          "municipios": (", ".join(municipios) or "todos") if municipios is not None else ", ".join(alvo.get("municipios") or []) or "todos"},
-        {"perfil": "perfil", "status": "situação", "municipios": "municípios"}), u["id"], u["empresa_id"])
+        {"nome": "nome", "perfil": "perfil", "status": "situação", "municipios": "municípios"})
+    banco.alterar_usuario(id_, dados.perfil, dados.status, municipios, nome)
+    banco.registrar("alterou usuário", f"{alvo['nome']}: {mudou}", u["id"], u["empresa_id"])
     return {"usuario": _linha_usuario(banco.usuario(id_))}
 
 
@@ -274,8 +285,12 @@ class NovaEmpresa(BaseModel):
     cnpj: str | None = Field(None, max_length=30)
 
 
-class SituacaoEmpresa(BaseModel):
-    status: str
+class AlteraEmpresa(BaseModel):
+    """Situação (suspender ou reativar) ou os dados da empresa (nome, domínio, CNPJ); o que não vier fica como está."""
+    status: str | None = None
+    nome: str | None = Field(None, max_length=200)
+    dominio: str | None = Field(None, max_length=120)
+    cnpj: str | None = Field(None, max_length=30)
 
 
 @rotas.get("/empresas")
@@ -285,42 +300,71 @@ def listar_empresas(u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
                           "usuarios": e["usuarios"], "avisos": e["avisos"]} for e in banco.empresas()]}
 
 
+def _dominio(dominio: str) -> str:
+    d = str(dominio or "").strip().lower()
+    if regras.problema_email(f"x@{d}"):
+        raise erro(422, "Domínio de e-mail inválido (ex.: empresa.com.br).", "dominio")
+    return d
+
+
+def _cnpj(cnpj: str | None, exceto: int | None = None) -> str | None:
+    c = regras.normalizar_cnpj(cnpj) or None
+    if c and not regras.cnpj_valido(c):
+        raise erro(422, "CNPJ inválido: confira os dígitos verificadores (aceita o alfanumérico).", "cnpj")
+    if c and (outra := banco.empresa_por_cnpj(c)) and outra["id"] != exceto:
+        raise erro(409, "Já existe uma empresa com este CNPJ.", "cnpj")
+    return c
+
+
 @rotas.patch("/empresas/{id_}")
-def mudar_empresa(id_: int, dados: SituacaoEmpresa, u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
-    """Suspende ou reativa a empresa (suspensa: ninguém dela entra, e as sessões abertas acabam)."""
+def mudar_empresa(id_: int, dados: AlteraEmpresa, u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
+    """Suspende ou reativa a empresa (suspensa: ninguém dela entra, e as sessões abertas acabam), ou altera o nome,
+    o domínio dos e-mails e o CNPJ (os e-mails já cadastrados não mudam). Antes e depois na auditoria."""
     e = banco.empresa(id_)
     if not e:
         raise HTTPException(404, "Empresa não encontrada.")
-    if dados.status not in ("ativa", "suspensa"):
-        raise HTTPException(422, "Situação: ativa ou suspensa.")
-    banco.mudar_status_empresa(id_, dados.status)
-    banco.registrar("suspendeu empresa" if dados.status == "suspensa" else "reativou empresa",
-                    f"{e['nome']} ({e['sigla']}): situação {e['status']} → {dados.status}", u["id"], id_)
-    return {"empresa": {"id": id_, "status": dados.status}}
+    if dados.status is not None:
+        if dados.status not in ("ativa", "suspensa"):
+            raise erro(422, "Situação: ativa ou suspensa.", "status")
+        if dados.status == e["status"]:
+            raise erro(409, f"A empresa já está {dados.status}.", "status")
+        banco.mudar_status_empresa(id_, dados.status)
+        banco.registrar("suspendeu empresa" if dados.status == "suspensa" else "reativou empresa",
+                        f"{e['nome']} ({e['sigla']}): situação {e['status']} → {dados.status}", u["id"], id_)
+        return {"empresa": {"id": id_, "status": dados.status}}
+    nome = _nome(dados.nome) if dados.nome is not None else e["nome"]
+    dominio = _dominio(dados.dominio) if dados.dominio is not None else e["dominio"]
+    cnpj = _cnpj(dados.cnpj, id_) if dados.cnpj is not None else e.get("cnpj")
+    novo = {"nome": nome, "dominio": dominio, "cnpj": regras.formatar_cnpj(cnpj) if cnpj else "—"}
+    antes = {"nome": e["nome"], "dominio": e["dominio"], "cnpj": regras.formatar_cnpj(e["cnpj"]) if e.get("cnpj") else "—"}
+    if novo == antes:
+        raise erro(409, "Nada mudou nos dados da empresa.")
+    banco.alterar_empresa(id_, nome, dominio, cnpj)
+    banco.registrar("alterou empresa", f"{e['nome']} ({e['sigla']}): " + auditoria.diferencas(antes, novo, {
+        "nome": "nome", "dominio": "domínio", "cnpj": "CNPJ"}), u["id"], id_)
+    return {"empresa": {"id": id_, "nome": nome, "dominio": dominio, "status": e["status"]}}
 
 
 @rotas.post("/empresas")
 def criar_empresa(dados: NovaEmpresa, u: dict = Depends(exigir("gerenciar_empresas"))) -> dict:
-    nome, sigla, dominio = _nome(dados.nome), dados.sigla.strip().upper(), dados.dominio.strip().lower()
+    nome, sigla = _nome(dados.nome), dados.sigla.strip().upper()
     if not (2 <= len(sigla) <= 10 and sigla.isalnum()):
-        raise HTTPException(422, "Sigla: de 2 a 10 letras ou números.")
-    if regras.problema_email(f"x@{dominio}"):
-        raise HTTPException(422, "Domínio de e-mail inválido.")
+        raise erro(422, "Sigla: de 2 a 10 letras ou números.", "sigla")
+    dominio = _dominio(dados.dominio)
+    admin_nome = _nome(dados.admin_nome, "admin_nome")
     email = regras.normalizar_email(dados.admin_email)
     if (p := regras.problema_email(email, dominio)):
-        raise HTTPException(422, p)
+        raise erro(422, p, "admin_email")
     if banco.empresa_por_sigla(sigla):
-        raise HTTPException(409, "Já existe uma empresa com esta sigla.")
+        raise erro(409, "Já existe uma empresa com esta sigla.", "sigla")
     if banco.usuario_por_email(email):
-        raise HTTPException(409, "Já existe um usuário com este e-mail.")
-    cnpj = regras.normalizar_cnpj(dados.cnpj) or None
-    if cnpj and not regras.cnpj_valido(cnpj):
-        raise HTTPException(422, "CNPJ inválido: confira os dígitos verificadores (aceita o alfanumérico).")
-    if cnpj and banco.empresa_por_cnpj(cnpj):
-        raise HTTPException(409, "Já existe uma empresa com este CNPJ.")
-    e = banco.criar_empresa(nome, sigla, dominio, cnpj)
+        raise erro(409, "Já existe um usuário com este e-mail.", "admin_email")
+    cnpj = _cnpj(dados.cnpj)
     temporaria = senha_temporaria()
-    banco.criar_usuario(e["id"], email, _nome(dados.admin_nome), "admin_empresa", hash_senha(temporaria))
+    try:   # a empresa e o primeiro admin juntos: nunca uma empresa sem admin
+        e = banco.criar_empresa_com_admin(nome, sigla, dominio, cnpj, email, admin_nome, hash_senha(temporaria))
+    except banco.errors.UniqueViolation:   # clique duplo: a outra requisição gravou primeiro
+        raise erro(409, "Já existe uma empresa com esta sigla.", "sigla") from None
     banco.registrar("cadastrou empresa", f"{nome} ({sigla}) e o primeiro admin", u["id"], e["id"])
     return {"empresa": {"id": e["id"], "nome": nome, "sigla": sigla}, "senha_temporaria": temporaria}
 

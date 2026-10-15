@@ -25,7 +25,7 @@ from comunidades.api.app import app  # noqa: E402
 # GET que só mostram (nada muda, nenhum arquivo sai): fora da auditoria por decisão (CHECKLIST, Fase H)
 VISTAS = {
     "/", "/api/saude", "/api/config", "/api/concessao", "/api/eu", "/api/usuarios", "/api/empresas", "/api/registro",
-    "/api/auditoria/verificar", "/api/empresa/configuracao", "/api/radios", "/api/historico", "/api/historico/{id_}",
+    "/api/auditoria/verificar", "/api/empresa/configuracao", "/api/radios", "/api/radios/pedidos", "/api/historico", "/api/historico/{id_}",
     "/api/historico/{id_}/radios", "/api/historico/{id_}/envios", "/api/historico/{id_}/comprovante", "/api/historico/{id_}/linha-do-tempo",
     "/api/painel", "/api/verificar/{codigo}", "/api/municipios/{codigo}/comunidades", "/api/municipios/{codigo}/rede",
     "/api/relatorios/vias", "/api/comunidades/ficha", "/api/comunidades/calor", "/confirmar/{token}",

@@ -456,3 +456,21 @@ button.dica:hover { background: radial-gradient(circle at center, var(--acento) 
 .painel, .vista, .relatorio, .dash-bloco { grid-template-columns: minmax(0, 1fr); }
 .barras.grafico-doc { height: 170px; }
 .grafico-doc .barra-mes-rotulo { white-space: normal; text-align: center; overflow-wrap: anywhere; line-height: 1.15; }
+
+/* Erros nos campos (Fase J): o campo com a borda de erro e o texto ligado a ele; o resumo no topo do formulário com um
+   link para cada campo. O erro tem ícone e texto, nunca só a cor. */
+[aria-invalid="true"] { border-color: var(--erro) !important; box-shadow: 0 0 0 1px var(--erro); }
+.erro-campo { margin: -4px 0 0; color: var(--erro); font-size: 14px; font-weight: 500; }
+.erro-campo::before { content: "⚠ "; }
+.resumo-erros { padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--erro); background: color-mix(in srgb, var(--erro) 8%, var(--sup));
+  color: var(--texto); font-size: 14px; }
+.resumo-erros p { margin: 0 0 4px; font-weight: 600; color: var(--erro); }
+.resumo-erros p::before { content: "⚠ "; }
+.resumo-erros ul { margin: 0; padding-left: 20px; }
+.resumo-erros a { color: var(--texto); }
+.resumo-erros:focus { outline: 2px solid var(--foco); outline-offset: 2px; }
+[aria-busy="true"] { cursor: progress; }
+.campo-linha { display: grid; gap: 2px; font-size: 13px; color: var(--texto2); }
+.usuario-linha .campo-linha input { min-width: 12em; }
+.pedido-radio { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px dashed var(--linha); background: var(--sup2); }
+.pedido-radio h5 { margin: 6px 0 0; font-size: 14px; }

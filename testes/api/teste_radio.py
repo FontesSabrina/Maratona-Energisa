@@ -215,10 +215,14 @@ try:
     adm.put("/api/empresa/configuracao", json=novo)
 
     # rádios
-    r_leo = op.post("/api/radios", json={"nome": "Rádio Leopoldina FM (demonstração)", "email": "leopoldina.fm@example.com",
-                                         "whatsapp": "(32) 99999-0001", "alcance": {"municipios": ["3138401"]}, "valor_padrao": "120,00",
-                                         "cobranca": "minuto"})
-    conferir("Operador cadastra rádio (+ Nova rádio)", r_leo.status_code == 200 and r_leo.json()["radio"]["whatsapp"] == "32999990001", r_leo.text[:160])
+    dados_leo = {"nome": "Rádio Leopoldina FM (demonstração)", "email": "leopoldina.fm@example.com", "whatsapp": "(32) 99999-0001",
+                 "alcance": {"municipios": ["3138401"]}, "valor_padrao": "120,00", "cobranca": "minuto"}
+    conferir("Operador não cadastra rádio (403): só o Admin da empresa (Fase J)", op.post("/api/radios", json=dados_leo).status_code == 403)
+    r_leo = adm.post("/api/radios", json=dados_leo)
+    conferir("Admin da empresa cadastra rádio", r_leo.status_code == 200 and r_leo.json()["radio"]["whatsapp"] == "32999990001", r_leo.text[:160])
+    dup = adm.post("/api/radios", json={**dados_leo, "nome": "  rádio leopoldina FM  (demonstração) "})
+    conferir("rádio com o mesmo nome (maiúsculas e espaços à parte) recusada (409), com o campo", dup.status_code == 409
+             and dup.headers.get("X-Farol-Campo") == "nome", dup.text[:120])
     leo_id = r_leo.json()["radio"]["id"]
     r_pia = adm.post("/api/radios", json={"nome": "Rádio Comunitária de Tebas (demonstração)", "email": "tebas@example.com",
                                           "alcance": {"comunidades": [{"municipio": "3138401", "nome": "Piacatuba", "distrito": "Tebas"}]},
@@ -231,7 +235,39 @@ try:
     erros = {"e-mail inválido": {"nome": "R", "email": "nao-e-email"}, "sem contato": {"nome": "Rádio X"},
              "município fora da concessão": {"nome": "Rádio X", "email": "x@example.com", "alcance": {"municipios": ["3550308"]}},
              "WhatsApp curto": {"nome": "Rádio X", "whatsapp": "1234"}}
-    conferir("rádio inválida recusada (422)", all(op.post("/api/radios", json=d).status_code == 422 for d in erros.values()))
+    respostas = {k: adm.post("/api/radios", json=d) for k, d in erros.items()}
+    conferir("rádio inválida recusada (422), com o campo do erro", all(r.status_code == 422 for r in respostas.values())
+             and [r.headers.get("X-Farol-Campo") for r in respostas.values()] == ["nome", "email", "alcance", "whatsapp"],
+             str({k: (r.status_code, r.headers.get("X-Farol-Campo")) for k, r in respostas.items()}))
+    # pedidos de rádio (Fase J): o Operador pede; o Admin atende (cadastra a partir do pedido) ou recusa com motivo
+    ped = op.post("/api/radios/pedidos", json={"nome": "Rádio Pedida (demonstração)", "cidade": "Leopoldina", "contato": "pedida@example.com",
+                                               "observacao": "Cobre a zona rural."})
+    ped2 = op.post("/api/radios/pedidos", json={"nome": "Rádio Pedida (demonstração)", "cidade": "leopoldina"})
+    ped3 = op.post("/api/radios/pedidos", json={"nome": "Rádio Recusada (demonstração)", "cidade": "Tebas", "observacao": "CPF 123.456.789-00"})
+    ped4 = op.post("/api/radios/pedidos", json={"nome": "Rádio Recusada (demonstração)", "cidade": "Tebas", "contato": "(32) 3441-0000"})
+    conferir("pedido de rádio: o Operador pede; repetido (409) e com dado pessoal na observação (422) recusados",
+             ped.status_code == 200 and ped2.status_code == 409 and ped3.status_code == 422 and ped3.headers.get("X-Farol-Campo") == "observacao"
+             and ped4.status_code == 200, f"{ped.status_code} {ped2.status_code} {ped3.status_code} {ped4.status_code}")
+    conferir("pedido de rádio: o Admin da empresa não pede (403) e o Operador não recusa (403)",
+             adm.post("/api/radios/pedidos", json={"nome": "Rádio X", "cidade": "Leopoldina"}).status_code == 403
+             and op.post(f"/api/radios/pedidos/{ped4.json()['pedido']['id']}/recusar", json={"motivo": "não"}).status_code == 403)
+    lista_adm, lista_op = adm.get("/api/radios/pedidos").json()["pedidos"], op.get("/api/radios/pedidos").json()["pedidos"]
+    conferir("pedido de rádio: o Admin vê os pedidos da empresa, com quem pediu", len(lista_adm) == 2 and all(p["status"] == "aberto"
+             and p["por"] == "Operador da EMG" for p in lista_adm) and len(lista_op) == 2)
+    atendido = adm.post("/api/radios", json={"nome": "Rádio Pedida (demonstração)", "email": "pedida@example.com",
+                                             "alcance": {"municipios": ["3138401"]}, "pedido_id": ped.json()["pedido"]["id"]})
+    de_novo = adm.post("/api/radios", json={"nome": "Rádio Pedida 2 (demonstração)", "email": "pedida@example.com",
+                                            "alcance": {"municipios": ["3138401"]}, "pedido_id": ped.json()["pedido"]["id"]})
+    sem_motivo = adm.post(f"/api/radios/pedidos/{ped4.json()['pedido']['id']}/recusar", json={"motivo": ""})
+    recusa = adm.post(f"/api/radios/pedidos/{ped4.json()['pedido']['id']}/recusar", json={"motivo": "A rádio não cobre Tebas."})
+    finais = {p["nome"]: p for p in adm.get("/api/radios/pedidos").json()["pedidos"]}
+    conferir("pedido de rádio: atender cadastra a rádio e fecha o pedido (uma vez só); recusar exige o motivo",
+             atendido.status_code == 200 and de_novo.status_code == 409 and sem_motivo.status_code == 422 and recusa.status_code == 200
+             and finais["Rádio Pedida (demonstração)"]["status"] == "atendido" and finais["Rádio Pedida (demonstração)"]["radio_id"] == atendido.json()["radio"]["id"]
+             and finais["Rádio Recusada (demonstração)"]["motivo_recusa"] == "A rádio não cobre Tebas.",
+             f"{atendido.status_code} {de_novo.status_code} {sem_motivo.status_code} {recusa.status_code}")
+    adm.patch(f"/api/radios/{atendido.json()['radio']['id']}", json={"nome": "Rádio Pedida (demonstração)", "email": "pedida@example.com",
+                                                                    "alcance": {"municipios": ["3138401"]}, "ativa": False})
     sug = op.get(f"/api/historico/{a['id']}/radios").json()
     sl = next(m for m in sug["municipios"] if m["nome"] == "Leopoldina")
     sj = next(m for m in sug["municipios"] if m["nome"] == "São João Nepomuceno")
@@ -334,19 +370,26 @@ try:
     # limite, falha e e-mail desligado
     radio_mod._emails.clear()
     radio_mod.LIMITE_EMAILS = 1
-    um = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto})
-    dois = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto})
+    um = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "2"})
+    dois = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "3"})
     radio_mod.LIMITE_EMAILS = 30
     radio_mod._emails.clear()
     conferir("limite de e-mails por hora: depois, 429", um.status_code == 200 and dois.status_code == 429, f"{um.status_code} {dois.status_code}")
     os.environ["FAROL_SMTP_PORTA"] = "1"     # porta fechada: o servidor de e-mail não responde
-    falha = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto})
+    falha = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "4"})
+    # logo depois de uma falha, o mesmo envio pode ser tentado de novo (não é duplicata); o repetido de um enviado é (409)
+    os.environ["FAROL_SMTP_PORTA"] = "1"
+    falha2 = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "4"})
+    os.environ["FAROL_SMTP_PORTA"] = str(SMTP)
+    repetido = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "2"})
+    conferir("envio repetido em menos de um minuto: 409 (clique duplo); depois de uma falha, pode tentar de novo",
+             falha2.status_code == 200 and repetido.status_code == 409, f"{falha2.status_code} {repetido.status_code}")
     os.environ["FAROL_SMTP_PORTA"] = str(SMTP)
     conferir("servidor de e-mail fora do ar: envio 'falhou', com aviso e auditoria", falha.status_code == 200
              and falha.json()["envio"]["status"] == "falhou" and "não foi entregue" in falha.json().get("erro", "")
              and sql("SELECT 1 FROM registro WHERE acao = 'envio por e-mail falhou'"), falha.text[:200])
     os.environ["FAROL_EMAIL"] = "0"
-    deslig = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto})
+    deslig = op.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "canal": "email", "texto": texto, "valor": "5"})
     conferir("e-mail desligado (FAROL_EMAIL=0 ou sem SMTP): 503 e a configuração diz", deslig.status_code == 503
              and op.get("/api/config").json()["email"] is False, deslig.text[:120])
     del os.environ["FAROL_EMAIL"]

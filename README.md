@@ -33,8 +33,8 @@ Exemplo da tela (chave fictícia CF-0066, 758 UCs): o aviso de hoje cita 120 loc
 | Perfil | O que faz | Menu |
 |---|---|---|
 | Admin do Farol | Cadastra e suspende empresas; vê a auditoria geral de acessos de todas as empresas | Empresas, Auditoria geral |
-| Admin da empresa | Tudo do Operador, mais usuários da empresa, rádios, configurações (modelo da mensagem, limite de rejeição, fuso UTM, antecedência) e o relatório de auditoria | Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações, Auditoria |
-| Operador | Importa e confere a planilha, gera o aviso, baixa PDF e MP3, envia à rádio informando o valor, baixa o JSON com UCs (registrado) e acrescenta rádio no envio | Novo aviso, Histórico, Relatórios |
+| Admin da empresa | Tudo do Operador, mais usuários da empresa, rádios (só ele cadastra, edita, desativa e define o valor padrão; atende ou recusa os pedidos de rádio), configurações (modelo da mensagem, limite de rejeição, fuso UTM, antecedência) e o relatório de auditoria | Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações, Auditoria |
+| Operador | Importa e confere a planilha, gera o aviso, baixa PDF e MP3, envia à rádio escolhida da lista informando o valor daquele envio, baixa o JSON com UCs (registrado) e, se faltar rádio, pede o cadastro ao Admin da empresa | Novo aviso, Histórico, Relatórios |
 | Consulta | Vê o mapa, o histórico, os comprovantes e os relatórios; não gera nem envia | Mapa, Histórico, Relatórios |
 
 A permissão é conferida **no servidor** em toda rota. O teste `testes/api/teste_matriz.py` percorre cada rota com cada perfil, e uma rota nova sem regra faz o teste falhar. Ninguém vê dados de outra empresa.

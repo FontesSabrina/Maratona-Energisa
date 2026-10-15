@@ -45,6 +45,10 @@ const estado = {
   vias: [],                // segundas vias dos relatórios em PDF (só título, quem, quando e código)
   ficha: null,             // ficha da comunidade clicada no mapa (só contagens)
   calor: null,             // mapa de calor: desligamentos por comunidade em 12 meses
+  pedidos: [],             // pedidos de cadastro de rádio (Admin da empresa: da empresa)
+  meusPedidos: [],         // os pedidos de rádio que o Operador fez
+  pedidoAtendendo: null,   // o pedido que o Admin está atendendo (o formulário da rádio vem preenchido)
+  empresaEditando: null,   // a empresa no formulário (null: nova)
 };
 
 // o menu de cada perfil (a matriz de perfis do plano); quem decide o que pode é o servidor, a tela só mostra o que serve
@@ -66,7 +70,7 @@ const AJUDA = {
   operador: [
     ['Novo aviso', 'Escolha a planilha das UCs afetadas (.xlsx ou .csv, até 10 MB) e, no passo 2, a data, o horário e o tipo do desligamento.'],
     ['Conferir', 'O Farol lê a planilha, corrige o que é seguro corrigir (em roxo no mapa) e mostra os números. Vermelho bloqueia (equipamento vital com problema); amarelo pede atenção. Marque "Conferi os números e o mapa" e gere o aviso.'],
-    ['Avisos', 'Ajuste a mensagem da rádio, ouça, baixe o PDF e envie à rádio (e-mail com confirmação, WhatsApp ou cópia), informando o valor.'],
+    ['Avisos', 'Ajuste a mensagem da rádio, ouça, baixe o PDF e envie à rádio da lista (e-mail com confirmação, WhatsApp ou cópia), informando o valor daquele envio. Se faltar a rádio, use "Pedir cadastro de rádio": o Admin da empresa cadastra.'],
     ['Histórico e relatórios', 'No histórico ficam os avisos, os envios e os comprovantes; mude a data ou cancele quando preciso. Os relatórios mostram custo, economia e prazo do mês.'],
   ],
   consulta: [
@@ -81,7 +85,7 @@ const AJUDA = {
 };
 AJUDA.admin_empresa = [...AJUDA.operador,
   ['Usuários', 'Convide pessoas da empresa (só e-mail do domínio), escolha o perfil e os municípios; bloqueie quando sair. O último admin não pode ser bloqueado.'],
-  ['Rádios e configurações', 'Cadastre as rádios e o que cada uma alcança; ajuste o modelo da mensagem, o telefone, o limite de rejeição, o fuso UTM e a antecedência.'],
+  ['Rádios e configurações', 'Só você cadastra as rádios, o que cada uma alcança e o valor padrão; desative ou reative pela lista. Em "Pedidos de rádio", atenda (o cadastro abre preenchido) ou recuse com o motivo o que o Operador pediu. Ajuste o modelo da mensagem, o telefone, o limite de rejeição, o fuso UTM e a antecedência.'],
   ['Auditoria', 'Tudo o que cada pessoa fez, com o nome e o perfil, sem nada apagado; baixe o relatório de auditoria.']];
 
 // os termos que confundem: um "?" ao lado mostra a explicação
@@ -128,14 +132,11 @@ function validarArquivo(arquivo) {
   return null;
 }
 
-function validarFormulario({ arquivo, data, inicio, fim, tipo, tipoOutro }) {
-  const problema = validarArquivo(arquivo);
-  if (problema) return problema;
-  if (!data) return 'Informe a data do desligamento.';
-  if (!inicio || !fim) return 'Informe o horário de início e de fim.';
-  if (fim <= inicio) return 'O fim tem de ser depois do início.';
-  if (tipo === 'outro' && tipoOutro.trim().length < 3) return 'Descreva o motivo do desligamento (de 3 a 200 caracteres).';
-  return null;
+// os campos do passo 2 com problema: [[id do campo, texto], ...] (a planilha é conferida à parte, no passo 1)
+function validarFormulario({ data, inicio, fim, tipo, tipoOutro }) {
+  return [!data && ['data', 'Informe a data do desligamento.'], !inicio && ['inicio', 'Informe o horário de início.'],
+    !fim && ['fim', 'Informe o horário de fim.'], inicio && fim && fim <= inicio && ['fim', 'O fim tem de ser depois do início.'],
+    tipo === 'outro' && tipoOutro.trim().length < 3 && ['tipoOutro', 'Descreva o motivo do desligamento (de 3 a 200 caracteres).']].filter(Boolean);
 }
 
 // "Solicitado por Fulana (Operador) em 14/10/2026 às 10:32 · código de verificação FRL-…" (o nome vem do login)
@@ -146,11 +147,13 @@ function solicitadoTexto(r) {
     + `${q.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${r.codigo ? ` · código de verificação ${r.codigo}` : ''}`;
 }
 
+// [campo, problema] da senha nova, ou null
 function validarSenhaNova(nova, repetida) {
-  if (nova.length < 12) return 'A senha nova precisa ter pelo menos 12 caracteres.';
-  if (nova !== repetida) return 'As duas senhas novas não são iguais.';
+  if (nova.length < 12) return ['senhaNova', 'A senha nova precisa ter pelo menos 12 caracteres.'];
+  if (nova !== repetida) return ['senhaNova2', 'As duas senhas novas não são iguais.'];
   return null;
 }
+const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;   // a mesma regra do servidor (nucleo/acesso.py)
 
 // o áudio vale enquanto o texto não muda; só em português por enquanto
 const audioAtual = codigo => estado.audios[codigo]?.texto === estado.avisos[codigo] ? estado.audios[codigo] : null;
@@ -388,6 +391,58 @@ function mensagemEm(id, texto, erro) {
   $(id).classList.toggle('erro', !!erro);
 }
 
+// ---- Erros nos campos: o erro fica ligado ao campo (aria-invalid + aria-describedby), com um resumo no topo
+// do formulário (role="alert") e um link para cada campo; o que foi digitado nunca é apagado ----
+function erroNoCampo(campo, texto) {
+  const idErro = `${campo.id}-erro`;
+  let p = $(idErro);
+  if (!p) {
+    p = no('p', { id: idErro, classe: 'erro-campo' });
+    (campo.closest('label') || campo).after(p);
+  }
+  p.textContent = texto;
+  campo.setAttribute('aria-invalid', 'true');
+  const ids = (campo.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== idErro);
+  campo.setAttribute('aria-describedby', [...ids, idErro].join(' '));
+}
+
+function limparErroCampo(campo) {
+  if (!campo?.id) return;
+  campo.removeAttribute('aria-invalid');
+  $(`${campo.id}-erro`)?.remove();
+  const ids = (campo.getAttribute('aria-describedby') || '').split(/\s+/).filter(x => x && x !== `${campo.id}-erro`);
+  if (ids.length) campo.setAttribute('aria-describedby', ids.join(' ')); else campo.removeAttribute('aria-describedby');
+  const resumo = campo.closest('form, .com-erros')?.querySelector(':scope > .resumo-erros');
+  resumo?.querySelector(`a[href="#${CSS.escape(campo.id)}"]`)?.closest('li')?.remove();
+  if (resumo && !resumo.querySelector('li')) resumo.remove();
+}
+
+function limparErros(lugar) {
+  for (const c of lugar.querySelectorAll('[aria-invalid="true"]')) limparErroCampo(c);
+  lugar.querySelector(':scope > .resumo-erros')?.remove();
+}
+
+// erros: [[id do campo, texto], ...]; o foco vai para o resumo (o leitor de tela lê) ou, com um erro só, para o campo
+function mostrarErros(lugar, erros) {
+  limparErros(lugar);
+  const validos = erros.filter(([id]) => $(id));
+  if (!validos.length) return false;
+  for (const [id, texto] of validos) erroNoCampo($(id), texto);
+  lugar.classList.add('com-erros');
+  const resumo = no('div', { classe: 'resumo-erros', role: 'alert', tabindex: '-1' },
+    no('p', { texto: validos.length === 1 ? 'Corrija o campo abaixo:' : `Corrija os ${validos.length} campos abaixo:` }),
+    no('ul', {}, validos.map(([id, texto]) => no('li', {}, no('a', { href: `#${id}`, 'data-campo-erro': id, texto })))));
+  lugar.prepend(resumo);
+  (validos.length === 1 ? $(validos[0][0]) : resumo).focus();
+  return true;
+}
+
+// o erro do servidor no campo que ele apontou (cabeçalho X-Farol-Campo), pelo mapa campo da API -> id na tela
+function erroDoServidor(lugar, e, mapa) {
+  const id = e.campo && mapa[e.campo];
+  return id ? mostrarErros(lugar, [[id, e.message]]) : false;
+}
+
 function desenharResumo() {
   const r = estado.resultado, p = r.planilha;
   const ucs = r.municipios.reduce((s, m) => s + m.ucs, 0);
@@ -455,20 +510,22 @@ function desenharEnvio(m) {
   if (!(r.id && pode('gerar_aviso') && r.status !== 'cancelado')) return lugar.replaceChildren(...lista);
   const s = estado.sugestao[cod] || { radios: [], sem_radio: [] }, cobrem = new Map(s.radios.map(x => [x.radio_id, x]));
   const ordem = [...estado.radios].sort((a, b) => (cobrem.has(b.id) - cobrem.has(a.id)) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  // a rádio escolhida saiu da lista, ou a lista chegou depois (rádio cadastrada com o aviso aberto): volta à primeira, com o valor dela
+  if (estado.escolha[cod] && !ordem.some(x => String(x.id) === String(estado.escolha[cod].radioId)))
+    estado.escolha[cod] = { ...escolhaPadrao(ordem[0]), pedido: estado.escolha[cod].pedido };
   const e = estado.escolha[cod] ||= escolhaPadrao(ordem[0]);
   const alcance = x => cobrem.has(x.id) ? (cobrem.get(x.id).municipio_inteiro ? ' · alcança o município' : ` · alcança ${cobrem.get(x.id).comunidades} comunidade(s)`)
     : ' · fora do alcance cadastrado';
   const sel = no('select', { 'data-envio': 'radioId', id: `radio-${cod}` },
-    ordem.map(x => no('option', { value: String(x.id), texto: x.nome + alcance(x), selected: String(x.id) === String(e.radioId) })),
-    no('option', { value: 'nova', texto: '+ Nova rádio', selected: e.radioId === 'nova' }));
-  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { 'data-envio': nome, value: e[nome] ?? '', autocomplete: 'off', ...extra }));
+    ordem.map(x => no('option', { value: String(x.id), texto: x.nome + alcance(x), selected: String(x.id) === String(e.radioId) })));
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { id: `${nome}-${cod}`, 'data-envio': nome, value: e[nome] ?? '',
+    autocomplete: 'off', ...extra }));
   const blocos = [no('h4', { texto: 'Enviar para a rádio' })];
-  if (s.sem_radio.length) blocos.push(no('p', { classe: 'alerta-amarelo', role: 'status', texto: `Sem rádio cadastrada para: ${s.sem_radio.join(', ')}.` }));
-  blocos.push(no('label', { for: `radio-${cod}`, texto: 'Rádio' }), sel);
-  if (e.radioId === 'nova') blocos.push(formNovaRadio(m, e));
-  else if (ordem.length) blocos.push(
-    no('div', { classe: 'campos' }, campo('Valor (R$)', 'valor', { inputmode: 'decimal', placeholder: '0,00' }),
-      no('label', { texto: 'Cobrança' }, no('select', { 'data-envio': 'cobranca' },
+  if (s.sem_radio.length) blocos.push(no('p', { classe: 'alerta-amarelo', role: 'status' }, no('span', { 'aria-hidden': 'true', texto: '⚠ ' }),
+    `Sem rádio cadastrada para: ${s.sem_radio.join(', ')}.`));
+  if (ordem.length) blocos.push(no('label', { for: `radio-${cod}`, texto: 'Rádio' }), sel,
+    no('div', { classe: 'campos' }, campo('Valor deste envio (R$, obrigatório)', 'valor', { inputmode: 'decimal', placeholder: '0,00' }),
+      no('label', { texto: 'Cobrança' }, no('select', { id: `cobranca-${cod}`, 'data-envio': 'cobranca' },
         Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === e.cobranca })))),
       campo('Quanto custaria do jeito antigo (R$, opcional)', 'antigo', { inputmode: 'decimal', placeholder: 'opcional' })),
     no('p', { classe: 'economia-linha' }, no('span', { classe: 'economia', id: `previa-${cod}`, 'aria-live': 'polite' }), dica('economia', 'economia calculada e informada')),
@@ -477,30 +534,37 @@ function desenharEnvio(m) {
       no('button', { type: 'button', 'data-envio-acao': 'whatsapp', texto: 'Enviar por WhatsApp' }),
       no('button', { type: 'button', 'data-envio-acao': 'copia', texto: 'Copiar mensagem' })),
     estado.config?.email === false ? no('p', { classe: 'ajuda', texto: 'O envio por e-mail está desligado neste servidor.' }) : null);
-  else blocos.push(no('p', { classe: 'ajuda', texto: 'Nenhuma rádio cadastrada ainda: use "+ Nova rádio".' }));
+  else blocos.push(no('p', { classe: 'ajuda', texto: pode('gerenciar_radios') ? 'Nenhuma rádio ativa cadastrada ainda: cadastre em Rádios.'
+    : 'Nenhuma rádio ativa cadastrada ainda: peça o cadastro ao Admin da empresa.' }),
+    pode('gerenciar_radios') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-envio-acao': 'ir-radios', texto: 'Ir para Rádios' })) : null);
+  if (pode('pedir_radio')) blocos.push(formPedidoRadio(m, e));
   lugar.replaceChildren(...blocos, ...lista);
   desenharPrevia(cod);
 }
 
 function escolhaPadrao(radio) {
   return radio ? { radioId: String(radio.id), valor: radio.valor_sugerido ? Number(radio.valor_sugerido).toFixed(2).replace('.', ',') : '',
-    cobranca: radio.cobranca_sugerida || 'fechado', antigo: '' } : { radioId: 'nova', valor: '', cobranca: 'fechado', antigo: '' };
+    cobranca: radio.cobranca_sugerida || 'fechado', antigo: '' } : { radioId: '', valor: '', cobranca: 'fechado', antigo: '' };
 }
 
-function formNovaRadio(m, e) {
-  const n = e.nova ||= { nome: '', email: '', whatsapp: '', valor: '', cobranca: 'fechado', alcance: 'municipio' };
-  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { 'data-nova': nome, value: n[nome], autocomplete: 'off', ...extra }));
-  return no('div', { classe: 'nova-radio' },
-    campo('Nome da rádio', 'nome', { maxlength: '80' }), campo('E-mail da rádio', 'email', { type: 'email' }),
-    campo('WhatsApp da rádio (com DDD)', 'whatsapp', { inputmode: 'tel' }),
-    no('div', { classe: 'campos' }, campo('Valor padrão (R$)', 'valor', { inputmode: 'decimal' }),
-      no('label', { texto: 'Cobrança' }, no('select', { 'data-nova': 'cobranca' },
-        Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === n.cobranca }))))),
-    no('label', { texto: 'O que a rádio alcança' }, no('select', { 'data-nova': 'alcance' },
-      no('option', { value: 'municipio', texto: `${m.nome} inteiro`, selected: n.alcance === 'municipio' }),
-      no('option', { value: 'comunidades', texto: 'Só as comunidades deste aviso', selected: n.alcance === 'comunidades' }))),
-    no('p', { classe: 'ajuda', texto: 'Contato da rádio (empresa), nunca de cliente. Fica na lista da empresa e na auditoria.' }),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'salvar-radio', texto: 'Cadastrar rádio' })));
+// falta uma rádio: o Operador pede o cadastro ao Admin da empresa (contato da rádio, nunca de cliente)
+function formPedidoRadio(m, e) {
+  const cod = m.codigo_ibge, p = e.pedido ||= { aberto: false, nome: '', cidade: m.nome, contato: '', observacao: '' };
+  const botao = no('button', { type: 'button', 'data-envio-acao': 'pedir', 'aria-expanded': String(p.aberto), 'aria-controls': `pedido-${cod}`,
+    texto: 'Pedir cadastro de rádio' });
+  if (!p.aberto) return no('div', { classe: 'acoes' }, botao);
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { id: `pedido-${nome}-${cod}`, 'data-pedido-campo': nome,
+    value: p[nome], autocomplete: 'off', ...extra }));
+  const meus = (estado.meusPedidos || []).slice(0, 5);
+  return no('div', { classe: 'pedido-radio com-erros', id: `pedido-${cod}` }, no('div', { classe: 'acoes' }, botao),
+    no('p', { classe: 'ajuda', texto: 'O Admin da empresa recebe o pedido e cadastra a rádio (ou explica por que não). Só dados da rádio: nada de cliente.' }),
+    campo('Nome da rádio (obrigatório)', 'nome', { maxlength: '80' }), campo('Cidade da rádio (obrigatória)', 'cidade', { maxlength: '80' }),
+    campo('Contato da rádio: e-mail ou telefone (opcional)', 'contato', { maxlength: '120' }),
+    campo('Observação (opcional)', 'observacao', { maxlength: '300' }),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'enviar-pedido', texto: 'Enviar o pedido' })),
+    meus.length ? no('div', {}, no('h5', { texto: 'Seus pedidos de rádio' }), no('ul', { classe: 'envios' }, meus.map(x => no('li', {},
+      no('span', { classe: `chip ${x.status === 'recusado' ? 'cancelado' : ''}`, texto: SITUACAO_PEDIDO[x.status] }),
+      no('span', { texto: `${x.nome} (${x.cidade}) · ${dataHora(x.criado_em)}${x.motivo_recusa ? ` · motivo: ${x.motivo_recusa}` : ''}` }))))) : null);
 }
 
 function desenharPrevia(cod) {
@@ -841,20 +905,27 @@ function desenharPainel() {
 function desenharUsuarios() {
   $('novoPerfil').replaceChildren(...Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === 'operador' })));
   if (!$('novoMunicipios').options.length) $('novoMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
-  $('listaUsuarios').replaceChildren(...estado.usuarios.map(x => no('div', { classe: 'item usuario-linha', 'data-usuario': x.id },
-    no('div', {}, no('strong', { texto: x.nome }), no('br'),
-      no('span', { classe: 'meta', texto: `${x.email} · ${x.ultimo_acesso ? 'último acesso ' + dataHora(x.ultimo_acesso) : 'nunca entrou'}`
-        + (x.trocar_senha ? ' · senha temporária' : '') }), no('br'),
-      no('span', { classe: 'meta', texto: `Municípios: ${x.municipios.length ? x.municipios.map(nomeMunicipio).join(', ') : 'todos (nenhum escolhido)'}` })),
-    no('div', { classe: 'controles' },
-      no('select', { 'aria-label': `Perfil de ${x.nome}`, 'data-campo': 'perfil' },
-        Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.perfil }))),
-      no('select', { 'aria-label': `Situação de ${x.nome}`, 'data-campo': 'status' },
-        [['ativo', 'Ativo'], ['bloqueado', 'Bloqueado']].map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.status }))),
-      no('select', { 'aria-label': `Municípios de ${x.nome}`, 'data-campo': 'municipios', multiple: true, size: '3' },
-        municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n, selected: x.municipios.includes(c) }))),
-      no('button', { type: 'button', 'data-acao-usuario': 'salvar', texto: 'Salvar' }),
-      no('button', { type: 'button', 'data-acao-usuario': 'senha', texto: 'Nova senha temporária' })))));
+  const campo = (rotulo, el) => no('label', { classe: 'campo-linha' }, no('span', { texto: rotulo }), el);
+  $('listaUsuarios').replaceChildren(...estado.usuarios.map(x => {
+    const nome = no('input', { id: `usu-${x.id}-nome`, 'data-campo': 'nome', maxlength: '120', autocomplete: 'off', required: true });
+    nome.value = x.nome;
+    return no('div', { classe: 'item usuario-linha com-erros', 'data-usuario': x.id },
+      no('div', {}, no('strong', { texto: x.nome }), no('br'),
+        no('span', { classe: 'meta', texto: `${x.email} · ${x.ultimo_acesso ? 'último acesso ' + dataHora(x.ultimo_acesso) : 'nunca entrou'}`
+          + (x.trocar_senha ? ' · senha temporária' : '') }), no('br'),
+        no('span', { classe: 'meta', texto: `Municípios: ${x.municipios.length ? x.municipios.map(nomeMunicipio).join(', ') : 'todos (nenhum escolhido)'}` }),
+        x.status === 'bloqueado' ? no('span', { classe: 'chip cancelado', texto: 'Bloqueado' }) : null),
+      no('div', { classe: 'controles' },
+        campo(`Nome de ${x.nome}`, nome),
+        campo(`Perfil de ${x.nome}`, no('select', { id: `usu-${x.id}-perfil`, 'data-campo': 'perfil' },
+          Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.perfil })))),
+        campo(`Situação de ${x.nome}`, no('select', { id: `usu-${x.id}-status`, 'data-campo': 'status' },
+          [['ativo', 'Ativo'], ['bloqueado', 'Bloqueado']].map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.status })))),
+        campo(`Municípios de ${x.nome} (Ctrl para vários)`, no('select', { id: `usu-${x.id}-municipios`, 'data-campo': 'municipios', multiple: true, size: '3' },
+          municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n, selected: x.municipios.includes(c) })))),
+        no('button', { type: 'button', 'data-acao-usuario': 'salvar', texto: 'Salvar' }),
+        no('button', { type: 'button', 'data-acao-usuario': 'senha', texto: 'Nova senha temporária' })));
+  }));
 }
 
 function desenharEmpresas() {
@@ -862,8 +933,9 @@ function desenharEmpresas() {
     no('td', { classe: 'codigo', texto: e.cnpj || '—' }), no('td', { texto: e.dominio }),
     no('td', {}, no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}`, texto: e.status === 'suspensa' ? 'Suspensa' : 'Ativa' })),
     no('td', { texto: fmt(e.usuarios) }), no('td', { texto: fmt(e.avisos) }),
-    no('td', {}, no('button', { type: 'button', classe: e.status === 'ativa' ? 'perigo' : '', 'data-empresa-acao': e.status === 'ativa' ? 'suspensa' : 'ativa',
-      texto: e.status === 'ativa' ? 'Suspender' : 'Reativar' }))));
+    no('td', {}, no('span', { classe: 'acoes' }, no('button', { type: 'button', 'data-empresa-acao': 'editar', 'aria-label': `Editar ${e.nome}`, texto: 'Editar' }),
+      no('button', { type: 'button', classe: e.status === 'ativa' ? 'perigo' : '', 'data-empresa-acao': e.status === 'ativa' ? 'suspensa' : 'ativa',
+        'aria-label': `${e.status === 'ativa' ? 'Suspender' : 'Reativar'} ${e.nome}`, texto: e.status === 'ativa' ? 'Suspender' : 'Reativar' })))));
   $('listaEmpresas').replaceChildren(no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
     no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Ações'].map(t => no('th', { texto: t })))),
     no('tbody', {}, linhas))));
@@ -871,10 +943,11 @@ function desenharEmpresas() {
 
 // ---- Rádios (Admin da empresa) ----
 function desenharRadios() {
-  const r = estado.radioEditando;
-  $('formRadioTitulo').textContent = r ? `Editar ${r.nome}` : 'Cadastrar rádio';
+  const r = estado.radioEditando, p = estado.pedidoAtendendo;
+  $('formRadioTitulo').textContent = r ? `Editar ${r.nome}` : p ? `Cadastrar a rádio pedida por ${p.por}` : 'Cadastrar rádio';
   $('radSalvar').textContent = r ? 'Salvar alterações' : 'Cadastrar rádio';
-  $('radCancelar').hidden = !r;
+  $('radCancelar').hidden = !r && !p;
+  desenharPedidos();
   if (!$('radMunicipios').options.length) {
     $('radMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
     $('radMunCom').replaceChildren(no('option', { value: '', texto: 'Escolha o município' }), ...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
@@ -886,8 +959,29 @@ function desenharRadios() {
     no('span', { classe: 'meta', texto: `${x.valor_padrao ? dinheiro(x.valor_padrao) : 'sem valor padrão'} (${COBRANCA[x.cobranca]}) · alcança `
       + [x.alcance.municipios.map(nomeMunicipio).join(', '), x.alcance.comunidades.length ? `${x.alcance.comunidades.length} comunidade(s)` : '']
         .filter(Boolean).join(' e ') || 'nada cadastrado' }),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-radio-acao': 'editar', texto: 'Editar' }))))
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-radio-acao': 'editar', 'aria-label': `Editar ${x.nome}`, texto: 'Editar' }),
+      no('button', { type: 'button', 'data-radio-acao': x.ativa ? 'desativar' : 'reativar', classe: x.ativa ? 'perigo' : '',
+        'aria-label': `${x.ativa ? 'Desativar' : 'Reativar'} ${x.nome}`, texto: x.ativa ? 'Desativar' : 'Reativar' }))))
     : [no('p', { classe: 'ajuda', texto: 'Nenhuma rádio cadastrada.' })]));
+}
+
+const SITUACAO_PEDIDO = { aberto: 'aberto', atendido: 'atendido', recusado: 'recusado' };
+// pedidos de rádio do Operador: os abertos com Atender e Recusar (motivo); os resolvidos só para consulta
+function desenharPedidos() {
+  const pedidos = estado.pedidos || [];
+  $('listaPedidos').replaceChildren(...(pedidos.length ? pedidos.slice(0, 30).map(p => {
+    const aberto = p.status === 'aberto';
+    return no('div', { classe: 'item com-erros', 'data-pedido': p.id },
+      no('strong', { texto: `${p.nome} (${p.cidade})` }),
+      no('span', { classe: `chip ${p.status === 'recusado' ? 'cancelado' : ''}`, texto: SITUACAO_PEDIDO[p.status] }),
+      no('span', { classe: 'meta', texto: [p.contato && `contato da rádio: ${p.contato}`, p.observacao].filter(Boolean).join(' · ') || 'sem contato nem observação' }),
+      no('span', { classe: 'meta', texto: `pedido por ${p.por} em ${dataHora(p.criado_em)}` + (p.resolvido_por ? ` · ${p.status} por ${p.resolvido_por} em ${dataHora(p.resolvido_em)}` : '')
+        + (p.motivo_recusa ? ` · motivo: ${p.motivo_recusa}` : '') }),
+      aberto ? no('div', { classe: 'acoes' },
+        no('button', { type: 'button', classe: 'prim', 'data-pedido-acao': 'atender', 'aria-label': `Atender o pedido da ${p.nome}`, texto: 'Atender (cadastrar)' }),
+        no('label', { texto: 'Motivo da recusa (o Operador vê) ' }, no('input', { id: `pedido-motivo-${p.id}`, 'data-pedido-motivo': '', maxlength: '300', autocomplete: 'off' })),
+        no('button', { type: 'button', 'data-pedido-acao': 'recusar', 'aria-label': `Recusar o pedido da ${p.nome}`, texto: 'Recusar' })) : null);
+  }) : [no('p', { classe: 'ajuda', texto: 'Nenhum pedido de rádio.' })]));
 }
 
 function desenharComunidadesRadio() {
@@ -1162,7 +1256,7 @@ async function buscarNaTela() {
       tarefas.push([c, async () => { estado.territorios[c] = await api(`/api/municipios/${c}/comunidades`); }]);
     if (estado.verRede && !(c in estado.redes) && !buscando.has(`rede ${c}`))
       tarefas.push([`rede ${c}`, async () => {
-        try { estado.redes[c] = await api(`/api/municipios/${c}/rede`); } catch (e) { if (e.status === 404) estado.redes[c] = null; else throw e; }
+        try { estado.redes[c] = (await api(`/api/municipios/${c}/rede`)) || null; } catch (e) { if (e.status === 404) estado.redes[c] = null; else throw e; }
       }]);
   }
   await Promise.all(tarefas.map(async ([chave, fazer]) => {
@@ -1303,18 +1397,50 @@ function desenharUcs() {
 
 // ======================= Controller: eventos e chamadas à API (atualiza o estado e redesenha) =======================
 class ErroApi extends Error {
-  constructor(status, mensagem, dados = {}) { super(mensagem); this.status = status; this.dados = dados; }
+  constructor(status, mensagem, dados = {}, campo = null) { super(mensagem); this.status = status; this.dados = dados; this.campo = campo; }
+}
+const SEM_CONEXAO = 'Sem conexão com o servidor: o pedido não foi concluído. Confira a internet e tente de novo.';
+const ERRO_SERVIDOR = 'O servidor teve um problema e nada foi salvo. Tente de novo em instantes; se continuar, avise o suporte.';
+
+// fetch com a falha de rede traduzida (o navegador diria só "Failed to fetch")
+async function buscar(url, opcoes) {
+  try { return await fetch(url, { credentials: 'same-origin', ...opcoes }); } catch (e) { throw new ErroApi(0, SEM_CONEXAO); }
+}
+
+// a resposta de erro vira uma mensagem clara: a do servidor (JSON) ou, se o corpo não for JSON (proxy fora do ar), a padrão
+async function erroDaResposta(r, padrao = 'Não foi possível concluir. Confira os dados e tente de novo.') {
+  const j = (r.headers.get('Content-Type') || '').includes('json') ? await r.json().catch(() => ({})) : {};
+  if (r.status === 401 && estado.tela === 'app') { sessaoAcabou(); return new ErroApi(401, 'A sessão acabou. Entre de novo.'); }
+  const texto = typeof j.detail === 'string' ? j.detail : r.status >= 500 ? ERRO_SERVIDOR : padrao;
+  return new ErroApi(r.status, texto, j, r.headers.get('X-Farol-Campo') || j.campo || null);
 }
 
 async function api(url, opcoes = {}) {
-  const r = await fetch(url, { credentials: 'same-origin', ...opcoes,
-    headers: opcoes.json ? { 'Content-Type': 'application/json' } : undefined,
+  const r = await buscar(url, { ...opcoes, headers: opcoes.json ? { 'Content-Type': 'application/json' } : undefined,
     body: opcoes.json ? JSON.stringify(opcoes.json) : opcoes.body });
-  const j = await r.json().catch(() => ({}));
-  if (r.status === 401 && estado.tela === 'app') { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou. Entre de novo.'); }
-  if (!r.ok) throw new ErroApi(r.status, typeof j.detail === 'string' ? j.detail : 'Não foi possível concluir. Tente de novo.', j);
-  return j;
+  if (!r.ok) throw await erroDaResposta(r);
+  return r.json().catch(() => ({}));
 }
+
+// enquanto salva: o botão fica desabilitado com "Salvando…" (ou outro texto) e um segundo clique não faz nada
+async function ocupado(botao, texto, fazer) {
+  if (!botao) return fazer();
+  if (botao.dataset.ocupado) return;
+  const antes = botao.textContent;
+  Object.assign(botao.dataset, { ocupado: '1' });
+  botao.disabled = true;
+  botao.setAttribute('aria-busy', 'true');
+  botao.textContent = texto;
+  try {
+    return await fazer();
+  } finally {
+    delete botao.dataset.ocupado;
+    botao.disabled = false;
+    botao.removeAttribute('aria-busy');
+    if (botao.textContent === texto) botao.textContent = antes;
+  }
+}
+const botaoDoEnvio = evento => evento.submitter || evento.target.querySelector('button[type=submit]');
 
 // pedido que devolve um arquivo (CSV, JSON): baixa com o nome que o servidor sugere; nada fica na página
 // rádios sugeridas e envios do aviso aberto (só depois de gerado; quem só consulta vê os envios)
@@ -1322,9 +1448,10 @@ async function carregarEnvios() {
   const r = estado.resultado;
   if (!r?.id) return;
   try {
-    const [envs, sug] = await Promise.all([pode('ver_historico') ? api(`/api/historico/${r.id}/envios`) : { envios: [] },
-      pode('gerar_aviso') ? api(`/api/historico/${r.id}/radios`) : null]);
+    const [envs, sug, ped] = await Promise.all([pode('ver_historico') ? api(`/api/historico/${r.id}/envios`) : { envios: [] },
+      pode('gerar_aviso') ? api(`/api/historico/${r.id}/radios`) : null, pode('pedir_radio') ? api('/api/radios/pedidos') : null]);
     estado.envios = envs.envios;
+    if (ped) estado.meusPedidos = ped.pedidos;
     if (sug) { estado.radios = sug.radios; estado.sugestao = Object.fromEntries(sug.municipios.map(x => [x.codigo_ibge, x])); }
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
@@ -1334,13 +1461,13 @@ async function carregarEnvios() {
 
 function editarEnvio(evento) {
   const alvo = evento.target, sec = alvo.closest('section.envio-radio');
-  if (!sec || !(alvo.dataset.envio || alvo.dataset.nova)) return;
+  if (!sec || !(alvo.dataset.envio || alvo.dataset.pedidoCampo)) return;
   const cod = sec.dataset.codigo, e = estado.escolha[cod];
-  if (alvo.dataset.nova) { e.nova[alvo.dataset.nova] = alvo.value; return; }
+  if (alvo.dataset.pedidoCampo) { e.pedido[alvo.dataset.pedidoCampo] = alvo.value; return; }
   e[alvo.dataset.envio] = alvo.value;
   if (alvo.dataset.envio === 'radioId' && evento.type === 'change') {   // outra rádio: o valor sugerido dela
     const radio = estado.radios.find(x => String(x.id) === alvo.value);
-    Object.assign(e, alvo.value === 'nova' ? {} : escolhaPadrao(radio));
+    Object.assign(e, escolhaPadrao(radio));
     return desenharEnvio(estado.resultado.municipios.find(x => x.codigo_ibge === cod));
   }
   desenharPrevia(cod);
@@ -1350,38 +1477,55 @@ async function acaoEnvio(evento) {
   const b = evento.target.closest('button[data-envio-acao], button[data-arquivo]');
   if (!b) return;
   if (b.dataset.arquivo) {
-    try { await baixarDaApi(`/api/envios/${b.dataset.envioId}/arquivos/${b.dataset.arquivo}`, { method: 'GET' }, `farol-envio.${b.dataset.arquivo}`); }
-    catch (e) { if (e.status !== 401) avisar(e.message, true); }
-    return;
+    return ocupado(b, 'Baixando…', async () => {
+      try { await baixarDaApi(`/api/envios/${b.dataset.envioId}/arquivos/${b.dataset.arquivo}`, { method: 'GET' }, `farol-envio.${b.dataset.arquivo}`); }
+      catch (e) { if (e.status !== 401) avisar(e.message, true); }
+    });
   }
-  const cod = b.closest('section.envio-radio').dataset.codigo, m = estado.resultado.municipios.find(x => x.codigo_ibge === cod);
-  b.disabled = true;
-  try {
-    if (b.dataset.envioAcao === 'salvar-radio') await cadastrarRadio(m);
-    else await enviarParaRadio(m, b.dataset.envioAcao);
-  } catch (e) {
-    if (e.status !== 401) avisar(e.message, true);
-  } finally {
-    b.disabled = false;
+  if (b.dataset.envioAcao === 'ir-radios') return irPara('radios');
+  const sec = b.closest('section.envio-radio'), cod = sec.dataset.codigo, m = estado.resultado.municipios.find(x => x.codigo_ibge === cod);
+  if (b.dataset.envioAcao === 'pedir') {
+    const p = estado.escolha[cod].pedido;
+    p.aberto = !p.aberto;
+    desenharEnvio(m);
+    return p.aberto ? $(`pedido-nome-${cod}`)?.focus() : sec.querySelector('[data-envio-acao=pedir]')?.focus();
   }
+  await ocupado(b, b.dataset.envioAcao === 'enviar-pedido' ? 'Enviando…' : b.dataset.envioAcao === 'copia' ? 'Copiando…' : 'Enviando…', async () => {
+    try {
+      if (b.dataset.envioAcao === 'enviar-pedido') await pedirRadio(m, sec);
+      else await enviarParaRadio(m, b.dataset.envioAcao, sec);
+    } catch (e) {
+      if (e.status === 401) return;
+      avisar(e.message, true);
+      erroDoServidor(b.dataset.envioAcao === 'enviar-pedido' ? $(`pedido-${cod}`) : sec, e, b.dataset.envioAcao === 'enviar-pedido'
+        ? Object.fromEntries(['nome', 'cidade', 'contato', 'observacao'].map(c => [c, `pedido-${c}-${cod}`]))
+        : { valor: `valor-${cod}`, custo_antigo: `antigo-${cod}`, texto: `aviso-${cod}` });
+    }
+  });
 }
 
-async function cadastrarRadio(m) {
-  const n = estado.escolha[m.codigo_ibge].nova;
-  const alcance = n.alcance === 'municipio' ? { municipios: [m.codigo_ibge] }
-    : { comunidades: m.comunidades.map(c => ({ municipio: m.codigo_ibge, nome: semSufixo(c.nome), distrito: c.distrito })) };
-  const j = await api('/api/radios', { method: 'POST', json: { nome: n.nome, email: n.email || null, whatsapp: n.whatsapp || null,
-    valor_padrao: n.valor || null, cobranca: n.cobranca, alcance } });
-  avisar(`${j.radio.nome} cadastrada (registrado na auditoria).`);
-  estado.escolha[m.codigo_ibge] = escolhaPadrao(j.radio);
-  await carregarEnvios();
+async function pedirRadio(m, sec) {
+  const cod = m.codigo_ibge, p = estado.escolha[cod].pedido, lugar = $(`pedido-${cod}`);
+  const erros = [p.nome.trim().length < 2 && [`pedido-nome-${cod}`, 'Informe o nome da rádio (de 2 a 80 caracteres).'],
+    p.cidade.trim().length < 2 && [`pedido-cidade-${cod}`, 'Informe a cidade da rádio.']].filter(Boolean);
+  if (erros.length) { mostrarErros(lugar, erros); return avisar(erros[0][1], true); }
+  limparErros(lugar);
+  const j = await api('/api/radios/pedidos', { method: 'POST', json: { nome: p.nome, cidade: p.cidade, contato: p.contato, observacao: p.observacao } });
+  avisar(`Pedido de cadastro da ${j.pedido.nome} enviado ao Admin da empresa (registrado na auditoria).`);
+  Object.assign(p, { nome: '', contato: '', observacao: '' });
+  estado.meusPedidos = (await api('/api/radios/pedidos')).pedidos;
+  desenharEnvio(m);
+  sec.querySelector('[data-envio-acao=pedir]')?.focus();
 }
 
-async function enviarParaRadio(m, canal) {
+async function enviarParaRadio(m, canal, sec) {
   const cod = m.codigo_ibge, e = estado.escolha[cod], radio = estado.radios.find(x => String(x.id) === String(e.radioId));
   if (!radio) return avisar('Escolha a rádio.', true);
-  const valor = reaisNumero(e.valor), texto = estado.avisos[cod];
-  if (valor === null || Number.isNaN(valor)) return avisar('Informe o valor do envio em R$.', true);
+  const valor = reaisNumero(e.valor), antigo = reaisNumero(e.antigo), texto = estado.avisos[cod];
+  const erros = [(valor === null || Number.isNaN(valor)) && [`valor-${cod}`, 'Informe o valor deste envio em R$ (ex.: 150,00).'],
+    Number.isNaN(antigo) && [`antigo-${cod}`, 'O custo antigo tem de ser um valor em R$ (ou vazio).']].filter(Boolean);
+  if (erros.length) { mostrarErros(sec, erros); return avisar(erros[0][1], true); }
+  limparErros(sec);
   if (canal === 'email') {
     if (!radio.email) return avisar(`${radio.nome} não tem e-mail cadastrado.`, true);
     if (!confirm(`Enviar para ${radio.nome} (${radio.email})?`)) return;
@@ -1405,9 +1549,8 @@ async function enviarParaRadio(m, canal) {
 }
 
 async function baixarDaApi(url, opcoes, nomePadrao) {
-  const r = await fetch(url, { method: 'POST', credentials: 'same-origin', ...opcoes });
-  if (r.status === 401) { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou.'); }
-  if (!r.ok) throw new ErroApi(r.status, (await r.json().catch(() => ({}))).detail || 'Não foi possível baixar.');
+  const r = await buscar(url, { method: 'POST', ...opcoes });
+  if (!r.ok) throw await erroDaResposta(r, 'Não foi possível baixar.');
   const nome = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '')?.[1] || nomePadrao;
   const href = URL.createObjectURL(await r.blob()), link = no('a', { href, download: nome });
   document.body.append(link); link.click(); link.remove();
@@ -1460,35 +1603,39 @@ async function aposEntrar(usuario) {
 async function entrar(evento) {
   evento.preventDefault();
   const email = $('email').value.trim(), senha = $('senha').value;
-  if (!email || !senha) return mensagemEm('estadoEntrar', 'Informe o e-mail e a senha.', true);
-  $('botaoEntrar').disabled = true;
-  try {
-    const j = await api('/api/entrar', { method: 'POST', json: { email, senha } });
-    $('senha').value = '';
-    mensagemEm('estadoEntrar', '');
-    await aposEntrar(j.usuario);
-  } catch (e) {
-    mensagemEm('estadoEntrar', e.message, true);
-  } finally {
-    $('botaoEntrar').disabled = false;
-  }
+  const erros = [!email && ['email', 'Informe o e-mail.'], !senha && ['senha', 'Informe a senha.']].filter(Boolean);
+  if (erros.length) { mostrarErros($('formEntrar'), erros); return mensagemEm('estadoEntrar', 'Informe o e-mail e a senha.', true); }
+  limparErros($('formEntrar'));
+  await ocupado($('botaoEntrar'), 'Entrando…', async () => {
+    try {
+      const j = await api('/api/entrar', { method: 'POST', json: { email, senha } });
+      $('senha').value = '';
+      mensagemEm('estadoEntrar', '');
+      await aposEntrar(j.usuario);
+    } catch (e) {
+      mensagemEm('estadoEntrar', e.message, true);
+    }
+  });
 }
 
 async function trocarSenha(evento) {
   evento.preventDefault();
-  const atual = $('senhaAtual').value, nova = $('senhaNova').value, problema = validarSenhaNova(nova, $('senhaNova2').value);
-  if (problema) return mensagemEm('estadoSenha', problema, true);
-  $('botaoSenha').disabled = true;
-  try {
-    const j = await api('/api/senha', { method: 'POST', json: { atual, nova } });
-    for (const id of ['senhaAtual', 'senhaNova', 'senhaNova2']) $(id).value = '';
-    mensagemEm('estadoSenha', '');
-    await aposEntrar(j.usuario);
-  } catch (e) {
-    mensagemEm('estadoSenha', e.message, true);
-  } finally {
-    $('botaoSenha').disabled = false;
-  }
+  const atual = $('senhaAtual').value, nova = $('senhaNova').value;
+  const erros = [!atual && ['senhaAtual', 'Informe a senha atual (a temporária).'], validarSenhaNova(nova, $('senhaNova2').value)].filter(Boolean);
+  if (erros.length) { mostrarErros($('formSenha'), erros); return mensagemEm('estadoSenha', erros[0][1], true); }
+  limparErros($('formSenha'));
+  await ocupado($('botaoSenha'), 'Salvando…', async () => {
+    try {
+      const j = await api('/api/senha', { method: 'POST', json: { atual, nova } });
+      for (const id of ['senhaAtual', 'senhaNova', 'senhaNova2']) $(id).value = '';
+      mensagemEm('estadoSenha', '');
+      await aposEntrar(j.usuario);
+    } catch (e) {
+      mensagemEm('estadoSenha', e.message, true);
+      if (/atual/.test(e.message)) mostrarErros($('formSenha'), [['senhaAtual', e.message]]);
+      else if (e.status === 422) mostrarErros($('formSenha'), [['senhaNova', e.message]]);
+    }
+  });
 }
 
 // ao sair (ou quando a sessão acaba), nada do usuário anterior fica na página: num computador
@@ -1502,9 +1649,13 @@ function limparTela() {
     calor: null });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
     'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes',
-    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo'])
+    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo', 'listaPedidos'])
     $(id).replaceChildren();
-  Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null });
+  Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null, pedidos: [], meusPedidos: [],
+    pedidoAtendendo: null, empresaEditando: null });
+  for (const f of ['formEntrar', 'formSenha', 'formUsuario', 'formRadio', 'formConfig', 'formEmpresa', 'form']) limparErros($(f));
+  // as mensagens de status também (ex.: "Fulana: alterações salvas"): quem entra depois não vê nada do anterior
+  for (const id of ['estadoUsuario', 'estadoRadio', 'estadoConfig', 'estadoEmpresa', 'estadoAuditoria', 'estadoSenha']) mensagemEm(id, '');
   $('caixaAjuda').hidden = true;
   $('relDestinos').value = $('audDestinos').value = '';
   $('linhaTempo').hidden = true; estado.linhaTempo = null;
@@ -1541,7 +1692,12 @@ async function irPara(vista) {
     if (vista === 'painel') { estado.painel = await api('/api/painel'); desenharPainel(); }
     if (vista === 'relatorios') { desenharFiltrosRelatorio(); await carregarRelatorio(); }
     if (vista === 'registro') prepararAuditoria();
-    if (vista === 'radios') { estado.radiosAdmin = (await api('/api/radios')).radios; desenharRadios(); }
+    if (vista === 'radios') {
+      const [r, p] = await Promise.all([api('/api/radios'), api('/api/radios/pedidos')]);
+      estado.radiosAdmin = r.radios; estado.pedidos = p.pedidos;
+      desenharRadios();
+    }
+    if (vista === 'empresas') desenharFormEmpresa();
     if (vista === 'configuracoes') { estado.configuracao = await api('/api/empresa/configuracao'); desenharConfig(); }
     if (vista === 'comparativo') { desenharComparativo(); estado.painel = await api('/api/painel'); desenharComparativo(); }
     if (vista === 'usuarios') { const j = await api('/api/usuarios'); estado.usuarios = j.usuarios; estado.perfis = j.perfis; desenharUsuarios(); }
@@ -1616,11 +1772,10 @@ async function enviar(evento) {
   evento.preventDefault();
   const form = { arquivo: estado.arquivo, data: $('data').value, inicio: $('inicio').value, fim: $('fim').value, idioma: $('idioma').value,
     tipo: $('tipo').value, tipoOutro: $('tipoOutro').value };
-  const problema = validarFormulario(form);
-  if (problema) {
-    if (validarArquivo(form.arquivo)) { estado.passo = 1; desenharAbas(); }
-    return avisar(problema, true);
-  }
+  if (validarArquivo(form.arquivo)) { estado.passo = 1; desenharAbas(); return avisar(validarArquivo(form.arquivo), true); }
+  const erros = validarFormulario(form);
+  if (erros.length) { mostrarErros($('form'), erros); return avisar(erros[0][1], true); }
+  limparErros($('form'));
   if (temResultadoNovo() && !gerado()) descartarNovo();
   estado.enviando = true;
   avisar('Lendo a planilha, conferindo as linhas e localizando as comunidades…');
@@ -1649,7 +1804,10 @@ async function enviar(evento) {
       estado.aba = estado.abas[0];
       $('aba').replaceChildren(...estado.abas.map(a => no('option', { value: a, texto: a })));
       avisar(`${e.message} Escolha a aba e clique em "Conferir a planilha" de novo.`, true);
-    } else if (e.status !== 401) avisar(e.message, true);
+    } else if (e.status !== 401) {
+      avisar(e.message, true);
+      erroDoServidor($('form'), e, { data: 'data', horario: 'inicio', tipo: 'tipo', tipo_outro: 'tipoOutro', idioma: 'idioma' });
+    }
   } finally {
     estado.enviando = false;
     desenharEstado();
@@ -1733,10 +1891,9 @@ async function gerarAudio(codigo, m) {
   if (audioAtual(codigo)) return audioAtual(codigo);
   avisar(`Gerando o áudio de ${m.nome}…`);
   const texto = estado.avisos[codigo];
-  const r = await fetch('/api/audio', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+  const r = await buscar('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texto, idioma: estado.formulario.idioma, municipio: m.nome }) });
-  if (r.status === 401) { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou.'); }
-  if (!r.ok) throw new ErroApi(r.status, (await r.json().catch(() => ({}))).detail || 'Não foi possível gerar o áudio.');
+  if (!r.ok) throw await erroDaResposta(r, 'Não foi possível gerar o áudio.');
   if (estado.audios[codigo]) URL.revokeObjectURL(estado.audios[codigo].url);
   estado.audios[codigo] = { texto, url: URL.createObjectURL(await r.blob()), segundos: Number(r.headers.get('X-Duracao-Segundos')) || 0 };
   avisar(`Áudio de ${m.nome} pronto.`);
@@ -1748,10 +1905,9 @@ async function gerarAudio(codigo, m) {
 async function audioHoje(codigo, m) {
   if (estado.audiosHoje[codigo]) return estado.audiosHoje[codigo];
   avisar(`Gerando o áudio do aviso de hoje de ${m.nome} (é longo: pode levar um tempo)…`);
-  const r = await fetch('/api/audio', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+  const r = await buscar('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texto: m.hoje.texto, idioma: 'pt-BR', municipio: m.nome, comparativo: true }) });
-  if (r.status === 401) { sessaoAcabou(); throw new ErroApi(401, 'A sessão acabou.'); }
-  if (!r.ok) throw new ErroApi(r.status, (await r.json().catch(() => ({}))).detail || 'Não foi possível gerar o áudio.');
+  if (!r.ok) throw await erroDaResposta(r, 'Não foi possível gerar o áudio.');
   estado.audiosHoje[codigo] = { url: URL.createObjectURL(await r.blob()), segundos: Number(r.headers.get('X-Duracao-Segundos')) || 0 };
   avisar(`Áudio do aviso de hoje de ${m.nome} pronto.`);
   return estado.audiosHoje[codigo];
@@ -1842,29 +1998,38 @@ async function abrirHistorico(evento) {
 async function acaoAviso(evento) {
   const b = evento.target.closest('button[data-aviso]');
   if (!b) return;
-  const r = estado.resultado;
-  try {
-    let a, feito;
-    if (b.dataset.aviso === 'data') {
-      const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
-      if (!d || !i || !f || f <= i) return avisar('Informe a nova data e um horário de fim depois do início.', true);
-      a = await api(`/api/historico/${r.id}/data`, { method: 'POST', json: { data: dataTexto(d), horario: `${horaTexto(i)} às ${horaTexto(f)}` } });
-      feito = `Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`;
-    } else {
-      const motivo = $('motivoCancelar').value.trim();
-      if (motivo.length < 3) return avisar('Escreva o motivo do cancelamento.', true);
-      if (!confirm(`Cancelar o desligamento do aviso nº ${r.id}? O aviso fica no histórico, marcado como cancelado.`)) return;
-      a = await api(`/api/historico/${r.id}/cancelar`, { method: 'POST', json: { motivo } });
-      feito = `Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`;
+  const r = estado.resultado, lugar = $('acoesAviso'), data = b.dataset.aviso === 'data';
+  let erros = [];
+  if (data) {
+    const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
+    erros = [!d && ['novaData', 'Informe a nova data.'], !i && ['novoInicio', 'Informe o início.'], !f && ['novoFim', 'Informe o fim.'],
+      i && f && f <= i && ['novoFim', 'O fim tem de ser depois do início.']].filter(Boolean);
+  } else if ($('motivoCancelar').value.trim().length < 3) erros = [['motivoCancelar', 'Escreva o motivo do cancelamento (de 3 a 200 caracteres).']];
+  if (erros.length) { mostrarErros(lugar, erros); return avisar(erros[0][1], true); }
+  limparErros(lugar);
+  if (!data && !confirm(`Cancelar o desligamento do aviso nº ${r.id}? O aviso fica no histórico, marcado como cancelado.`)) return;
+  await ocupado(b, 'Salvando…', async () => {
+    try {
+      let a, feito;
+      if (data) {
+        const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
+        a = await api(`/api/historico/${r.id}/data`, { method: 'POST', json: { data: dataTexto(d), horario: `${horaTexto(i)} às ${horaTexto(f)}` } });
+        feito = `Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`;
+      } else {
+        a = await api(`/api/historico/${r.id}/cancelar`, { method: 'POST', json: { motivo: $('motivoCancelar').value.trim() } });
+        feito = `Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`;
+      }
+      // a lista e o aviso aberto primeiro; a mensagem de pronto só depois de tudo redesenhado
+      estado.historico = estado.historico.map(x => x.id === a.id ? a : x);
+      desenharHistorico();
+      await mostrarResultado(doHistorico(a), 'historico', { data: a.data, dataLonga: a.data, horario: a.horario, idioma: a.idioma });
+      avisar(feito);
+    } catch (e) {
+      if (e.status === 401) return;
+      avisar(e.message, true);
+      erroDoServidor(lugar, e, { data: 'novaData', horario: 'novoInicio', motivo: 'motivoCancelar' });
     }
-    // a lista e o aviso aberto primeiro; a mensagem de pronto só depois de tudo redesenhado
-    estado.historico = estado.historico.map(x => x.id === a.id ? a : x);
-    desenharHistorico();
-    await mostrarResultado(doHistorico(a), 'historico', { data: a.data, dataLonga: a.data, horario: a.horario, idioma: a.idioma });
-    avisar(feito);
-  } catch (e) {
-    if (e.status !== 401) avisar(e.message, true);
-  }
+  });
 }
 
 async function carregarRelatorio(evento) {
@@ -1893,26 +2058,30 @@ const destinatarios = texto => [...new Set(texto.split(/[\s,;]+/).map(d => d.tri
 async function exportarRelatorio(evento) {
   const b = evento.target.closest('button[data-rel]');
   if (!b) return;
-  const tipo = $('relQual').value;
-  b.disabled = true;
-  try {
-    if (b.dataset.rel === 'enviar') {
-      const destinos = destinatarios($('relDestinos').value);
-      if (!destinos.length) return avisar('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
-      if (!confirm(`Enviar o relatório por e-mail (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
-      const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: filtrosRelatorio(), destinatarios: destinos } });
-      avisar(`Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}; registrado na auditoria).`);
-    } else {
-      await baixarDaApi(`/api/relatorios/${tipo}.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-${tipo}.${b.dataset.rel}`);
-      avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
-    }
-    estado.vias = (await api('/api/relatorios/vias')).vias;
-    desenharVias();
-  } catch (e) {
-    if (e.status !== 401) avisar(e.message, true);
-  } finally {
-    b.disabled = false;
+  const tipo = $('relQual').value, enviar = b.dataset.rel === 'enviar', destinos = destinatarios($('relDestinos').value);
+  if (enviar) {
+    if (!destinos.length) { mostrarErros($('relEnviar'), [['relDestinos', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).']]);
+      return avisar('Escreva o e-mail de quem vai receber.', true); }
+    limparErros($('relEnviar'));
+    if (!confirm(`Enviar o relatório por e-mail (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
   }
+  await ocupado(b, enviar ? 'Enviando…' : 'Gerando…', async () => {
+    try {
+      if (enviar) {
+        const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: filtrosRelatorio(), destinatarios: destinos } });
+        avisar(`Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}; registrado na auditoria).`);
+      } else {
+        await baixarDaApi(`/api/relatorios/${tipo}.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-${tipo}.${b.dataset.rel}`);
+        avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
+      }
+      estado.vias = (await api('/api/relatorios/vias')).vias;
+      desenharVias();
+    } catch (e) {
+      if (e.status === 401) return;
+      avisar(e.message, true);
+      erroDoServidor($('relEnviar'), e, { destinatarios: 'relDestinos' });
+    }
+  });
 }
 
 async function baixarVia(evento) {
@@ -1948,32 +2117,36 @@ async function exportarAuditoria(evento) {
   if ($('audPessoa').value.trim()) f.pessoa = $('audPessoa').value.trim();
   if ($('audCategoria').value) f.categoria = $('audCategoria').value;
   if (pode('auditoria_geral') && $('audEmpresa').value.trim()) f.empresa = $('audEmpresa').value.trim().toUpperCase();
-  const tipo = pode('auditoria_geral') ? 'acessos' : 'auditoria', acao = b.dataset.aud;
-  b.disabled = true;
-  try {
-    if (acao === 'tela') {
-      const r = await api(`/api/relatorios/${tipo}?${consulta(f)}`);
-      $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo));
-      mensagemEm('estadoAuditoria', `${fmt(r.total)} linha(s) no período (a consulta fica na auditoria com o seu nome).`);
-    } else if (acao === 'enviar') {
-      const destinos = destinatarios($('audDestinos').value);
-      if (!destinos.length) return mensagemEm('estadoAuditoria', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
-      if (!confirm(`Enviar o relatório de auditoria (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
-      const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: f, destinatarios: destinos } });
-      mensagemEm('estadoAuditoria', `Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
-    } else if (acao === 'json') {
-      // as linhas filtradas, como a tela as recebe (a consulta fica na auditoria)
-      await baixarDaApi(`/api/relatorios/${tipo}?${consulta(f)}`, { method: 'GET' }, `farol-${tipo}-${f.mes}.json`);
-      mensagemEm('estadoAuditoria', 'Relatório baixado em JSON (registrado na auditoria com o seu nome).');
-    } else {
-      await baixarDaApi(`/api/relatorios/${tipo}.${acao}?${consulta(f)}`, { method: 'GET' }, `farol-auditoria.${acao}`);
-      mensagemEm('estadoAuditoria', `Relatório baixado em ${acao.toUpperCase()}, com o seu nome e o código de verificação.`);
-    }
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoAuditoria', e.message, true);
-  } finally {
-    b.disabled = false;
+  const tipo = pode('auditoria_geral') ? 'acessos' : 'auditoria', acao = b.dataset.aud, destinos = destinatarios($('audDestinos').value);
+  if (acao === 'enviar') {
+    if (!destinos.length) { mostrarErros($('audEnviar'), [['audDestinos', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).']]);
+      return mensagemEm('estadoAuditoria', 'Escreva o e-mail de quem vai receber.', true); }
+    limparErros($('audEnviar'));
+    if (!confirm(`Enviar o relatório de auditoria (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
   }
+  await ocupado(b, acao === 'enviar' ? 'Enviando…' : acao === 'tela' ? 'Carregando…' : 'Gerando…', async () => {
+    try {
+      if (acao === 'tela') {
+        const r = await api(`/api/relatorios/${tipo}?${consulta(f)}`);
+        $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo));
+        mensagemEm('estadoAuditoria', `${fmt(r.total)} linha(s) no período (a consulta fica na auditoria com o seu nome).`);
+      } else if (acao === 'enviar') {
+        const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: f, destinatarios: destinos } });
+        mensagemEm('estadoAuditoria', `Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
+      } else if (acao === 'json') {
+        // as linhas filtradas, como a tela as recebe (a consulta fica na auditoria)
+        await baixarDaApi(`/api/relatorios/${tipo}?${consulta(f)}`, { method: 'GET' }, `farol-${tipo}-${f.mes}.json`);
+        mensagemEm('estadoAuditoria', 'Relatório baixado em JSON (registrado na auditoria com o seu nome).');
+      } else {
+        await baixarDaApi(`/api/relatorios/${tipo}.${acao}?${consulta(f)}`, { method: 'GET' }, `farol-auditoria.${acao}`);
+        mensagemEm('estadoAuditoria', `Relatório baixado em ${acao.toUpperCase()}, com o seu nome e o código de verificação.`);
+      }
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoAuditoria', e.message, true);
+      erroDoServidor($('audEnviar'), e, { destinatarios: 'audDestinos' });
+    }
+  });
 }
 
 // tudo o que aconteceu com o aviso, da auditoria: quando, quem (nome e perfil), o quê e o código da linha
@@ -2016,101 +2189,209 @@ async function verificarAuditoria() {
 
 const selecionados = sel => [...sel.selectedOptions].map(o => o.value);
 
+const nomeValido = n => n.trim().replace(/\s+/g, ' ').length >= 2;
+
 async function cadastrarUsuario(evento) {
   evento.preventDefault();
-  try {
-    const j = await api('/api/usuarios', { method: 'POST', json: { nome: $('novoNome').value, email: $('novoEmail').value, perfil: $('novoPerfil').value,
-      municipios: selecionados($('novoMunicipios')) } });
-    for (const o of $('novoMunicipios').options) o.selected = false;
-    $('novoNome').value = ''; $('novoEmail').value = '';
-    mensagemEm('estadoUsuario', `${j.usuario.nome} cadastrado.`);
-    mostrarSenhaTemporaria(`Senha temporária de ${j.usuario.nome} (${j.usuario.email}):`, j.senha_temporaria);
-    await irPara('usuarios');
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoUsuario', e.message, true);
-  }
+  const form = $('formUsuario'), nome = $('novoNome').value, email = $('novoEmail').value.trim();
+  const erros = [!nomeValido(nome) && ['novoNome', 'Informe o nome (de 2 a 120 caracteres).'],
+    !EMAIL.test(email) && ['novoEmail', email ? 'E-mail inválido.' : 'Informe o e-mail da empresa.']].filter(Boolean);
+  if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoUsuario', erros[0][1], true); }
+  limparErros(form);
+  await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
+    try {
+      const j = await api('/api/usuarios', { method: 'POST', json: { nome, email, perfil: $('novoPerfil').value,
+        municipios: selecionados($('novoMunicipios')) } });
+      for (const o of $('novoMunicipios').options) o.selected = false;
+      $('novoNome').value = ''; $('novoEmail').value = '';
+      mensagemEm('estadoUsuario', `${j.usuario.nome} cadastrado (registrado na auditoria).`);
+      mostrarSenhaTemporaria(`Senha temporária de ${j.usuario.nome} (${j.usuario.email}):`, j.senha_temporaria);
+      await irPara('usuarios');
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoUsuario', e.message, true);
+      erroDoServidor(form, e, { nome: 'novoNome', email: 'novoEmail', perfil: 'novoPerfil', municipios: 'novoMunicipios' });
+    }
+  });
 }
 
 async function acaoUsuario(evento) {
   const b = evento.target.closest('button[data-acao-usuario]');
   if (!b) return;
   const linha = b.closest('[data-usuario]'), id = linha.dataset.usuario, x = estado.usuarios.find(u => String(u.id) === id);
-  try {
-    if (b.dataset.acaoUsuario === 'salvar') {
-      const campo = n => linha.querySelector(`[data-campo="${n}"]`).value;
-      await api(`/api/usuarios/${id}`, { method: 'PATCH', json: { perfil: campo('perfil'), status: campo('status'),
-        municipios: selecionados(linha.querySelector('[data-campo="municipios"]')) } });
-      mensagemEm('estadoUsuario', `${x.nome}: alterações salvas.`);
-    } else {
-      const j = await api(`/api/usuarios/${id}/senha-temporaria`, { method: 'POST' });
-      mostrarSenhaTemporaria(`Nova senha temporária de ${x.nome} (${x.email}). As sessões abertas dele foram encerradas.`, j.senha_temporaria);
-    }
-    await irPara('usuarios');
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoUsuario', e.message, true);
+  const salvar = b.dataset.acaoUsuario === 'salvar';
+  if (salvar && !nomeValido($(`usu-${id}-nome`).value)) {
+    mostrarErros(linha, [[`usu-${id}-nome`, 'Informe o nome (de 2 a 120 caracteres).']]);
+    return mensagemEm('estadoUsuario', `${x.nome}: informe o nome.`, true);
   }
+  limparErros(linha);
+  await ocupado(b, salvar ? 'Salvando…' : 'Gerando…', async () => {
+    try {
+      if (salvar) {
+        const campo = n => $(`usu-${id}-${n}`).value;
+        await api(`/api/usuarios/${id}`, { method: 'PATCH', json: { nome: campo('nome'), perfil: campo('perfil'), status: campo('status'),
+          municipios: selecionados($(`usu-${id}-municipios`)) } });
+        mensagemEm('estadoUsuario', `${campo('nome').trim()}: alterações salvas (registrado na auditoria).`);
+      } else {
+        const j = await api(`/api/usuarios/${id}/senha-temporaria`, { method: 'POST' });
+        mostrarSenhaTemporaria(`Nova senha temporária de ${x.nome} (${x.email}). As sessões abertas dele foram encerradas.`, j.senha_temporaria);
+      }
+      await irPara('usuarios');
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoUsuario', e.message, true);
+      erroDoServidor(linha, e, Object.fromEntries(['nome', 'perfil', 'status', 'municipios'].map(c => [c, `usu-${id}-${c}`])));
+    }
+  });
 }
+
+const CAMPOS_EMPRESA = { nome: 'empNome', sigla: 'empSigla', dominio: 'empDominio', cnpj: 'empCnpj', admin_nome: 'empAdminNome', admin_email: 'empAdminEmail' };
 
 async function cadastrarEmpresa(evento) {
   evento.preventDefault();
-  const v = id => $(id).value;
-  try {
-    const j = await api('/api/empresas', { method: 'POST', json: { nome: v('empNome'), sigla: v('empSigla'), dominio: v('empDominio'),
-      admin_nome: v('empAdminNome'), admin_email: v('empAdminEmail'), cnpj: v('empCnpj') || null } });
-    for (const id of ['empNome', 'empCnpj', 'empSigla', 'empDominio', 'empAdminNome', 'empAdminEmail']) $(id).value = '';
-    mensagemEm('estadoEmpresa', `${j.empresa.nome} cadastrada.`);
-    mostrarSenhaTemporaria(`Senha temporária do primeiro admin de ${j.empresa.nome}:`, j.senha_temporaria);
-    await irPara('empresas');
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoEmpresa', e.message, true);
-  }
+  const form = $('formEmpresa'), v = id => $(id).value.trim(), editando = estado.empresaEditando;
+  const erros = [!nomeValido(v('empNome')) && ['empNome', 'Informe o nome da empresa (de 2 a 120 caracteres).'],
+    !editando && !/^[A-Za-z0-9]{2,10}$/.test(v('empSigla')) && ['empSigla', 'Sigla: de 2 a 10 letras ou números.'],
+    !EMAIL.test(`x@${v('empDominio')}`) && ['empDominio', 'Informe o domínio dos e-mails (ex.: empresa.com.br).'],
+    !editando && !nomeValido(v('empAdminNome')) && ['empAdminNome', 'Informe o nome do primeiro admin.'],
+    !editando && !EMAIL.test(v('empAdminEmail')) && ['empAdminEmail', 'Informe o e-mail do primeiro admin (do domínio da empresa).']].filter(Boolean);
+  if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoEmpresa', erros[0][1], true); }
+  limparErros(form);
+  await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
+    try {
+      if (editando) {
+        await api(`/api/empresas/${editando.id}`, { method: 'PATCH', json: { nome: v('empNome'), dominio: v('empDominio'), cnpj: v('empCnpj') } });
+        limparFormEmpresa();
+        await irPara('empresas');
+        return mensagemEm('estadoEmpresa', `${v('empNome') || editando.nome} alterada (registrado na auditoria).`);
+      }
+      const j = await api('/api/empresas', { method: 'POST', json: { nome: v('empNome'), sigla: v('empSigla'), dominio: v('empDominio'),
+        admin_nome: v('empAdminNome'), admin_email: v('empAdminEmail'), cnpj: v('empCnpj') || null } });
+      limparFormEmpresa();
+      mensagemEm('estadoEmpresa', `${j.empresa.nome} cadastrada (registrado na auditoria).`);
+      mostrarSenhaTemporaria(`Senha temporária do primeiro admin de ${j.empresa.nome}:`, j.senha_temporaria);
+      await irPara('empresas');
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoEmpresa', e.message, true);
+      erroDoServidor(form, e, CAMPOS_EMPRESA);
+    }
+  });
+}
+
+function limparFormEmpresa() {
+  estado.empresaEditando = null;
+  for (const id of Object.values(CAMPOS_EMPRESA)) $(id).value = '';
+  limparErros($('formEmpresa'));
+  desenharFormEmpresa();
+}
+
+// o mesmo formulário cadastra ou edita (nome, CNPJ e domínio; a sigla e o primeiro admin não mudam)
+function desenharFormEmpresa() {
+  const e = estado.empresaEditando;
+  $('formEmpresaTitulo').textContent = e ? `Editar ${e.nome}` : 'Cadastrar empresa';
+  $('empSalvar').textContent = e ? 'Salvar alterações' : 'Cadastrar empresa';
+  $('empCancelar').hidden = !e;
+  for (const id of ['empSiglaRotulo', 'empAdminNomeRotulo', 'empAdminEmailRotulo']) $(id).hidden = !!e;
 }
 
 async function acaoEmpresa(evento) {
   const b = evento.target.closest('button[data-empresa-acao]');
   if (!b) return;
-  const id = b.closest('[data-empresa]').dataset.empresa, e = estado.empresas.find(x => String(x.id) === id), status = b.dataset.empresaAcao;
-  if (status === 'suspensa' && !confirm(`Suspender ${e.nome}? Ninguém da empresa entra até ela ser reativada.`)) return;
-  try {
-    await api(`/api/empresas/${id}`, { method: 'PATCH', json: { status } });
-    await irPara('empresas');
-    mensagemEm('estadoEmpresa', `${e.nome} ${status === 'suspensa' ? 'suspensa' : 'reativada'} (registrado na auditoria).`);
-  } catch (x) {
-    if (x.status !== 401) mensagemEm('estadoEmpresa', x.message, true);
+  const id = b.closest('[data-empresa]').dataset.empresa, e = estado.empresas.find(x => String(x.id) === id), acao = b.dataset.empresaAcao;
+  if (acao === 'editar') {
+    estado.empresaEditando = e;
+    limparErros($('formEmpresa'));
+    $('empNome').value = e.nome; $('empDominio').value = e.dominio; $('empCnpj').value = e.cnpj || '';
+    desenharFormEmpresa();
+    $('formEmpresa').scrollIntoView({ block: 'start' });
+    return $('empNome').focus();
   }
+  if (acao === 'suspensa' && !confirm(`Suspender ${e.nome}? Ninguém da empresa entra até ela ser reativada.`)) return;
+  await ocupado(b, 'Salvando…', async () => {
+    try {
+      await api(`/api/empresas/${id}`, { method: 'PATCH', json: { status: acao } });
+      await irPara('empresas');
+      mensagemEm('estadoEmpresa', `${e.nome} ${acao === 'suspensa' ? 'suspensa' : 'reativada'} (registrado na auditoria).`);
+    } catch (x) {
+      if (x.status !== 401) mensagemEm('estadoEmpresa', x.message, true);
+    }
+  });
 }
 
 // ---- Rádios (Admin da empresa) ----
 function limparFormRadio() {
   estado.radioEditando = null;
+  estado.pedidoAtendendo = null;
   estado.alcanceComunidades = [];
   for (const id of ['radNome', 'radEmail', 'radWhats', 'radValor']) $(id).value = '';
   $('radCobranca').value = 'fechado';
   $('radAtiva').checked = true;
   for (const o of $('radMunicipios').options) o.selected = false;
   $('radMunCom').value = '';
+  limparErros($('formRadio'));
+}
+
+const CAMPOS_RADIO = { nome: 'radNome', email: 'radEmail', whatsapp: 'radWhats', valor_padrao: 'radValor', alcance: 'radMunicipios' };
+
+// o que o servidor também confere (api/radio._validar_radio), antecipado na tela com o erro no campo
+function errosRadio() {
+  const nome = $('radNome').value.trim(), email = $('radEmail').value.trim(), whats = $('radWhats').value.replace(/\D/g, ''), valor = reaisNumero($('radValor').value);
+  return [!(nome.length >= 2 && nome.length <= 80) && ['radNome', 'Informe o nome da rádio (de 2 a 80 caracteres).'],
+    !email && !whats && ['radEmail', 'Informe o e-mail ou o WhatsApp da rádio.'],
+    email && !EMAIL.test(email) && ['radEmail', 'E-mail da rádio inválido.'],
+    whats && (whats.length < 10 || whats.length > 13) && ['radWhats', 'WhatsApp: de 10 a 13 algarismos, com o DDD.'],
+    Number.isNaN(valor) && ['radValor', 'Valor padrão: um valor em R$ (ex.: 150,00).']].filter(Boolean);
 }
 
 async function salvarRadio(evento) {
   evento.preventDefault();
-  const r = estado.radioEditando;
+  const r = estado.radioEditando, pedido = estado.pedidoAtendendo, form = $('formRadio');
+  const erros = errosRadio();
+  if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoRadio', erros[0][1], true); }
+  limparErros(form);
   const dados = { nome: $('radNome').value, email: $('radEmail').value || null, whatsapp: $('radWhats').value || null,
     valor_padrao: $('radValor').value || null, cobranca: $('radCobranca').value, ativa: $('radAtiva').checked,
-    alcance: { municipios: selecionados($('radMunicipios')), comunidades: estado.alcanceComunidades } };
-  try {
-    const j = await api(r ? `/api/radios/${r.id}` : '/api/radios', { method: r ? 'PATCH' : 'POST', json: dados });
-    limparFormRadio();
-    await irPara('radios');
-    mensagemEm('estadoRadio', `${j.radio.nome} ${r ? 'alterada' : 'cadastrada'} (registrado na auditoria).`);
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoRadio', e.message, true);
-  }
+    alcance: { municipios: selecionados($('radMunicipios')), comunidades: estado.alcanceComunidades },
+    ...(pedido && !r ? { pedido_id: pedido.id } : {}) };
+  await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
+    try {
+      const j = await api(r ? `/api/radios/${r.id}` : '/api/radios', { method: r ? 'PATCH' : 'POST', json: dados });
+      limparFormRadio();
+      await irPara('radios');
+      mensagemEm('estadoRadio', j.nada_mudou ? `${j.radio.nome}: nada mudou.` : `${j.radio.nome} ${r ? 'alterada' : 'cadastrada'}`
+        + `${pedido && !r ? ` (pedido de ${pedido.por} atendido)` : ''} (registrado na auditoria).`);
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoRadio', e.message, true);
+      erroDoServidor(form, e, CAMPOS_RADIO);
+    }
+  });
 }
+
+// os dados de uma rádio da lista, como o servidor recebe (para desativar e reativar sem mudar o resto)
+const dadosDaRadio = (x, ativa) => ({ nome: x.nome, email: x.email, whatsapp: x.whatsapp, valor_padrao: x.valor_padrao, cobranca: x.cobranca,
+  ativa, alcance: x.alcance });
 
 async function editarRadio(evento) {
   const b = evento.target.closest('button[data-radio-acao]');
   if (!b) return;
   const r = estado.radiosAdmin.find(x => String(x.id) === b.closest('[data-radio]').dataset.radio);
+  if (b.dataset.radioAcao !== 'editar') {
+    const ativa = b.dataset.radioAcao === 'reativar';
+    if (!ativa && !confirm(`Desativar ${r.nome}? Ela some da lista do envio até ser reativada.`)) return;
+    return ocupado(b, 'Salvando…', async () => {
+      try {
+        await api(`/api/radios/${r.id}`, { method: 'PATCH', json: dadosDaRadio(r, ativa) });
+        await irPara('radios');
+        mensagemEm('estadoRadio', `${r.nome} ${ativa ? 'reativada' : 'desativada'} (registrado na auditoria).`);
+      } catch (e) {
+        if (e.status !== 401) mensagemEm('estadoRadio', e.message, true);
+      }
+    });
+  }
+  estado.pedidoAtendendo = null;
+  limparErros($('formRadio'));
   estado.radioEditando = r;
   estado.alcanceComunidades = r.alcance.comunidades.map(c => ({ ...c }));
   $('radNome').value = r.nome; $('radEmail').value = r.email || ''; $('radWhats').value = r.whatsapp || '';
@@ -2119,6 +2400,40 @@ async function editarRadio(evento) {
   for (const o of $('radMunicipios').options) o.selected = r.alcance.municipios.includes(o.value);
   desenharRadios();
   $('formRadio').scrollIntoView({ block: 'start' });
+}
+
+// pedido de rádio: atender abre o cadastro preenchido (o envio do cadastro fecha o pedido); recusar pede o motivo
+async function acaoPedido(evento) {
+  const b = evento.target.closest('button[data-pedido-acao]');
+  if (!b) return;
+  const item = b.closest('[data-pedido]'), p = estado.pedidos.find(x => String(x.id) === item.dataset.pedido);
+  if (b.dataset.pedidoAcao === 'atender') {
+    limparFormRadio();
+    estado.pedidoAtendendo = p;
+    $('radNome').value = p.nome;
+    if (p.contato.includes('@')) $('radEmail').value = p.contato; else $('radWhats').value = p.contato;
+    desenharRadios();
+    mensagemEm('estadoRadio', `Confira o cadastro da ${p.nome}, escolha o que ela alcança e clique em "Cadastrar rádio".`);
+    $('formRadio').scrollIntoView({ block: 'start' });
+    return $('radNome').focus();
+  }
+  const motivo = $(`pedido-motivo-${p.id}`);
+  if (motivo.value.trim().length < 3) {
+    mostrarErros(item, [[motivo.id, 'Escreva o motivo da recusa (de 3 a 300 caracteres).']]);
+    return mensagemEm('estadoRadio', 'Escreva o motivo da recusa.', true);
+  }
+  limparErros(item);
+  await ocupado(b, 'Salvando…', async () => {
+    try {
+      await api(`/api/radios/pedidos/${p.id}/recusar`, { method: 'POST', json: { motivo: motivo.value } });
+      await irPara('radios');
+      mensagemEm('estadoRadio', `Pedido da ${p.nome} recusado (o Operador vê o motivo; registrado na auditoria).`);
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoRadio', e.message, true);
+      erroDoServidor(item, e, { motivo: motivo.id });
+    }
+  });
 }
 
 async function escolherMunicipioRadio() {
@@ -2139,19 +2454,45 @@ function marcarComunidade(evento) {
 }
 
 // ---- Configurações da empresa ----
+const CAMPOS_CONFIG = { modelo_mensagem: 'cfgModelo', nome_mensagem: 'cfgNome', telefone: 'cfgTelefone', limite_rejeicao: 'cfgLimite',
+  epsg_utm: 'cfgFuso', antecedencia_dias: 'cfgAntecedencia', orcamento_radio: 'cfgOrcamento', alerta_preco: 'cfgAlertaPreco',
+  repeticao_n: 'cfgRepN', repeticao_dias: 'cfgRepDias' };
+// [id, mínimo, máximo, inteiro, texto]: as faixas que o servidor aceita (api/radio.Configuracao)
+const FAIXAS_CONFIG = [['cfgLimite', 0, 50, false, 'Limite de rejeição: de 0 a 50%.'], ['cfgAntecedencia', 1, 90, true, 'Antecedência: de 1 a 90 dias.'],
+  ['cfgAlertaPreco', 0, 500, false, 'Alerta de preço: de 0 a 500%.'], ['cfgRepN', 2, 50, true, 'Repetição: de 2 a 50 desligamentos.'],
+  ['cfgRepDias', 7, 365, true, 'Repetição: de 7 a 365 dias.']];
+
+function errosConfig() {
+  const num = id => $(id).value.trim() === '' ? NaN : Number($(id).value);
+  const erros = FAIXAS_CONFIG.filter(([id, min, max, inteiro]) => { const n = num(id); return !(n >= min && n <= max) || (inteiro && !Number.isInteger(n)); })
+    .map(([id, , , , texto]) => [id, texto]);
+  const orc = $('cfgOrcamento').value.trim();
+  if (orc && !(Number(orc) >= 0)) erros.push(['cfgOrcamento', 'Orçamento: um valor em R$ (ou vazio, sem orçamento).']);
+  if (!$('cfgModelo').value.trim()) erros.unshift(['cfgModelo', 'Escreva o modelo da mensagem.']);
+  if (!nomeValido($('cfgNome').value)) erros.unshift(['cfgNome', 'Nome da empresa na mensagem: de 2 a 120 caracteres.']);
+  return erros;
+}
+
 async function salvarConfig(evento) {
   evento.preventDefault();
-  try {
-    estado.configuracao = await api('/api/empresa/configuracao', { method: 'PUT', json: { modelo_mensagem: $('cfgModelo').value, nome_mensagem: $('cfgNome').value,
-      telefone: $('cfgTelefone').value, limite_rejeicao: Number($('cfgLimite').value) / 100, epsg_utm: Number($('cfgFuso').value),
-      antecedencia_dias: Number($('cfgAntecedencia').value),
-      orcamento_radio: $('cfgOrcamento').value.trim() === '' ? null : Number($('cfgOrcamento').value),
-      alerta_preco: Number($('cfgAlertaPreco').value) / 100, repeticao_n: Number($('cfgRepN').value), repeticao_dias: Number($('cfgRepDias').value) } });
-    desenharConfig();
-    mensagemEm('estadoConfig', 'Configurações salvas (registrado na auditoria). Valem para os próximos avisos.');
-  } catch (e) {
-    if (e.status !== 401) mensagemEm('estadoConfig', e.message, true);
-  }
+  const form = $('formConfig'), erros = errosConfig();
+  if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoConfig', erros[0][1], true); }
+  limparErros(form);
+  await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
+    try {
+      estado.configuracao = await api('/api/empresa/configuracao', { method: 'PUT', json: { modelo_mensagem: $('cfgModelo').value, nome_mensagem: $('cfgNome').value,
+        telefone: $('cfgTelefone').value, limite_rejeicao: Number($('cfgLimite').value) / 100, epsg_utm: Number($('cfgFuso').value),
+        antecedencia_dias: Number($('cfgAntecedencia').value),
+        orcamento_radio: $('cfgOrcamento').value.trim() === '' ? null : Number($('cfgOrcamento').value),
+        alerta_preco: Number($('cfgAlertaPreco').value) / 100, repeticao_n: Number($('cfgRepN').value), repeticao_dias: Number($('cfgRepDias').value) } });
+      desenharConfig();
+      mensagemEm('estadoConfig', 'Configurações salvas (registrado na auditoria). Valem para os próximos avisos.');
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoConfig', e.message, true);
+      erroDoServidor(form, e, CAMPOS_CONFIG);
+    }
+  });
 }
 
 // ---- Tema, ajuda e dicas ----
@@ -2241,6 +2582,15 @@ async function abrir() {
   $('formRadio').addEventListener('submit', salvarRadio);
   $('radCancelar').addEventListener('click', () => { limparFormRadio(); desenharRadios(); });
   $('listaRadios').addEventListener('click', editarRadio);
+  $('listaPedidos').addEventListener('click', acaoPedido);
+  $('empCancelar').addEventListener('click', limparFormEmpresa);
+  // erro no campo: some quando a pessoa corrige; o link do resumo leva ao campo
+  document.addEventListener('input', e => { if (e.target.getAttribute?.('aria-invalid') === 'true') limparErroCampo(e.target); });
+  document.addEventListener('change', e => { if (e.target.getAttribute?.('aria-invalid') === 'true') limparErroCampo(e.target); });
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[data-campo-erro]');
+    if (a) { e.preventDefault(); $(a.dataset.campoErro)?.focus(); }
+  });
   $('radMunCom').addEventListener('change', escolherMunicipioRadio);
   $('radComunidades').addEventListener('change', marcarComunidade);
   $('formConfig').addEventListener('submit', salvarConfig);

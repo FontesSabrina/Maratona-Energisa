@@ -13,6 +13,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
+from psycopg import errors
 from psycopg.rows import dict_row
 
 from ..nucleo import auditoria
@@ -86,6 +87,9 @@ DO $$ BEGIN
       ADD CONSTRAINT registro_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES empresa ON DELETE RESTRICT;
   END IF;
 END $$;
+-- Fase J: o pacote da conferência gera um aviso só (clique duplo ou reenvio não grava dois)
+ALTER TABLE aviso ADD COLUMN IF NOT EXISTS pacote_hash text;
+CREATE UNIQUE INDEX IF NOT EXISTS aviso_pacote ON aviso (pacote_hash) WHERE pacote_hash IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS registro_hash ON registro (hash);
 CREATE INDEX IF NOT EXISTS aviso_codigo ON aviso (codigo);
 CREATE INDEX IF NOT EXISTS sessao_usuario ON sessao (usuario_id);
@@ -172,6 +176,21 @@ def criar_empresa(nome: str, sigla: str, dominio: str, cnpj: str | None = None) 
     return _executar("INSERT INTO empresa (nome, sigla, dominio, cnpj) VALUES (%s, %s, %s, %s) RETURNING *", (nome, sigla, dominio, cnpj))
 
 
+def criar_empresa_com_admin(nome: str, sigla: str, dominio: str, cnpj: str | None, admin_email: str, admin_nome: str,
+                            senha_hash: str) -> dict:
+    """A empresa e o primeiro admin na mesma transação: nunca fica empresa sem admin (nada pela metade)."""
+    with conectar() as c, c.cursor(row_factory=dict_row) as cur:
+        cur.execute("INSERT INTO empresa (nome, sigla, dominio, cnpj) VALUES (%s, %s, %s, %s) RETURNING *", (nome, sigla, dominio, cnpj))
+        e = cur.fetchone()
+        cur.execute("INSERT INTO usuario (empresa_id, email, nome, perfil, senha_hash, trocar_senha) VALUES (%s, %s, %s, 'admin_empresa', %s, true)",
+                    (e["id"], admin_email, admin_nome, senha_hash))
+        return e
+
+
+def alterar_empresa(id_: int, nome: str, dominio: str, cnpj: str | None) -> None:
+    _executar("UPDATE empresa SET nome = %s, dominio = %s, cnpj = %s WHERE id = %s", (nome, dominio, cnpj, id_))
+
+
 def empresa_por_cnpj(cnpj: str) -> dict | None:
     return _um("SELECT * FROM empresa WHERE cnpj = %s", (cnpj,))
 
@@ -218,9 +237,9 @@ def criar_usuario(empresa_id: int | None, email: str, nome: str, perfil: str, se
                      (empresa_id, email, nome, perfil, senha_hash, trocar_senha, json.dumps(municipios or [])))
 
 
-def alterar_usuario(id_: int, perfil: str, status: str, municipios: list[str] | None = None) -> None:
-    _executar("UPDATE usuario SET perfil = %s, status = %s, municipios = COALESCE(%s, municipios) WHERE id = %s",
-              (perfil, status, json.dumps(municipios) if municipios is not None else None, id_))
+def alterar_usuario(id_: int, perfil: str, status: str, municipios: list[str] | None = None, nome: str | None = None) -> None:
+    _executar("UPDATE usuario SET perfil = %s, status = %s, municipios = COALESCE(%s, municipios), nome = COALESCE(%s, nome) WHERE id = %s",
+              (perfil, status, json.dumps(municipios) if municipios is not None else None, nome, id_))
     if status == "bloqueado":
         encerrar_sessoes(id_)
 
@@ -312,17 +331,30 @@ def linha_por_hash(prefixo: str) -> dict | None:
 
 
 # ---------- Histórico de avisos (só o agregado) ----------
+class AvisoRepetido(Exception):
+    """O pacote da conferência já gerou um aviso (args[0]: o número dele)."""
+
+
+def aviso_do_pacote(empresa_id: int, pacote_hash: str) -> int | None:
+    r = _um("SELECT id FROM aviso WHERE empresa_id = %s AND pacote_hash = %s", (empresa_id, pacote_hash))
+    return r["id"] if r else None
+
+
 def gravar_aviso(empresa_id: int, usuario_id: int, data: str, horario: str, idioma: str, resumo: dict, municipios: list,
-                 tipo: str, motivo: str, detalhe_registro) -> dict:
+                 tipo: str, motivo: str, detalhe_registro, pacote_hash: str | None = None) -> dict:
     """Grava o aviso e a linha "gerou aviso" na auditoria na mesma transação; o código de verificação do
-    aviso sai do hash dessa linha. detalhe_registro(id) monta o detalhe com o número do aviso."""
+    aviso sai do hash dessa linha. detalhe_registro(id) monta o detalhe com o número do aviso.
+    O mesmo pacote da conferência não grava dois avisos (índice único): AvisoRepetido."""
     with conectar() as c, c.cursor(row_factory=dict_row) as cur:
         cur.execute("SELECT nome, perfil FROM usuario WHERE id = %s", (usuario_id,))
         quem = cur.fetchone()
-        cur.execute("INSERT INTO aviso (empresa_id, usuario_id, data, horario, idioma, resumo, municipios, tipo, motivo, solicitante,"
-                    " solicitante_perfil) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, criado_em",
-                    (empresa_id, usuario_id, data, horario, idioma, json.dumps(resumo, ensure_ascii=False),
-                     json.dumps(municipios, ensure_ascii=False), tipo, motivo, quem["nome"], quem["perfil"]))
+        try:
+            cur.execute("INSERT INTO aviso (empresa_id, usuario_id, data, horario, idioma, resumo, municipios, tipo, motivo, solicitante,"
+                        " solicitante_perfil, pacote_hash) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, criado_em",
+                        (empresa_id, usuario_id, data, horario, idioma, json.dumps(resumo, ensure_ascii=False),
+                         json.dumps(municipios, ensure_ascii=False), tipo, motivo, quem["nome"], quem["perfil"], pacote_hash))
+        except errors.UniqueViolation:
+            raise AvisoRepetido(aviso_do_pacote(empresa_id, pacote_hash)) from None
         a = cur.fetchone()
         linha = _registrar(c, "gerou aviso", detalhe_registro(a["id"]), usuario_id, empresa_id)
         codigo = auditoria.codigo_verificacao(linha["hash"])

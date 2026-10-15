@@ -52,8 +52,10 @@ MATRIZ = {
     ("GET", "/api/registro"): {FAROL, ADM}, ("GET", "/api/auditoria/verificar"): {FAROL, ADM},
     # configuração da empresa (modelo da mensagem etc.): Admin da empresa
     ("GET", "/api/empresa/configuracao"): {ADM}, ("PUT", "/api/empresa/configuracao"): {ADM},
-    # rádios: quem gera aviso lista e acrescenta ("+ Nova rádio"); só o Admin da empresa altera
-    ("GET", "/api/radios"): GERA, ("POST", "/api/radios"): GERA, ("PATCH", "/api/radios/{id_}"): {ADM},
+    # rádios (Fase J): quem gera aviso lista (para o envio); só o Admin da empresa cadastra, altera e atende ou recusa pedidos;
+    # o Operador pede o cadastro de uma rádio que falta e vê os pedidos que fez
+    ("GET", "/api/radios"): GERA, ("POST", "/api/radios"): {ADM}, ("PATCH", "/api/radios/{id_}"): {ADM},
+    ("POST", "/api/radios/pedidos"): {OP}, ("GET", "/api/radios/pedidos"): GERA, ("POST", "/api/radios/pedidos/{id_}/recusar"): {ADM},
     ("GET", "/api/historico/{id_}/radios"): GERA, ("POST", "/api/historico/{id_}/envios"): GERA,
     # envios e os arquivos enviados (comprovantes): os três perfis da empresa
     ("GET", "/api/historico/{id_}/envios"): EMPRESA, ("GET", "/api/envios/{id_}/arquivos/{tipo}"): EMPRESA,

@@ -305,18 +305,21 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('PDF do roteiro gerado no servidor e baixado', bytesPdf.subarray(0, 5).toString() === '%PDF-' && /^farol-aviso-leopoldina-20-11\.pdf$/.test(nomePdf),
     `${nomePdf} ${bytesPdf.length} bytes`);
 
-  // envio para a rádio: sem rádio cadastrada, o alerta; "+ Nova rádio"; valor e economia; WhatsApp e cópia (e-mail desligado aqui)
+  // envio para a rádio: sem rádio cadastrada, o alerta e o pedido ao Admin (o Operador não cadastra rádio, Fase J);
+  // o Admin cadastra; valor e economia; WhatsApp e cópia (e-mail desligado aqui)
   const semRadio = await p.avaliar(`document.querySelector('#envio-${cod} .alerta-amarelo')?.textContent || ''`);
-  conferir('envio: sem rádio cadastrada, o alerta lista as comunidades', /^Sem rádio cadastrada para: .+\(.+\)/.test(semRadio), semRadio.slice(0, 120));
-  await p.avaliar(`(() => { const s = document.querySelector('#envio-${cod} select[data-envio=radioId]'); s.value = 'nova'; s.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
-  await p.avaliar(`(() => { const f = (n, v) => { const i = document.querySelector('#envio-${cod} [data-nova=' + n + ']'); i.value = v; i.dispatchEvent(new Event(i.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
-    f('nome', 'Rádio Leopoldina FM (demonstração)'); f('email', 'leopoldina.fm@example.com'); f('whatsapp', '(32) 99999-0001'); f('valor', '150,00'); f('cobranca', 'minuto');
-    document.querySelector('#envio-${cod} [data-envio-acao=salvar-radio]').click(); return 0; })()`);
-  await ate(p, `/cadastrada/.test($('estado').textContent) && document.querySelector('#envio-${cod} [data-envio=valor]')`);
+  conferir('envio: sem rádio cadastrada, o alerta lista as comunidades', /Sem rádio cadastrada para: .+\(.+\)/.test(semRadio), semRadio.slice(0, 120));
+  conferir('envio (Operador): sem rádio, nada de "+ Nova rádio"; pede o cadastro ao Admin', await p.avaliar(`!document.querySelector('#envio-${cod} select[data-envio=radioId]')
+    && /peça o cadastro ao Admin/.test($('envio-${cod}').textContent) && !!document.querySelector('#envio-${cod} [data-envio-acao=pedir]')`));
+  await fetch(`${BASE}/api/radios`, { method: 'POST', headers: { cookie, origin: BASE, 'Content-Type': 'application/json' }, body: JSON.stringify({
+    nome: 'Rádio Leopoldina FM (demonstração)', email: 'leopoldina.fm@example.com', whatsapp: '(32) 99999-0001', valor_padrao: '150,00', cobranca: 'minuto',
+    alcance: { municipios: [cod] } }) });
+  await p.avaliar(`carregarEnvios()`);
+  await ate(p, `document.querySelector('#envio-${cod} [data-envio=valor]')`);
   conferir('envio: sem SMTP neste servidor, sem o botão de e-mail e com o aviso', await p.avaliar(`!document.querySelector('#envio-${cod} [data-envio-acao=email]')
     && /desligado neste servidor/.test($('envio-${cod}').textContent)`));
   const previa = await p.avaliar(`$('previa-${cod}').textContent`);
-  conferir('"+ Nova rádio": cadastrada, sugerida com o valor padrão; prévia com a economia calculada pelo tempo no ar',
+  conferir('rádio cadastrada pelo Admin: sugerida com o valor padrão; prévia com a economia calculada pelo tempo no ar',
     await p.avaliar(`document.querySelector('#envio-${cod} [data-envio=valor]').value === '150,00' && !document.querySelector('#envio-${cod} .alerta-amarelo')`)
     && /^custo R\$\s?[\d.,]+ · economia calculada R\$\s?[\d.,]+ · .+ a menos no ar$/.test(previa), previa);
   await p.avaliar(`(() => { const i = document.querySelector('#envio-${cod} [data-envio=cobranca]'); i.value = 'fechado'; i.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
@@ -590,7 +593,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.avaliar(`($('caixaFechar').click(), 0)`);
   await ate(p, `$('listaEmpresas').textContent.includes('12.ABC.345/01DE-35')`);
   await p.avaliar(`(window.confirm = () => true, [...document.querySelectorAll('#listaEmpresas [data-empresa]')].find(t => t.textContent.includes('CTT'))
-    .querySelector('[data-empresa-acao]').click(), 0)`);
+    .querySelector('[data-empresa-acao=suspensa]').click(), 0)`);
   await ate(p, `/suspensa/.test($('estadoEmpresa').textContent)`);
   conferir('Empresas: cadastra com CNPJ alfanumérico e suspende (situação na lista)', await p.avaliar(`[...document.querySelectorAll('#listaEmpresas [data-empresa]')]
     .find(t => t.textContent.includes('CTT'))?.textContent.includes('Suspensa')`), await p.avaliar(`$('estadoEmpresa').textContent + ' | ' + $('listaEmpresas').textContent.slice(0, 300)`));
