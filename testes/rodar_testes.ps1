@@ -26,6 +26,7 @@ $testes = @(
     @{ Nome = "Acesso (login, perfis)";        Cmd = "uv run python -W ignore testes/api/teste_acesso.py" },
     @{ Nome = "Banco já existente (4 perfis)"; Cmd = "uv run python -W ignore testes/api/teste_migracao.py" },
     @{ Nome = "Área de atuação (empresas)";    Cmd = "uv run python -W ignore testes/api/teste_area_atuacao.py" },
+    @{ Nome = "Sem True/False nas saídas";      Cmd = "uv run python -W ignore testes/api/teste_sem_booleanos.py" },
     @{ Nome = "Matriz rota x perfil";          Cmd = "uv run python -W ignore testes/api/teste_matriz.py" },
     @{ Nome = "Auditoria encadeada";           Cmd = "uv run python -W ignore testes/api/teste_auditoria.py" },
     @{ Nome = "Rádio, envio e cofre (Mailpit)"; Cmd = "uv run python -W ignore testes/api/teste_radio.py" },
@@ -44,6 +45,7 @@ if (-not $Rapido) {
     $testes += @{ Nome = "Telas nos 3 idiomas (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_idiomas_tela.mjs" }
     $testes += @{ Nome = "Qualquer tela (navegador)";       Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_telas.mjs" }
     $testes += @{ Nome = "Mapa das empresas (navegador)";   Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_mapa_empresas.mjs" }
+    $testes += @{ Nome = "Tabelas do painel (navegador)";   Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_tabelas.mjs" }
     $testes += @{ Nome = "Verificação geral (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_verificacao.mjs --email" }
     if (-not $SemAlgoritmo) {
         $testes += @{ Nome = "Algoritmo (--so-algoritmo)"; Cmd = "uv run comunidades --so-algoritmo" }

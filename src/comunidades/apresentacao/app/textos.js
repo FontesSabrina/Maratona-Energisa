@@ -5,6 +5,10 @@
 // O teste testes/navegador/teste_idiomas.mjs confere que todo texto usado na tela tem as duas traduções.
 const TEXTOS = {
   en: {
+    'Ampliar painel': 'Widen panel',
+    'Reduzir painel': 'Narrow panel',
+    'Ver as últimas ações (sem filtro)': 'See the latest actions (no filter)',
+    'Últimas ações (sem filtro)': 'Latest actions (no filter)',
     // ---- Mapa das empresas e área de atuação ----
     'Ficha de {nome} (e a área no mapa)': '{nome} profile (and its area on the map)',
     'Área de atuação não cadastrada': 'Service area not registered',
@@ -387,6 +391,10 @@ const TEXTOS = {
     'Rede fictícia sobre as vias do © OpenStreetMap': 'Fictitious grid over © OpenStreetMap roads', 'Concessão e comunidades: IBGE · Leaflet': 'Concession and communities: IBGE · Leaflet',
   },
   es: {
+    'Ampliar painel': 'Ampliar panel',
+    'Reduzir painel': 'Reducir panel',
+    'Ver as últimas ações (sem filtro)': 'Ver las últimas acciones (sin filtro)',
+    'Últimas ações (sem filtro)': 'Últimas acciones (sin filtro)',
     // ---- Mapa das empresas e área de atuação ----
     'Ficha de {nome} (e a área no mapa)': 'Ficha de {nome} (y el área en el mapa)',
     'Área de atuação não cadastrada': 'Área de actuación no registrada',

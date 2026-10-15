@@ -270,6 +270,9 @@ EXATOS: dict[str, tuple[str, str]] = {
 
 # padrões: (expressão em português, inglês, espanhol); {1}, {2}... são os grupos; {mes1} é o grupo 1 como mês por extenso
 PADROES: list[tuple[str, str, str]] = [
+    (r'Nenhum acesso no período\. Há (\d+) ação\(ões\) de outro tipo; desmarque "Só acessos" para vê-las\.',
+     'No sign-ins in the period. There are {1} action(s) of another type; uncheck "Sign-ins only" to see them.',
+     'Ningún acceso en el período. Hay {1} acción(es) de otro tipo; desmarque "Solo accesos" para verlas.'),
     (r"Arquivo grande demais \(máximo (\d+) MB\)\.", "File too large (maximum {1} MB).", "Archivo demasiado grande (máximo {1} MB)."),
     (r"No máximo (\d+) municípios\.", "At most {1} municipalities.", "Como máximo {1} municipios."),
     (r"(\d+) código\(s\) que não são municípios do IBGE\.", "{1} code(s) that are not IBGE municipalities.", "{1} código(s) que no son municipios del IBGE."),

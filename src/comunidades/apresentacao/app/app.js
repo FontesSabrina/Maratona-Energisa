@@ -41,6 +41,7 @@ const estado = {
   empresasOcultas: new Set(), legendaEmpresasAberta: true, fichaEmpresa: null,
   area: null,              // editor da área de atuação: { empresaId, sigla, codigos: Set, uf, busca, resumo }
   municipiosIbge: null, ufGeo: null,
+  painelAmplo: false,      // "Ampliar painel": o painel com ~60% da tela (preferência do usuário)
   menuAberto: false,       // celular e tablet: o menu das seções aberto pelo botão "Menu"
   verUcs: true,            // camada dos pontos das UCs (só logo depois do envio; o histórico não tem pontos)
   verRede: true,           // rede elétrica FICTÍCIA (demonstração), de perto; o botão esconde
@@ -1430,12 +1431,13 @@ function desenharPreviaConfig() {
 }
 
 function desenharRegistro() {
-  const linhas = estado.registro.map(r => no('tr', {}, no('th', { scope: 'row', texto: dataHora(r.quando) }),
-    no('td', { texto: r.usuario ? `${r.usuario}${r.perfil ? ` (${t(r.perfil)})` : ''}` : '—' }),
-    no('td', { texto: r.empresa || '—' }), no('td', { texto: r.acao }), no('td', { texto: r.detalhe }),
+  const linhas = estado.registro.map(r => no('tr', {}, no('th', { scope: 'row' }, quandoCurto(r.quando)),
+    no('td', {}, r.usuario ? quem(r.usuario, r.perfil && t(r.perfil)) : '—'),
+    no('td', { classe: 'curto', texto: r.empresa || '—' }), no('td', { texto: r.acao }), no('td', { classe: 'detalhe', texto: r.detalhe }),
     no('td', { classe: 'codigo', texto: r.codigo || '' })));
-  $('listaRegistro').replaceChildren(no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Auditoria') }, no('table', { classe: 'tabela' },
-    no('caption', { classe: 'visualmente-oculto', texto: t('Auditoria') }),
+  $('listaRegistro').replaceChildren(no('h2', { classe: 'subtitulo', texto: t('Últimas ações (sem filtro)') }),
+    no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Últimas ações (sem filtro)') }, no('table', { classe: 'tabela' },
+    no('caption', { classe: 'visualmente-oculto', texto: t('Últimas ações (sem filtro)') }),
     no('thead', {}, no('tr', {}, ['Quando', 'Quem', 'Empresa', 'O quê', 'Detalhe', 'Código'].map(c => no('th', { scope: 'col', texto: t(c) })))),
     no('tbody', {}, linhas))));
 }
@@ -2013,6 +2015,8 @@ async function abrirApp() {
 
 async function aposEntrar(usuario) {
   estado.usuario = usuario;
+  estado.painelAmplo = !!usuario.preferencias?.acessibilidade?.painel;
+  desenharPainelAmplo();
   // o idioma guardado no perfil vale; sem ele, o escolhido na tela de entrar passa a ser o do perfil
   const preferido = usuario.preferencias?.idioma;
   if (preferido && preferido !== IDIOMA) await trocarIdioma(preferido, false);
@@ -2135,7 +2139,7 @@ async function irPara(vista) {
       if (!estado.mapaEmpresas) await carregarMapaEmpresas();
       estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas(); desenharFichaEmpresa(); desenharEditorArea();
     }
-    if (vista === 'registro') { estado.registro = (await api('/api/registro')).registro; desenharRegistro(); }
+    if (vista === 'registro') { estado.registro = (await api('/api/registro')).registro; desenharRegistro(); $('listaRegistro').hidden = !!$('docAuditoria').children.length; }
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   }
@@ -2145,6 +2149,28 @@ async function irPara(vista) {
 
 // ---- Funil do novo aviso ----
 // tabelas em cartões no celular: cada célula leva o nome da coluna (data-rotulo), que o CSS mostra ao lado do valor
+// data curta na célula ("15/10 14:59"), com a completa no title e para o leitor de tela, no idioma da tela
+function quandoCurto(quando) {
+  const d = quando instanceof Date ? quando : new Date(quando);
+  if (Number.isNaN(d.getTime())) return document.createTextNode(String(quando));
+  const curta = d.toLocaleString(IDIOMA, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  const longa = d.toLocaleString(IDIOMA, { dateStyle: 'long', timeStyle: 'short' });
+  return no('time', { datetime: d.toISOString(), title: longa, 'aria-label': longa, texto: curta });
+}
+// quem fez: o nome em cima e o perfil embaixo, menor
+const quem = (nome, perfil) => no('span', { classe: 'quem' }, no('span', { texto: nome }), perfil ? no('small', { texto: perfil }) : null);
+const DATA_BR = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})(?::(\d{2}))?$/;
+const CURTO = /^(FRL-[0-9A-F-]+|[A-Z0-9]{2,10}|[-+−↑↓]?\s?(R\$\s?)?[\d.,]+\s?%?( s)?|—|-)$/;
+const DETALHE = new Set(['Detalhe', 'Detail', 'Detalle']);
+function formatarCelula(c, coluna) {
+  if (c.dataset.formatada) return;
+  c.dataset.formatada = '1';
+  const txt = c.textContent.trim(), m = c.children.length ? null : DATA_BR.exec(txt);
+  if (m) c.replaceChildren(quandoCurto(new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0))));
+  else if (!c.children.length && CURTO.test(txt)) c.classList.add('curto');
+  if (DETALHE.has(coluna)) c.classList.add('detalhe');
+}
+
 function rotularTabelas(raiz) {
   for (const tabela of raiz.querySelectorAll?.('table.tabela') || []) {
     const cab = [...tabela.querySelectorAll('thead th')].map(th => th.textContent.trim());
@@ -2157,8 +2183,21 @@ function rotularTabelas(raiz) {
       [...tr.children].forEach((c, i) => {
         c.setAttribute('role', c.tagName === 'TH' ? 'rowheader' : 'cell');
         if (cab[i] && !c.dataset.rotulo) c.dataset.rotulo = cab[i];
+        formatarCelula(c, cab[i]);
       });
   }
+}
+
+function desenharPainelAmplo() {
+  $('telaApp').classList.toggle('amplo', estado.painelAmplo);
+  $('botaoAmpliar').setAttribute('aria-pressed', String(estado.painelAmplo));
+  $('botaoAmpliarTexto').textContent = estado.painelAmplo ? t('Reduzir painel') : t('Ampliar painel');
+  mapa?.invalidateSize();
+}
+function ampliarPainel(amplo = !estado.painelAmplo) {
+  estado.painelAmplo = amplo;
+  desenharPainelAmplo();
+  if (estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { acessibilidade: { painel: amplo } } }).catch(() => {});
 }
 
 function alternarMenu(aberto = !estado.menuAberto) {
@@ -2585,7 +2624,9 @@ async function exportarAuditoria(evento) {
     try {
       if (acao === 'tela') {
         const r = await api(`/api/relatorios/${tipo}?${consulta(f)}`);
-        $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo));
+        $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo),
+          no('button', { type: 'button', id: 'verUltimas', texto: t('Ver as últimas ações (sem filtro)') }));
+        $('listaRegistro').hidden = true;   // o relatório filtrado e a lista sem filtro não aparecem juntos
         mensagemEm('estadoAuditoria', t('{n} linha(s) no período (a consulta fica na auditoria com o seu nome).', { n: fmt(r.total) }));
       } else if (acao === 'enviar') {
         const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: f, destinatarios: destinos } });
@@ -2992,7 +3033,7 @@ async function trocarIdioma(novo, salvar = true) {
   $('idiomaTela').value = novo;
   try { sessionStorage.setItem('farol.idioma', novo); } catch (e) { /* sem armazenamento */ }
   aplicarTextos();
-  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado(); desenharBotaoRede();
+  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado(); desenharBotaoRede(); desenharPainelAmplo();
   if (salvar && estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { idioma: novo } }).catch(() => {});
   if (estado.tela !== 'app' || !estado.config) return;
   try { estado.config = await api('/api/config'); } catch (e) { return; }   // os tipos no idioma novo
@@ -3055,6 +3096,7 @@ async function abrir() {
   $('sair').addEventListener('click', sair);
   $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) { estado.menuAberto = false; irPara(b.dataset.vista); } });
   $('botaoMenu').addEventListener('click', () => alternarMenu());
+  $('botaoAmpliar').addEventListener('click', () => ampliarPainel());
   new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) rotularTabelas(n.matches('table') ? n.parentElement : n); })
     .observe(document.body, { childList: true, subtree: true });
   $('arquivo').addEventListener('change', e => escolherPlanilha(e.target.files[0]));
@@ -3068,6 +3110,11 @@ async function abrir() {
   $('relModo').addEventListener('change', desenharFiltrosRelatorio);
   $('listaVias').addEventListener('click', baixarVia);
   $('formAuditoria').addEventListener('click', exportarAuditoria);
+  $('docAuditoria').addEventListener('click', e => {
+    if (e.target.id !== 'verUltimas') return;
+    $('docAuditoria').replaceChildren(); mensagemEm('estadoAuditoria', '');
+    $('listaRegistro').hidden = false; $('listaRegistro').querySelector('h2')?.setAttribute('tabindex', '-1'); $('listaRegistro').querySelector('h2')?.focus();
+  });
   $('solicitado').addEventListener('click', baixarComprovante);
   $('conferencia').addEventListener('change', editarConferencia);
   $('conferencia').addEventListener('input', editarConferencia);
@@ -3144,6 +3191,7 @@ async function abrir() {
     $('dica').hidden = true;
     if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); }
     else if (estado.menuAberto) { alternarMenu(false); $('botaoMenu').focus(); }
+    else if (estado.painelAmplo && estado.tela === 'app' && !e.target.closest?.('input, select, textarea')) { ampliarPainel(false); $('botaoAmpliar').focus(); }
   });
   $('listaUsuarios').addEventListener('click', acaoUsuario);
   $('formEmpresa').addEventListener('submit', cadastrarEmpresa);

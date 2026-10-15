@@ -399,7 +399,7 @@ button.perigo:hover:not(:disabled) { background: color-mix(in srgb, var(--erro) 
 .relatorio { display: grid; gap: 14px; }
 .relatorio:empty { display: none; }
 .rolagem { overflow-x: auto; }
-.rolagem .tabela { min-width: 560px; }
+.rolagem .tabela { min-width: 0; }
 .como { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
 #baixarComprovante { margin-left: auto; }
 
@@ -481,7 +481,9 @@ button.dica:hover { background: radial-gradient(circle at center, var(--acento) 
 .botao-menu { display: none; }
 .menu-atual { font-weight: 400; color: var(--texto2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 img, video, canvas { max-width: 100%; }
-.painel { overflow-wrap: anywhere; }
+/* o painel é um container (as tabelas viram cartões quando ELE é estreito, não a tela); a palavra só quebra se não couber
+   sozinha na linha (anywhere deixava as tabelas encolherem até uma letra por linha) */
+.painel { overflow-wrap: break-word; container: painel / inline-size; position: relative; }   /* o que é escondido (absolute) fica dentro do painel, não estica a página */
 /* tabelas largas: rolam dentro de si com a primeira coluna fixa */
 .rolagem .tabela tr > :first-child { position: sticky; left: 0; z-index: 1; background: var(--sup); }
 .rolagem .tabela thead tr > :first-child { background: var(--sup2); }
@@ -593,3 +595,36 @@ button.link { background: none; border: 0; padding: 0; min-height: 44px; color: 
   .ficha-dados dd { margin-bottom: 6px; }
 }
 @media print { .legenda-empresas, #editorArea { display: none !important; } }
+
+/* ---------- Bloco A: tabelas do painel lateral ---------- */
+/* nada quebra no meio: cabeçalhos, siglas, códigos, números, datas e botões numa linha; só o Detalhe quebra */
+.tabela thead th, .tabela .curto, .tabela td.codigo, .tabela time, .tabela button { white-space: nowrap; }
+/* no Detalhe, um hash (sha256) ou código comprido pode quebrar em qualquer ponto: não é palavra */
+.tabela td.detalhe { white-space: normal; overflow-wrap: anywhere; min-width: 12em; }
+.tabela td, .tabela tbody th { overflow-wrap: normal; word-break: normal; hyphens: manual; }
+.quem { display: grid; line-height: 1.25; }
+.quem small { font-size: 0.75rem; color: var(--texto2); }
+/* painel ampliado (~60% da tela) */
+.botao-ampliar { display: none; }
+@media (min-width: 1024px) {
+  html, body { overflow: hidden; }   /* só o painel rola; o cabeçalho fica parado */
+  .botao-ampliar { display: inline-flex; align-items: center; gap: 6px; justify-self: end; }
+  .layout.amplo { grid-template-columns: minmax(380px, 60%) minmax(0, 1fr); }
+}
+/* painel estreito (até 640 px, o que inclui o painel lateral do computador): cada linha vira um cartão "rótulo: valor",
+   com a tabela mantida para o leitor de tela (role table/row/cell, caption e th scope) */
+@container painel (max-width: 640px) {
+  .rolagem { overflow-x: visible; }
+  .rolagem .tabela, .tabela { min-width: 0; border: 0; background: transparent; border-radius: 0; }
+  .tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabela, .tabela tbody, .tabela tr { display: block; }
+  .tabela tr { margin-bottom: 10px; border: 1px solid var(--linha); border-radius: 12px; background: var(--sup); overflow: hidden; }
+  .tabela tbody th, .tabela td { display: grid; grid-template-columns: minmax(6.5em, 38%) minmax(0, 1fr); gap: 4px 10px; align-items: baseline; }
+  .rolagem .tabela tr > :first-child { position: static; }
+  .tabela tbody th { background: var(--sup2); color: var(--texto); }
+  .tabela [data-rotulo]::before { content: attr(data-rotulo); font-weight: 600; color: var(--texto2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabela td:not([data-rotulo]), .tabela tbody th:not([data-rotulo]) { grid-template-columns: minmax(0, 1fr); }
+  .tabela td.codigo, .tabela .curto { white-space: nowrap; }
+  .tabela td.detalhe { min-width: 0; }
+  .tabela .acoes { flex-wrap: wrap; }
+}

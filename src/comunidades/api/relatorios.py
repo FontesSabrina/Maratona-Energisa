@@ -133,11 +133,16 @@ _NOMES_FILTROS = {
 }
 
 
+SIM_NAO = {"pt-BR": ("não", "sim"), "en": ("no", "yes"), "es": ("no", "sí")}
+
+
 def _filtros_texto(f: dict, idioma: str = "pt-BR") -> str:
     partes = []
     for k, rot in _NOMES_FILTROS.get(idioma, _NOMES_FILTROS["pt-BR"]).items():
         if f.get(k):
             v = traducao.texto(ROTULOS.get(f[k], f[k]), idioma) if k == "tipo" else f[k]
+            if isinstance(v, bool) or str(v).lower() in ("true", "false"):   # nunca "True"/"False" para quem lê
+                v = SIM_NAO[idioma if idioma in SIM_NAO else "pt-BR"][str(v).lower() == "true"]
             partes.append(f"{rot}: {v}")
     return ", ".join(partes) or traducao.texto("sem filtros", idioma)
 
@@ -225,6 +230,12 @@ def construir(u: dict, tipo: str, f: dict, idioma: str = "pt-BR") -> tuple[dict,
             linhas = [x for x in linhas if RH.categoria(x["acao"]) == f["categoria"]]
         v = banco_acesso.verificar_registro()
         doc = RH.auditoria(linhas, v if geral else {"ok": v["ok"], "motivo": None if v["ok"] else "não confere"}, geral, _rotulo(i, fim, modo))
+        if not linhas and f.get("so_acessos"):   # 0 acessos: dizer se há outras ações com os mesmos filtros
+            outras = len(banco.registros(None if geral else emp, i, fim, pessoa=f.get("pessoa"), acoes=None,
+                                         empresa_sigla=f.get("empresa") if geral else None))
+            if outras:
+                doc.setdefault("alertas", []).append(f"Nenhum acesso no período. Há {outras} ação(ões) de outro tipo; "
+                                                     "desmarque \"Só acessos\" para vê-las.")
         extra = {"periodo": {"inicio": i.isoformat(), "fim": fim.isoformat(), "rotulo": _rotulo(i, fim, modo)}, "linhas": linhas,
                  "total": len(linhas), "pessoas": sorted({x["usuario"] for x in linhas if x["usuario"]}),
                  "categorias": list(RH.CATEGORIAS) + ["outros"],

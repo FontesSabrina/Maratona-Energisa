@@ -169,7 +169,7 @@ def trocar_senha(dados: TrocaSenha, request: Request, u: dict = Depends(sessao_a
 
 # ---------- Preferências da tela (Fase K e I6): idioma e acessibilidade, do próprio usuário ----------
 ACESSIBILIDADE = {"texto": (100, 125, 150, 200), "contraste": (False, True), "movimento": (False, True), "dislexia": (False, True),
-                  "espacamento": (False, True), "foco": (False, True), "vibrar": (False, True)}
+                  "espacamento": (False, True), "foco": (False, True), "vibrar": (False, True), "painel": (False, True)}
 
 
 class Preferencias(BaseModel):
