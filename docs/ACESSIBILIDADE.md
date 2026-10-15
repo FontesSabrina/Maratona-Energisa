@@ -18,9 +18,9 @@ teste manual**, que precisa de gente e de leitores de tela de verdade.
   - destacar links e foco;
   - guia de leitura (uma faixa que acompanha o mouse e o foco);
   - modo simples (sem o mapa e as dicas);
-  - ler a tela em voz alta, com a voz do próprio aparelho (nada vai ao servidor);
+  - ler a tela em voz alta, só com voz instalada no aparelho (`SpeechSynthesisVoice.localService === true`). Uma voz on-line mandaria o texto da tela a servidores de fora, por isso nunca é usada. Sem voz local no idioma da tela, o botão fica desligado e o painel diz como instalar uma voz no Windows, no Android e no iPhone ou iPad;
   - "Voltar ao padrão".
-  As escolhas ficam em `usuario.preferencias`, e a auditoria registra só os nomes das opções, nunca motivo nem deficiência. Antes de entrar, valem só na sessão do navegador e passam para o perfil no login.
+  As escolhas ficam só em `usuario.preferencias`, no perfil da própria pessoa. A auditoria registra apenas "alterou as preferências de acessibilidade", **sem dizer quais opções**: a combinação delas pode indicar uma deficiência, que é dado sensível pela LGPD (art. 11). Nenhum relatório nem Admin vê quais opções cada pessoa usa. Antes de entrar, valem só na sessão do navegador e passam para o perfil no login.
 - **"Pular para o conteúdo"**: aparece no primeiro Tab e leva ao título da tela aberta.
 - **Declaração de acessibilidade** (no painel): WCAG 2.2 AA, ABNT NBR 17225:2025, LBI (Lei 13.146/2015) art. 63, o que existe e as limitações conhecidas. Tem o formulário "Relatar um problema de acessibilidade": até 1.000 caracteres, sem dado pessoal, registrado na auditoria com código de verificação. O Admin do Farol vê os relatos na auditoria geral.
 - **Telas:** do celular (320 px) à tela grande, com zoom de 400%. Menu, tabelas em cartões, janelas em tela cheia no celular e alvos de 48 px no toque.

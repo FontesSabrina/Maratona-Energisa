@@ -90,11 +90,33 @@ await p.avaliar(`($('estadoRelato').textContent = '', $('relatoTexto').value = '
 await ate(p, `/FRL-/.test($('estadoRelato').textContent)`);
 conferir('relato enviado com o código da auditoria', await p.avaliar(`/FRL-/.test($('estadoRelato').textContent)`), await p.avaliar(`$('estadoRelato').textContent`));
 await tecla(p, 'Escape', 'Escape', 27);
+// voz: só voz instalada no aparelho; com só voz on-line, o botão fica desligado e o painel diz como instalar
+const local = await p.avaliar(`!!vozLocal()`);
+conferir(`leitura em voz alta: ${local ? 'voz local disponível, botão ligado' : 'sem voz local, botão desligado'}`,
+  await p.avaliar(`$('a11yLer').disabled === !vozLocal()`));
+await p.avaliar(`(speechSynthesis.getVoices = () => [{ localService: false, lang: 'pt-BR', name: 'voz on-line' }], desenharVoz(), 0)`);
+conferir('só voz on-line no aparelho: botão desligado e "Nenhuma voz instalada" com como instalar', await p.avaliar(`$('a11yLer').disabled
+  && /Nenhuma voz instalada neste aparelho/.test($('a11yVoz').textContent) && /Windows/.test($('a11yVoz').textContent) && /Android/.test($('a11yVoz').textContent)`));
+conferir('a Declaração diz que só vozes instaladas no aparelho são usadas', await p.avaliar(`/nunca vozes on-line/.test($('caixaDeclaracao').textContent)`));
 // inglês
 await p.avaliar(`trocarIdioma('en', false).then(() => 0)`);
 conferir('em inglês', await p.avaliar(`$('botaoAcessibilidade').textContent.includes('Accessibility') && $('pular').textContent === 'Skip to content'`));
 conferir('nenhuma exceção nem violação da CSP', !p.excecoes.length && !(await p.avaliar('window.__csp')).length, J(p.excecoes.slice(0, 3)));
 await p.fechar();
+
+// auditoria: só "alterou as preferências de acessibilidade", nunca quais opções (dado sensível); o Admin da empresa vê a auditoria
+{
+  const a = await abrir(`${BASE}/`, { largura: 1280, altura: 800 });
+  await a.avaliar(`($('email').value = 'admin@emg.example', $('senha').value = ${J(SENHAS['admin@emg.example'])}, $('formEntrar').requestSubmit(), 0)`);
+  await ate(a, `estado.tela === 'app' && document.documentElement.dataset.farol === 'pronto'`, 60000);
+  const reg = await a.avaliar(`fetch('/api/registro').then(r => r.json()).then(j => j.registro)`);
+  const pref = reg.filter(r => /prefer/.test(r.acao));
+  const opcoes = /contraste|dislexia|espacamento|movimento|links|guia|simples|texto|painel/;
+  conferir('auditoria: "alterou as preferências de acessibilidade", sem dizer quais opções', pref.some(r => r.acao === 'alterou as preferências de acessibilidade')
+    && pref.every(r => !r.detalhe && !opcoes.test(r.acao)), J(pref.slice(0, 3)));
+  conferir('nenhuma linha da auditoria cita as opções de acessibilidade de alguém', !reg.some(r => /prefer|idioma/.test(r.acao) && (r.detalhe || opcoes.test(r.acao))));
+  await a.fechar();
+}
 
 for (const r of resultados) console.log(r[0], r[1], r[0] !== 'OK  ' && r[2] ? `→ ${r[2]}` : '');
 const falhas = resultados.filter(r => r[0] !== 'OK  ').length;

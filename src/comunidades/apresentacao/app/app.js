@@ -3073,6 +3073,7 @@ function desenharA11y() {
   $('botaoAcessibilidade').setAttribute('aria-expanded', String(estado.painelA11y));
   $('a11yLer').setAttribute('aria-pressed', String(estado.lendo));
   $('a11yLer').textContent = estado.lendo ? t('Parar a leitura') : t('Ler esta tela em voz alta');
+  desenharVoz();
   if (mapa) Object.assign(mapa.options, { zoomAnimation: !menosMovimento(), fadeAnimation: !menosMovimento(), markerZoomAnimation: !menosMovimento() });
   $('caixaDeclaracao').querySelector('.cartao').classList.toggle('simples', !!a.simples);
   mapa?.invalidateSize();
@@ -3092,16 +3093,25 @@ function abrirA11y(aberto = !estado.painelA11y) {
   if (aberto) $('a11yTitulo').focus(); else $('botaoAcessibilidade').focus();
 }
 // ler em voz alta o que está na tela (a vista aberta, ou a tela de entrar): só a voz do aparelho, nada vai ao servidor
+// só voz instalada no aparelho (localService): uma voz on-line mandaria o texto da tela a um servidor de fora
+const vozLocal = () => ('speechSynthesis' in window ? speechSynthesis.getVoices() : [])
+  .find(v => v.localService === true && v.lang.toLowerCase().startsWith(IDIOMA.slice(0, 2).toLowerCase())) || null;
+function desenharVoz() {
+  const tem = !!vozLocal();
+  $('a11yLer').disabled = !tem;
+  $('a11yVoz').textContent = tem ? t('A leitura usa a voz do próprio aparelho: nada é enviado ao Farol.')
+    : t('Nenhuma voz instalada neste aparelho. Windows: Configurações > Hora e idioma > Fala > Adicionar vozes. Android: Configurações > Acessibilidade > Saída de texto em voz (baixe os dados de voz). iPhone e iPad: Ajustes > Acessibilidade > Conteúdo Falado > Vozes.');
+}
 function lerEmVozAlta() {
-  if (!('speechSynthesis' in window)) return mensagemEm('a11yEstado', t('Este navegador não lê em voz alta.'));
   if (estado.lendo) { speechSynthesis.cancel(); estado.lendo = false; return desenharA11y(); }
+  const voz = vozLocal();
+  if (!voz) return desenharVoz();   // nunca uma voz on-line
   const alvo = estado.tela === 'app' ? document.querySelector('.vista:not([hidden])') : document.querySelector('.tela-acesso:not([hidden])');
   const texto = (alvo?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (!texto) return;
   const fala = new SpeechSynthesisUtterance(texto);
-  fala.lang = IDIOMA;
-  const local = speechSynthesis.getVoices().filter(v => v.localService && v.lang.toLowerCase().startsWith(IDIOMA.slice(0, 2).toLowerCase()));
-  if (local.length) fala.voice = local[0];
+  fala.lang = voz.lang;
+  fala.voice = voz;
   fala.onend = fala.onerror = () => { estado.lendo = false; desenharA11y(); };
   estado.lendo = true;
   speechSynthesis.speak(fala);
@@ -3214,6 +3224,7 @@ async function abrir() {
   $('declFechar').addEventListener('click', () => { $('caixaDeclaracao').hidden = true; $('botaoAcessibilidade').focus(); });
   $('formRelato').addEventListener('submit', enviarRelato);
   $('a11yLer').addEventListener('click', lerEmVozAlta);
+  if ('speechSynthesis' in window) speechSynthesis.addEventListener('voiceschanged', desenharVoz);   // as vozes chegam depois
   $('a11yPadrao').addEventListener('click', () => mudarA11y({ ...A11Y_PADRAO }, t('Opções de acessibilidade no padrão')));
   new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) rotularTabelas(n.matches('table') ? n.parentElement : n); })
     .observe(document.body, { childList: true, subtree: true });

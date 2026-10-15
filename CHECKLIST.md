@@ -209,3 +209,8 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - "Pular para o conteúdo" (primeiro Tab, leva ao h1 da tela).
 - Declaração de acessibilidade com o relato. A rota `POST /api/acessibilidade/relato` vale para todos os perfis, está na MATRIZ e vai para a auditoria com código FRL. Ela recusa texto com e-mail, telefone, número longo ou site.
 - Testes: teste_acessibilidade 24/24; axe 0 serious/critical; dicionário 4/4; matriz 5/5; registro total 5/5; acesso 46/46.
+
+### Privacidade da acessibilidade (15/10/2026, pedido da usuária)
+- Ler em voz alta: só vozes com `localService === true` (voz on-line mandaria o texto a servidores de fora); sem voz local no idioma, botão desligado e o como instalar (Windows, Android, iPhone/iPad); na Declaração.
+- Auditoria: só "alterou as preferências de acessibilidade" (e "alterou o idioma da tela"), sem quais opções: a combinação pode indicar deficiência (dado sensível, LGPD art. 11). As opções ficam só no perfil da pessoa; nenhum relatório nem Admin as vê.
+- Testes: teste_acessibilidade 29/29 (voz local x on-line simulada; auditoria sem as opções); registro total 5/5; dicionário 4/4.

@@ -193,9 +193,12 @@ def salvar_preferencias(dados: Preferencias, u: dict = Depends(sessao_atual)) ->
         if ruins:
             raise erro(422, "Opção de acessibilidade inválida.", "acessibilidade")
     prefs = banco.mesclar_preferencias(u["id"], dados.idioma, dados.acessibilidade)
-    # só os nomes das opções (nunca motivo nem deficiência)
-    mudou = (["idioma"] if dados.idioma is not None else []) + sorted(dados.acessibilidade or {})
-    banco.registrar("alterou as preferências da tela", ", ".join(mudou), u["id"], u["empresa_id"])
+    # a auditoria diz só que mudou: quais opções de acessibilidade a pessoa usa pode indicar deficiência (dado sensível,
+    # LGPD art. 11); as opções ficam só no perfil dela, e nenhum relatório nem Admin as vê
+    if dados.acessibilidade is not None:
+        banco.registrar("alterou as preferências de acessibilidade", "", u["id"], u["empresa_id"])
+    if dados.idioma is not None:
+        banco.registrar("alterou o idioma da tela", "", u["id"], u["empresa_id"])
     return {"preferencias": prefs}
 
 
