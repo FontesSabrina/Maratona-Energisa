@@ -12,6 +12,8 @@ from pathlib import Path
 
 from fpdf import FPDF
 
+from .rotulos import idioma_valido, t
+
 MARCA = Path(__file__).resolve().parent / "marca" / "farol.svg"
 NOITE, MARE, AMBAR, CINZA = (14, 22, 32), (28, 42, 55), (245, 184, 61), (90, 102, 112)
 _TROCAS = str.maketrans({"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "...", "•": "-", "→": "->",
@@ -29,20 +31,28 @@ def codigo_texto(texto: str) -> str:
 
 
 class _Roteiro(FPDF):
+    idioma = "pt-BR"
+
     def footer(self):
         self.set_y(-14)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(*CINZA)
-        self.cell(0, 6, _l1(f"Farol - roteiro para a rádio - página {self.page_no()}"), align="C")
+        self.cell(0, 6, _l1(t(self.idioma, "roteiro_rodape", pagina=self.page_no())), align="C")
 
 
 def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, tipo: str, texto: str,
             inteiras: list[str], parciais: list[str], vizinhas: list[str], prazo: str, vital_sim: int, vital_a_confirmar: int,
-            solicitado: str, aviso_id: int | None, aviso_ficticio: str, gerado_por: str, gerado_em: datetime) -> bytes:
+            solicitado: str, aviso_id: int | None, aviso_ficticio: str, gerado_por: str, gerado_em: datetime,
+            idioma: str = "pt-BR") -> bytes:
+    """O roteiro no idioma do aviso (Fase K): rótulos, rodapé e metadados; o texto e os nomes como vieram."""
+    idioma = idioma_valido(idioma)
     pdf = _Roteiro(format="A4", unit="mm")
+    pdf.idioma = idioma
     pdf.set_margins(18, 16, 18)
     pdf.set_auto_page_break(True, 20)
-    pdf.set_title(_l1(f"Roteiro para a rádio - {municipio}/{uf} - {data}"))
+    pdf.set_title(_l1(t(idioma, "roteiro_pdf_titulo", municipio=municipio, uf=uf, data=data)))
+    pdf.set_lang(idioma)
+    pdf.set_subject(_l1(t(idioma, "roteiro_titulo")))
     pdf.set_author("Farol")
     pdf.set_creator("Farol")
     pdf.add_page()
@@ -60,14 +70,14 @@ def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, t
     pdf.set_xy(38, 14)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)
-    pdf.cell(0, 6, _l1("Cada comunidade avisada pelo nome"))
+    pdf.cell(0, 6, _l1(t(idioma, "slogan")))
     pdf.set_y(32)
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 9, _l1("Roteiro para a rádio"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 9, _l1(t(idioma, "roteiro_titulo")), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*CINZA)
-    pdf.multi_cell(0, 5, _l1(f"{municipio}/{uf} - desligamento programado em {data}, das {horario} - {empresa}"
+    pdf.multi_cell(0, 5, _l1(t(idioma, "roteiro_sub", municipio=municipio, uf=uf, data=data, horario=horario, empresa=empresa)
                              + (f" - {tipo}" if tipo else "")), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
@@ -78,7 +88,7 @@ def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, t
         pdf.cell(0, 7, _l1(t), new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(*NOITE)
 
-    titulo("Texto para leitura")
+    titulo(t(idioma, "texto_leitura"))
     pdf.set_fill_color(253, 244, 222)
     pdf.set_draw_color(*AMBAR)
     pdf.set_font("Helvetica", "", 13)
@@ -86,30 +96,29 @@ def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, t
     palavras = len(texto.split())
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*CINZA)
-    pdf.cell(0, 6, _l1(f"{palavras} palavras - cerca de {round(palavras / 2.5)} s no ar"), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, _l1(t(idioma, "palavras", palavras=palavras, segundos=round(palavras / 2.5))), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "", 11)
-    for rotulo, nomes in (("Comunidades inteiras", inteiras), ("Parte da comunidade", parciais),
-                          ("Localidades vizinhas (citadas em conjunto)", vizinhas)):
+    for rotulo, nomes in ((t(idioma, "inteiras"), inteiras), (t(idioma, "parciais"), parciais), (t(idioma, "vizinhas"), vizinhas)):
         if nomes:
             titulo(rotulo)
             pdf.set_font("Helvetica", "", 11)
             pdf.multi_cell(0, 6, _l1(", ".join(nomes)), new_x="LMARGIN", new_y="NEXT")
-    titulo("Prazo")
+    titulo(t(idioma, "prazo"))
     pdf.set_font("Helvetica", "", 11)
-    pdf.multi_cell(0, 6, _l1(f"Antecedência mínima: {prazo}."), new_x="LMARGIN", new_y="NEXT")
-    pdf.multi_cell(0, 6, _l1(f"Unidades com equipamento vital: {vital_sim}"
-                             + (f" ({vital_a_confirmar} a confirmar)" if vital_a_confirmar else "") + " (só a contagem)."),
+    pdf.multi_cell(0, 6, _l1(t(idioma, "antecedencia", prazo=prazo)), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 6, _l1(t(idioma, "vital", sim=vital_sim)
+                             + (t(idioma, "vital_a_confirmar", n=vital_a_confirmar) if vital_a_confirmar else "") + t(idioma, "vital_fim")),
                    new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
     pdf.set_draw_color(220, 227, 223)
     pdf.line(18, pdf.get_y(), 192, pdf.get_y())
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 9)
-    pdf.multi_cell(0, 5, _l1(solicitado + (f" - aviso nº {aviso_id}" if aviso_id else "") + "."), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 5, _l1(solicitado + (t(idioma, "aviso_n", id=aviso_id) if aviso_id else "") + "."), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8.5)
     pdf.set_text_color(*CINZA)
-    pdf.multi_cell(0, 4.5, _l1(f"PDF gerado em {gerado_em.strftime('%d/%m/%Y às %H:%M')} por {gerado_por}. "
-                               f"Código do texto (SHA-256): {codigo_texto(texto)}."), new_x="LMARGIN", new_y="NEXT")
-    pdf.multi_cell(0, 4.5, _l1(aviso_ficticio), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 4.5, _l1(t(idioma, "pdf_gerado", quando=t(idioma, "quando", d=gerado_em), quem=gerado_por,
+                                 codigo=codigo_texto(texto))), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 4.5, _l1(aviso_ficticio if idioma == "pt-BR" else t(idioma, "aviso_ficticio")), new_x="LMARGIN", new_y="NEXT")
     return bytes(pdf.output())

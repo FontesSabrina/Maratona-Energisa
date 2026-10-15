@@ -10,28 +10,34 @@ from datetime import datetime
 from fpdf import FPDF
 from fpdf.fonts import FontFace
 
+from . import traducao
 from .pdf_radio import AMBAR, CINZA, MARCA, MARE, NOITE, _l1
 
 
 class _Relatorio(FPDF):
     rodape = ""
+    idioma = "pt-BR"
 
     def footer(self):
         self.set_y(-14)
         self.set_font("Helvetica", "", 7.5)
         self.set_text_color(*CINZA)
-        self.cell(0, 6, _l1(f"{self.rodape} - página {self.page_no()}"), align="C")
+        self.cell(0, 6, _l1(self.rodape + traducao.pdf(self.idioma, "pagina", n=self.page_no())), align="C")
 
 
 def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes: list[tuple], aviso_ficticio: str,
-              gerado_em: datetime, paisagem: bool = False) -> bytes:
-    """secoes: ("titulo", texto) | ("texto", texto) | ("numeros", [(rotulo, valor), ...]) | ("tabela", cabecalho, linhas[, larguras])."""
+              gerado_em: datetime, paisagem: bool = False, idioma: str = "pt-BR") -> bytes:
+    """secoes: ("titulo", texto) | ("texto", texto) | ("numeros", [(rotulo, valor), ...]) | ("tabela", cabecalho, linhas[, larguras]).
+    idioma: os textos fixos do PDF (Fase K); quem chama traduz os rótulos das seções."""
+    T = lambda chave, **v: traducao.pdf(idioma, chave, **v)
     pdf = _Relatorio(orientation="L" if paisagem else "P", format="A4", unit="mm")
+    pdf.idioma = idioma
     largura = 297 if paisagem else 210
-    pdf.rodape = f"Farol - {titulo} - código {codigo}"
+    pdf.rodape = T("rodape_doc", titulo=titulo, codigo=codigo)
     pdf.set_margins(14, 14, 14)
     pdf.set_auto_page_break(True, 18)
     pdf.set_title(_l1(titulo))
+    pdf.set_lang(idioma)
     pdf.set_author("Farol")
     pdf.add_page()
     pdf.set_fill_color(*NOITE)
@@ -48,7 +54,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.set_xy(33, 13)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)
-    pdf.cell(0, 6, _l1("Cada comunidade avisada pelo nome"))
+    pdf.cell(0, 6, _l1(T("slogan")))
     pdf.set_y(29)
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "B", 16)
@@ -58,7 +64,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.multi_cell(0, 5, _l1(subtitulo), new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_text_color(*MARE)
-    pdf.multi_cell(0, 5, _l1(f"Gerado por {gerado_por} em {gerado_em:%d/%m/%Y às %H:%M} - código de verificação {codigo}"),
+    pdf.multi_cell(0, 5, _l1(T("gerado_simples", quem=gerado_por, d=gerado_em, codigo=codigo)),
                    new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
     cabeca = FontFace(emphasis="BOLD", fill_color=(233, 238, 243))
@@ -85,7 +91,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
             cab, linhas = s[1], s[2]
             if not linhas:
                 pdf.set_font("Helvetica", "I", 9)
-                pdf.multi_cell(0, 5, _l1("Nada neste período."), new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(0, 5, _l1(T("nada")), new_x="LMARGIN", new_y="NEXT")
                 continue
             pdf.set_font("Helvetica", "", 8)
             larguras = s[3] if len(s) > 3 else None
@@ -102,8 +108,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.ln(3)
     pdf.set_font("Helvetica", "", 8)
     pdf.set_text_color(*CINZA)
-    pdf.multi_cell(0, 4.2, _l1("Só números agregados e o que está gravado: nenhum nome de cliente, número de UC, endereço ou "
-                               "coordenada. Confira o código de verificação na auditoria do Farol. " + aviso_ficticio),
+    pdf.multi_cell(0, 4.2, _l1(T("nota") + T("nota_doc") + traducao.aviso_ficticio(idioma, aviso_ficticio)),
                    new_x="LMARGIN", new_y="NEXT")
     return bytes(pdf.output())
 
@@ -111,22 +116,23 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
 # ---------- Fase H: o documento completo (todos os relatórios menos o comprovante) ----------
 class _Completo(FPDF):
     rodape = ""
+    idioma = "pt-BR"
 
     def footer(self):
         self.set_y(-13)
         self.set_font("Helvetica", "", 7.5)
         self.set_text_color(*CINZA)
-        self.cell(0, 6, _l1(f"{self.rodape} · página {self.page_no()} de ") + "{nb}", align="C")
+        self.cell(0, 6, _l1(self.rodape + traducao.pdf(self.idioma, "pagina_de", n=self.page_no())) + "{nb}", align="C")
 
 
-def _grafico(pdf: FPDF, s: dict, largura: float) -> None:
+def _grafico(pdf: FPDF, s: dict, largura: float, idioma: str = "pt-BR") -> None:
     """Barras (âmbar) com os valores; a projeção (quando há) em barras tracejadas sem preenchimento."""
     valores = list(s["valores"])
     proj = s.get("projecao") or [None] * len(valores)
     todos = [v for v in valores + proj if v]
     if not todos:
         pdf.set_font("Helvetica", "I", 9)
-        pdf.multi_cell(0, 5, _l1("Nada neste período."), new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 5, _l1(traducao.pdf(idioma, "nada")), new_x="LMARGIN", new_y="NEXT")
         return
     maximo, altura, n = max(todos), 38, len(valores)
     x0, y0 = pdf.l_margin, pdf.get_y() + 4
@@ -164,18 +170,22 @@ def _grafico(pdf: FPDF, s: dict, largura: float) -> None:
     pdf.set_y(y0 + altura + 6)
     if any(proj):
         pdf.set_font("Helvetica", "I", 7.5)
-        pdf.cell(0, 4, _l1("Barras tracejadas: projeção pela média dos meses fechados."), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 4, _l1(traducao.pdf(idioma, "barras")), new_x="LMARGIN", new_y="NEXT")
 
 
 def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, gerado_em: datetime, aviso_ficticio: str,
-                       paisagem: bool = True) -> bytes:
+                       paisagem: bool = True, idioma: str = "pt-BR") -> bytes:
+    """O documento completo; idioma: o de quem gera (Fase K). O documento já chega traduzido (traducao.documento)."""
+    T = lambda chave, **v: traducao.pdf(idioma, chave, **v)
     pdf = _Completo(orientation="L" if paisagem else "P", format="A4", unit="mm")
+    pdf.idioma = idioma
     largura_pagina = 297 if paisagem else 210
-    pdf.rodape = f"Gerado por {gerado_por} em {gerado_em:%d/%m/%Y} às {gerado_em:%H:%M} · Código {codigo}"
+    pdf.rodape = T("gerado", quem=gerado_por, d=gerado_em, codigo=codigo)
     pdf.alias_nb_pages()
     pdf.set_margins(14, 14, 14)
     pdf.set_auto_page_break(True, 18)
     pdf.set_title(_l1(doc["titulo"]))
+    pdf.set_lang(idioma)
     pdf.set_author("Farol")
     pdf.set_creation_date(gerado_em)
     pdf.add_page()
@@ -193,7 +203,7 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
     pdf.set_xy(33, 13)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)
-    pdf.cell(0, 6, _l1("Cada comunidade avisada pelo nome"))
+    pdf.cell(0, 6, _l1(T("slogan")))
     pdf.set_y(29)
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "B", 16)
@@ -209,12 +219,12 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
         pdf.set_fill_color(253, 236, 234)
         pdf.set_text_color(180, 35, 24)
         pdf.set_font("Helvetica", "B", 9.5)
-        pdf.multi_cell(0, 6, _l1(f"Alerta: {a}"), fill=True, padding=1.5, new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 6, _l1(T("alerta", a=a)), fill=True, padding=1.5, new_x="LMARGIN", new_y="NEXT")
         pdf.set_fill_color(255, 255, 255)
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "B", 11.5)
     pdf.set_text_color(*MARE)
-    pdf.cell(0, 7, "Resumo", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, _l1(T("resumo")), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "", 9.5)
     with pdf.table(col_widths=(3, 2, 2.4), text_align=("LEFT", "RIGHT", "RIGHT"), first_row_as_headings=False, line_height=5.4,
@@ -239,11 +249,11 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
             for it in s["itens"] or ["—"]:
                 pdf.multi_cell(0, 4.8, _l1(f"- {it}"), new_x="LMARGIN", new_y="NEXT")
         elif s["tipo"] == "grafico":
-            _grafico(pdf, s, largura_pagina - 28)
+            _grafico(pdf, s, largura_pagina - 28, idioma)
         elif s["tipo"] == "tabela":
             if not s["linhas"]:
                 pdf.set_font("Helvetica", "I", 9)
-                pdf.multi_cell(0, 5, _l1("Nada neste período."), new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(0, 5, _l1(T("nada")), new_x="LMARGIN", new_y="NEXT")
                 continue
             pdf.set_font("Helvetica", "", 7.5 if len(s["colunas"]) > 8 else 8.2)
             with pdf.table(headings_style=cabeca, line_height=4.4, borders_layout="SINGLE_TOP_LINE", repeat_headings=1) as t:
@@ -257,7 +267,7 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 13)
     pdf.set_text_color(*MARE)
-    pdf.cell(0, 8, "Como calculamos", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, _l1(T("como")), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*NOITE)
     pdf.set_font("Helvetica", "", 9.5)
     for t_ in doc["como_calculamos"]:
@@ -266,7 +276,6 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
     pdf.ln(3)
     pdf.set_font("Helvetica", "", 8)
     pdf.set_text_color(*CINZA)
-    pdf.multi_cell(0, 4.2, _l1("Só números agregados e o que está gravado: nenhum nome de cliente, número de UC, endereço ou coordenada. "
-                               "Confira o código de verificação no Farol (a segunda via fica guardada e tem o mesmo SHA-256). " + aviso_ficticio),
+    pdf.multi_cell(0, 4.2, _l1(T("nota") + T("nota_completo") + traducao.aviso_ficticio(idioma, aviso_ficticio)),
                    new_x="LMARGIN", new_y="NEXT")
     return bytes(pdf.output())

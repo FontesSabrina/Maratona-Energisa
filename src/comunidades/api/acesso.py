@@ -41,7 +41,8 @@ def _publico(u: dict) -> dict:
     """O que a tela pode saber do usuário (nada de hash, tentativas ou bloqueio)."""
     return {"id": u["id"], "nome": u["nome"], "email": u["email"], "perfil": u["perfil"],
             "perfil_nome": regras.PERFIS[u["perfil"]], "empresa_id": u["empresa_id"], "empresa": u.get("empresa_nome"),
-            "empresa_sigla": u.get("empresa_sigla"), "trocar_senha": u["trocar_senha"], "acoes": regras.acoes(u["perfil"])}
+            "empresa_sigla": u.get("empresa_sigla"), "trocar_senha": u["trocar_senha"], "acoes": regras.acoes(u["perfil"]),
+            "preferencias": u.get("preferencias") or {}}
 
 
 # ---------- Dependências: sessão e permissão ----------
@@ -154,16 +155,45 @@ def eu(u: dict = Depends(sessao_atual)) -> dict:
 def trocar_senha(dados: TrocaSenha, request: Request, u: dict = Depends(sessao_atual)) -> dict:
     completo = banco.usuario(u["id"])
     if not _conferir_senha(completo["senha_hash"], dados.atual[:regras.SENHA_MAX]):
-        raise HTTPException(422, "A senha atual não confere.")
+        raise erro(422, "A senha atual não confere.", "atual")
     problema = regras.problema_senha(dados.nova, u["email"])
     if problema:
-        raise HTTPException(422, problema)
+        raise erro(422, problema, "nova")
     if dados.nova == dados.atual:
-        raise HTTPException(422, "A senha nova tem de ser diferente da atual.")
+        raise erro(422, "A senha nova tem de ser diferente da atual.", "nova")
     banco.definir_senha(u["id"], hash_senha(dados.nova), trocar_senha=False)
     banco.encerrar_sessoes(u["id"], exceto_token=request.cookies.get(COOKIE))
     banco.registrar("trocou a senha", "", u["id"], u["empresa_id"])
     return {"usuario": _publico({**u, "trocar_senha": False})}
+
+
+# ---------- Preferências da tela (Fase K e I6): idioma e acessibilidade, do próprio usuário ----------
+ACESSIBILIDADE = {"texto": (100, 125, 150, 200), "contraste": (False, True), "movimento": (False, True), "dislexia": (False, True),
+                  "espacamento": (False, True), "foco": (False, True), "vibrar": (False, True)}
+
+
+class Preferencias(BaseModel):
+    idioma: str | None = Field(None, max_length=10)
+    acessibilidade: dict | None = None
+
+
+@rotas.put("/eu/preferencias")
+def salvar_preferencias(dados: Preferencias, u: dict = Depends(sessao_atual)) -> dict:
+    """O idioma da tela e as opções de acessibilidade do próprio usuário. Só valores da lista fechada: nada sobre
+    deficiência nem motivo. A auditoria registra que mudou, sem o conteúdo."""
+    prefs = dict(u.get("preferencias") or {})
+    if dados.idioma is not None:
+        if dados.idioma not in ("pt-BR", "en", "es"):
+            raise erro(422, "Idioma: pt-BR, en ou es.", "idioma")
+        prefs["idioma"] = dados.idioma
+    if dados.acessibilidade is not None:
+        ruins = [k for k, v in dados.acessibilidade.items() if k not in ACESSIBILIDADE or v not in ACESSIBILIDADE[k]]
+        if ruins:
+            raise erro(422, "Opção de acessibilidade inválida.", "acessibilidade")
+        prefs["acessibilidade"] = {**(prefs.get("acessibilidade") or {}), **dados.acessibilidade}
+    banco.salvar_preferencias(u["id"], prefs)
+    banco.registrar("alterou as preferências da tela", "", u["id"], u["empresa_id"])
+    return {"preferencias": prefs}
 
 
 # ---------- Usuários da empresa (Admin da empresa) ----------

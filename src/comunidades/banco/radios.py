@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS pedido_radio (
     resolvido_por_nome text,
     resolvido_em       timestamptz
 );
+-- Fase K: o modelo da mensagem em inglês e em espanhol e o idioma padrão do aviso da empresa
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS modelo_mensagem_en text, ADD COLUMN IF NOT EXISTS modelo_mensagem_es text,
+    ADD COLUMN IF NOT EXISTS idioma_padrao text CHECK (idioma_padrao IN ('pt-BR', 'en', 'es'));
 CREATE INDEX IF NOT EXISTS pedido_radio_empresa ON pedido_radio (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS relatorio_via_empresa ON relatorio_via (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS radio_empresa ON radio (empresa_id);
@@ -155,7 +158,7 @@ def config(empresa_id: int) -> dict:
 
 def salvar_config(empresa_id: int, usuario_id: int, dados: dict) -> None:
     campos = ("modelo_mensagem", "nome_mensagem", "telefone", "limite_rejeicao", "epsg_utm", "antecedencia_dias", "orcamento_radio",
-              "alerta_preco", "repeticao_n", "repeticao_dias")
+              "alerta_preco", "repeticao_n", "repeticao_dias", "modelo_mensagem_en", "modelo_mensagem_es", "idioma_padrao")
     _um("INSERT INTO empresa_config (empresa_id, atualizado_por, " + ", ".join(campos) + ") VALUES (%s, %s, "
         + ", ".join(["%s"] * len(campos)) + ") ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por,"
         " atualizado_em = now(), " + ", ".join(f"{c} = EXCLUDED.{c}" for c in campos),
@@ -289,7 +292,7 @@ def envio(id_: int, empresa_id: int) -> dict | None:
 def envio_pelo_token(token: str) -> dict | None:
     """O envio do token (só para mostrar a página de confirmação), com a validade e se já foi usado."""
     return _um("SELECT e.id, e.empresa_id, e.radio_nome, e.municipio_nome, e.status, e.token_expira, e.confirmado_em,"
-               " a.data, a.horario FROM envio e JOIN aviso a ON a.id = e.aviso_id WHERE e.token_hash = %s", (hash_token(token),))
+               " a.data, a.horario, a.idioma FROM envio e JOIN aviso a ON a.id = e.aviso_id WHERE e.token_hash = %s", (hash_token(token),))
 
 
 def confirmar(token: str) -> dict | None:

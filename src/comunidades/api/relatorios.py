@@ -19,12 +19,12 @@ from collections import defaultdict, deque
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from .. import cofre, correio
-from ..apresentacao import email_relatorio, pdf_relatorio
+from ..apresentacao import email_relatorio, pdf_relatorio, rotulos, traducao
 from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco_territorio
 from ..banco import radios as banco_radios
@@ -61,8 +61,8 @@ def _hoje() -> date:
     return datetime.now(BRASILIA).date()
 
 
-def _quem(u: dict) -> str:
-    return f"{u['nome']} ({PERFIS[u['perfil']]})"
+def _quem(u: dict, idioma: str = "pt-BR") -> str:
+    return f"{u['nome']} ({rotulos.perfil(idioma, u['perfil'])})"
 
 
 # ---------- filtros e período ----------
@@ -118,15 +118,28 @@ def _rotulo(i: date, fim: date, modo: str) -> str:
     return str(i.year) if modo == "ano" else R.rotulo_periodo(i, fim)
 
 
-def _filtros_texto(f: dict) -> str:
-    nomes = {"municipio": "município", "tipo": "tipo", "radio": "rádio", "pessoa": "pessoa", "nome": "comunidade", "distrito": "distrito",
-             "so_acessos": "só acessos", "empresa": "empresa", "categoria": "tipo de ação"}
+def idioma_tela(request: Request) -> str:
+    """O idioma da tela de quem pede (cabeçalho X-Farol-Idioma): o relatório sai nele (Fase K)."""
+    return traducao.idioma_do_pedido(request.headers.get("x-farol-idioma"))
+
+
+_NOMES_FILTROS = {
+    "pt-BR": {"municipio": "município", "tipo": "tipo", "radio": "rádio", "pessoa": "pessoa", "nome": "comunidade", "distrito": "distrito",
+              "so_acessos": "só acessos", "empresa": "empresa", "categoria": "tipo de ação"},
+    "en": {"municipio": "municipality", "tipo": "type", "radio": "radio station", "pessoa": "person", "nome": "community", "distrito": "district",
+           "so_acessos": "sign-ins only", "empresa": "company", "categoria": "action type"},
+    "es": {"municipio": "municipio", "tipo": "tipo", "radio": "radio", "pessoa": "persona", "nome": "comunidad", "distrito": "distrito",
+           "so_acessos": "solo accesos", "empresa": "empresa", "categoria": "tipo de acción"},
+}
+
+
+def _filtros_texto(f: dict, idioma: str = "pt-BR") -> str:
     partes = []
-    for k, rot in nomes.items():
+    for k, rot in _NOMES_FILTROS.get(idioma, _NOMES_FILTROS["pt-BR"]).items():
         if f.get(k):
-            v = ROTULOS.get(f[k], f[k]) if k == "tipo" else f[k]
+            v = traducao.texto(ROTULOS.get(f[k], f[k]), idioma) if k == "tipo" else f[k]
             partes.append(f"{rot}: {v}")
-    return ", ".join(partes) or "sem filtros"
+    return ", ".join(partes) or traducao.texto("sem filtros", idioma)
 
 
 # ---------- os documentos ----------
@@ -153,8 +166,8 @@ def _comparacoes(emp: int, i: date, fim: date) -> tuple[list, list]:
     return av, banco.envios(emp, [a["id"] for a in av])
 
 
-def construir(u: dict, tipo: str, f: dict) -> tuple[dict, dict, str]:
-    """(documento, campos a mais do JSON, subtítulo)."""
+def construir(u: dict, tipo: str, f: dict, idioma: str = "pt-BR") -> tuple[dict, dict, str]:
+    """(documento, campos a mais do JSON, subtítulo), no idioma de quem pede (as contas não mudam)."""
     emp, hoje, H, D = u["empresa_id"], _hoje(), DIST.prazo_legal_horas, DIST.prazo_vital_dias_uteis
     cfg = config_empresa(emp) if emp else {}
     extra = {}
@@ -232,8 +245,10 @@ def construir(u: dict, tipo: str, f: dict) -> tuple[dict, dict, str]:
         i, fim = hoje - timedelta(days=365), hoje
     else:
         raise HTTPException(404, "Relatório desconhecido.")
-    sub = f"{u.get('empresa_nome') or 'Todas as empresas'} · {_rotulo(i, fim, modo) if tipo != 'comunidade' else 'últimos 12 meses'} · {_filtros_texto(f)}"
-    return doc, extra, sub
+    T = lambda x: traducao.texto(x, idioma)
+    sub = (f"{u.get('empresa_nome') or T('Todas as empresas')} · {T(_rotulo(i, fim, modo)) if tipo != 'comunidade' else T('últimos 12 meses')}"
+           f" · {_filtros_texto(f, idioma)}")
+    return traducao.documento(doc, idioma), extra, sub
 
 
 def _opcoes(avisos: list[dict], envios: list[dict]) -> dict:
@@ -254,11 +269,11 @@ def _registrar(u: dict, acao: str, detalhe: str) -> str:
     return codigo_verificacao(banco_acesso.registrar(acao, detalhe[:500], u["id"], u["empresa_id"])["hash"])
 
 
-def gerar_pdf(u: dict, tipo: str, f: dict) -> tuple[bytes, str, str, dict]:
+def gerar_pdf(u: dict, tipo: str, f: dict, idioma: str = "pt-BR") -> tuple[bytes, str, str, dict]:
     """O PDF do relatório: a linha "gerou" (o código), o PDF com o rodapé e a segunda via cifrada, com o SHA-256 na auditoria."""
-    doc, _, sub = construir(u, tipo, f)
+    doc, _, sub = construir(u, tipo, f, idioma)
     codigo = _registrar(u, f"gerou relatório {tipo} (PDF)", f"{doc['titulo']}; {sub}")
-    pdf = pdf_relatorio.documento_completo(doc, sub, _quem(u), codigo, datetime.now(BRASILIA), AVISO_FICTICIO)
+    pdf = pdf_relatorio.documento_completo(doc, sub, _quem(u, idioma), codigo, datetime.now(BRASILIA), AVISO_FICTICIO, idioma=idioma)
     sha = hashlib.sha256(pdf).hexdigest()
     if not cofre.disponivel():
         raise HTTPException(503, "Sem a chave do cofre (FAROL_CHAVE_ARQUIVOS): a segunda via não seria guardada.")
@@ -273,8 +288,8 @@ def _nome_arquivo(tipo: str, codigo: str, formato: str) -> str:
 
 
 def _rota_json(tipo: str, acao: str):
-    def rota(f: dict = Depends(filtros), u: dict = Depends(exigir(acao))) -> dict:
-        doc, extra, sub = construir(u, tipo, f)
+    def rota(f: dict = Depends(filtros), u: dict = Depends(exigir(acao)), idioma: str = Depends(idioma_tela)) -> dict:
+        doc, extra, sub = construir(u, tipo, f, idioma)
         banco_acesso.registrar(f"gerou relatório {tipo} (tela)", f"{doc['titulo']}; {sub}"[:500], u["id"], u["empresa_id"])
         return {**extra, "documento": doc, "subtitulo": sub,
                 "projecao": None if not doc.get("projecao") else {k: str(v) if isinstance(v, Decimal) else v for k, v in doc["projecao"].items()}}
@@ -283,15 +298,15 @@ def _rota_json(tipo: str, acao: str):
 
 
 def _rota_arquivo(tipo: str, acao: str):
-    def rota(formato: str, f: dict = Depends(filtros), u: dict = Depends(exigir(acao))) -> Response:
+    def rota(formato: str, f: dict = Depends(filtros), u: dict = Depends(exigir(acao)), idioma: str = Depends(idioma_tela)) -> Response:
         if formato == "pdf":
-            pdf, codigo, sha, _ = gerar_pdf(u, tipo, f)
+            pdf, codigo, sha, _ = gerar_pdf(u, tipo, f, idioma)
             return Response(pdf, media_type="application/pdf", headers={
                 "Content-Disposition": f'attachment; filename="{_nome_arquivo(tipo, codigo, "pdf")}"', "X-Codigo": codigo, "X-Sha256": sha})
         if formato == "csv":
-            doc, _, sub = construir(u, tipo, f)
+            doc, _, sub = construir(u, tipo, f, idioma)
             codigo = _registrar(u, f"gerou relatório {tipo} (CSV)", f"{doc['titulo']}; {sub}")
-            return Response("﻿" + RH.csv_documento(doc, sub, _quem(u), codigo), media_type="text/csv; charset=utf-8",
+            return Response("﻿" + RH.csv_documento(doc, sub, _quem(u, idioma), codigo), media_type="text/csv; charset=utf-8",
                             headers={"Content-Disposition": f'attachment; filename="{_nome_arquivo(tipo, codigo, "csv")}"', "X-Codigo": codigo})
         raise HTTPException(404, "Formato: pdf ou csv.")
     rota.__name__ = f"relatorio_{tipo}_arquivo"
@@ -313,7 +328,8 @@ def _limite(usuario_id: int) -> None:
 
 
 def _rota_enviar(tipo: str, acao: str):
-    def rota(dados: PedidoEnvio, u: dict = Depends(exigir(acao)), _e: dict = Depends(exigir("enviar_relatorio"))) -> dict:
+    def rota(dados: PedidoEnvio, u: dict = Depends(exigir(acao)), _e: dict = Depends(exigir("enviar_relatorio")),
+             idioma: str = Depends(idioma_tela)) -> dict:
         emp = banco_acesso.empresa(u["empresa_id"])
         destinos = list(dict.fromkeys(str(d).strip().lower() for d in dados.destinatarios if str(d).strip()))
         if not 1 <= len(destinos) <= MAX_DESTINATARIOS:
@@ -325,10 +341,10 @@ def _rota_enviar(tipo: str, acao: str):
             raise HTTPException(503, "O envio por e-mail está desligado neste servidor.")
         _limite(u["id"])
         f = limpar_filtros(dados.filtros)
-        pdf, codigo, sha, doc = gerar_pdf(u, tipo, f)
+        pdf, codigo, sha, doc = gerar_pdf(u, tipo, f, idioma)
         msg = email_relatorio.mensagem(remetente=correio.remetente(), destinos=destinos, titulo=doc["titulo"], codigo=codigo,
-                                       gerado_por=_quem(u), empresa=emp["nome"], pdf=(_nome_arquivo(tipo, codigo, "pdf"), pdf),
-                                       aviso_ficticio=AVISO_FICTICIO)
+                                       gerado_por=_quem(u, idioma), empresa=emp["nome"], pdf=(_nome_arquivo(tipo, codigo, "pdf"), pdf),
+                                       aviso_ficticio=traducao.aviso_ficticio(idioma, AVISO_FICTICIO), idioma=idioma)
         try:
             correio.enviar(msg)
         except correio.FalhaEnvio as e:
@@ -406,6 +422,7 @@ def _tempo(s) -> str:
 @rotas.get("/api/historico/{id_}/comprovante.pdf")
 def comprovante_pdf(id_: int, u: dict = Depends(exigir("ver_historico"))) -> Response:
     c = _comprovante(id_, u)
+    idioma = (banco_acesso.aviso(id_, u["empresa_id"]) or {}).get("idioma") or "pt-BR"   # o comprovante sai no idioma do aviso
     codigo = _registrar(u, "gerou comprovante do aviso (PDF)", f"aviso {id_} ({c['codigo']})")
     criado = datetime.fromisoformat(c["criado_em"]).astimezone(BRASILIA)
     p = c["prazo"]
@@ -425,8 +442,11 @@ def comprovante_pdf(id_: int, u: dict = Depends(exigir("ver_historico"))) -> Res
                                                 _brl(e["valor"]), _brl(e["custo"]),
                                                 f"{_brl(e['economia'])} ({e['economia_tipo']})" if e["economia"] is not None else "-", e["por"]]
                                                for e in c["envios"]], (3.2, 1.2, 1.4, 1.5, 1.4, 1.3, 1.3, 2, 1.8))]
-    pdf = pdf_relatorio.documento(f"Comprovante do aviso nº {c['aviso']}", f"{u.get('empresa_nome') or ''} - desligamento de {c['data']}, {c['horario']}",
-                                  _quem(u), codigo, sec, AVISO_FICTICIO, datetime.now(BRASILIA))
+    T = lambda x: traducao.texto(x, idioma) if isinstance(x, str) else x
+    sec = [(s[0], T(s[1])) if s[0] in ("titulo", "texto") else (s[0], [(T(r), T(v)) for r, v in s[1]]) if s[0] == "numeros"
+           else (s[0], [T(x) for x in s[1]], [[T(x) for x in ln] for ln in s[2]], *s[3:]) for s in sec]
+    pdf = pdf_relatorio.documento(T(f"Comprovante do aviso nº {c['aviso']}"), T(f"{u.get('empresa_nome') or ''} - desligamento de {c['data']}, {c['horario']}"),
+                                  _quem(u, idioma), codigo, sec, AVISO_FICTICIO, datetime.now(BRASILIA), idioma=idioma)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="farol-comprovante-aviso-{id_}.pdf"', "X-Codigo": codigo})
 

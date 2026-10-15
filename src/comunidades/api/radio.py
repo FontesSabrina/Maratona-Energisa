@@ -27,7 +27,9 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
 from .. import cofre, correio
-from ..apresentacao import audio, confirmacao, email_radio, pdf_radio
+from ..apresentacao import audio, confirmacao, email_radio, pdf_radio, rotulos
+from ..nucleo import idiomas
+from ..nucleo.tipos_desligamento import rotulos as rotulos_tipos
 from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco_territorio
 from ..banco import radios as banco
@@ -69,30 +71,39 @@ class Configuracao(BaseModel):
     alerta_preco: float = Field(0.20, ge=0, le=5)                       # alerta quando o envio custa mais que isso acima da média
     repeticao_n: int = Field(3, ge=2, le=50)                            # repetição: N desligamentos...
     repeticao_dias: int = Field(30, ge=7, le=365)                       # ...dentro de D dias
+    modelo_mensagem_en: str | None = Field(None, max_length=mensagem.MAX_MODELO)   # Fase K: o modelo em inglês e em espanhol
+    modelo_mensagem_es: str | None = Field(None, max_length=mensagem.MAX_MODELO)
+    idioma_padrao: Literal["pt-BR", "en", "es"] = "pt-BR"
 
 
 @rotas.get("/api/empresa/configuracao")
 def ver_configuracao(u: dict = Depends(exigir("configurar_empresa"))) -> dict:
-    return {**config_empresa(u["empresa_id"]), "campos": list(mensagem.CAMPOS), "modelo_padrao": mensagem.PADRAO}
+    return {**config_empresa(u["empresa_id"]), "campos": list(mensagem.CAMPOS), "modelo_padrao": mensagem.PADRAO,
+            "modelos_padrao": mensagem.PADROES}
 
 
 @rotas.put("/api/empresa/configuracao")
 def salvar_configuracao(dados: Configuracao, u: dict = Depends(exigir("configurar_empresa"))) -> dict:
-    if (p := mensagem.problema_modelo(dados.modelo_mensagem)):
-        raise erro(422, p, "modelo_mensagem")
+    for campo in ("modelo_mensagem", "modelo_mensagem_en", "modelo_mensagem_es"):
+        if getattr(dados, campo) is not None and (p := mensagem.problema_modelo(getattr(dados, campo))):
+            raise erro(422, p, campo)
     nome = limpar(dados.nome_mensagem)
     if len(nome) < 2:
         raise erro(422, "Nome da empresa na mensagem: de 2 a 120 caracteres.", "nome_mensagem")
     antes = config_empresa(u["empresa_id"])
+    antes = {**antes, "modelo_mensagem_en": antes["modelos"]["en"], "modelo_mensagem_es": antes["modelos"]["es"]}
     novo = {"modelo_mensagem": dados.modelo_mensagem.strip(), "nome_mensagem": nome, "telefone": limpar(dados.telefone),
             "limite_rejeicao": round(dados.limite_rejeicao, 4), "epsg_utm": dados.epsg_utm, "antecedencia_dias": dados.antecedencia_dias,
             "orcamento_radio": round(dados.orcamento_radio, 2) if dados.orcamento_radio is not None else None,
-            "alerta_preco": round(dados.alerta_preco, 4), "repeticao_n": dados.repeticao_n, "repeticao_dias": dados.repeticao_dias}
+            "alerta_preco": round(dados.alerta_preco, 4), "repeticao_n": dados.repeticao_n, "repeticao_dias": dados.repeticao_dias,
+            "modelo_mensagem_en": (dados.modelo_mensagem_en or "").strip() or antes["modelos"]["en"],
+            "modelo_mensagem_es": (dados.modelo_mensagem_es or "").strip() or antes["modelos"]["es"], "idioma_padrao": dados.idioma_padrao}
     banco.salvar_config(u["empresa_id"], u["id"], novo)
     banco_acesso.registrar("alterou a configuração da empresa", diferencas(antes, novo, {
         "modelo_mensagem": "modelo da mensagem", "nome_mensagem": "nome na mensagem", "telefone": "telefone", "limite_rejeicao": "limite de rejeição",
         "epsg_utm": "fuso UTM", "antecedencia_dias": "antecedência (dias)", "orcamento_radio": "orçamento de rádio", "alerta_preco": "alerta de preço",
-        "repeticao_n": "repetição (N)", "repeticao_dias": "repetição (dias)"}), u["id"], u["empresa_id"])
+        "repeticao_n": "repetição (N)", "repeticao_dias": "repetição (dias)", "modelo_mensagem_en": "modelo em inglês",
+        "modelo_mensagem_es": "modelo em espanhol", "idioma_padrao": "idioma padrão"}), u["id"], u["empresa_id"])
     return ver_configuracao(u)
 
 
@@ -308,15 +319,17 @@ def _gerar_pdf(a: dict, m: dict, texto: str, u: dict, cfg: dict) -> tuple[str, b
     situacao = lambda c: "vizinha" if c.get("fragmento") else "parte" if c.get("parcial") else "inteira"
     nome = lambda c: f"{alcance_.nome_base(c['nome'])} ({'Sede' if c.get('distrito') == m['nome'] else c.get('distrito')})"
     grupos = {s: [nome(c) for c in m["comunidades"] if situacao(c) == s] for s in ("inteira", "parte", "vizinha")}
-    q = a["criado_em"].astimezone(BRASILIA)
-    solicitado = (f"Solicitado por {a['usuario']} ({PERFIS.get(a.get('usuario_perfil'), '')}) em {q:%d/%m/%Y} às {q:%H:%M}"
-                  f" · código de verificação {a.get('codigo') or '-'}")
-    pdf = pdf_radio.roteiro(municipio=m["nome"], uf=m["uf"], empresa=cfg["nome_mensagem"], data=a["data"], horario=a["horario"],
+    q, i = a["criado_em"].astimezone(BRASILIA), a.get("idioma") or "pt-BR"
+    solicitado = rotulos.t(i, "solicitado", nome=a["usuario"], perfil=rotulos.perfil(i, a.get("usuario_perfil")),
+                           quando=rotulos.t(i, "quando", d=q), codigo=a.get("codigo") or "-")
+    data, horario = idiomas.localizar(a["data"], a["horario"], i)
+    prazo = rotulos.prazo(i, f"{a['resumo']['prazo']['antecedencia_minima']} ({a['resumo']['prazo']['norma']})")
+    pdf = pdf_radio.roteiro(municipio=m["nome"], uf=m["uf"], empresa=cfg["nome_mensagem"], data=data, horario=horario,
                             tipo=a.get("motivo") or "", texto=texto, inteiras=grupos["inteira"], parciais=grupos["parte"],
-                            vizinhas=grupos["vizinha"], prazo=f"{a['resumo']['prazo']['antecedencia_minima']} ({a['resumo']['prazo']['norma']})",
+                            vizinhas=grupos["vizinha"], prazo=prazo,
                             vital_sim=m["equipamento_vital"]["sim"], vital_a_confirmar=m["equipamento_vital"]["a_confirmar"],
                             solicitado=solicitado, aviso_id=a["id"], aviso_ficticio=AVISO_FICTICIO, gerado_por=u["nome"],
-                            gerado_em=datetime.now(BRASILIA))
+                            gerado_em=datetime.now(BRASILIA), idioma=i)
     base = "-".join(sem_acento(m["nome"]).lower().split()) or "municipio"
     return f"farol-aviso-{base}-{a['data'].replace('/', '-')}.pdf", pdf
 
@@ -429,10 +442,10 @@ def enviar(id_: int, dados: PedidoEnvio, u: dict = Depends(exigir("gerar_aviso")
 
 def _por_email(a: dict, m: dict, r: dict, texto: str, envio_id: int, u: dict, cfg: dict) -> dict:
     nome_pdf, pdf = _gerar_pdf(a, m, texto, u, cfg)
-    mp3 = None
-    if AUDIO and a.get("idioma", "pt-BR") == "pt-BR":
+    mp3, i = None, a.get("idioma") or "pt-BR"
+    if AUDIO and i in audio.idiomas_com_voz():   # idioma sem voz com licença adequada: o e-mail vai só com o PDF
         try:
-            dados_mp3, _ = audio.mp3(texto, "pt-BR")
+            dados_mp3, _ = audio.mp3(texto, i)
             mp3 = (nome_pdf.replace(".pdf", ".mp3"), dados_mp3)
         except Exception:  # noqa: BLE001 (sem o MP3, o e-mail vai com o PDF e diz isso)
             mp3 = None
@@ -440,10 +453,11 @@ def _por_email(a: dict, m: dict, r: dict, texto: str, envio_id: int, u: dict, cf
         banco.guardar_arquivo(envio_id, u["empresa_id"], tipo, nome, len(dados), cofre.cifrar(dados, u["empresa_id"], envio_id, tipo))
     token = secrets.token_urlsafe(32)
     banco.definir_token(envio_id, token)
-    msg = email_radio.mensagem(remetente=correio.remetente(), destino=r["email"], municipio=m["nome"], uf=m["uf"], data=a["data"],
-                               horario=a["horario"], empresa=cfg["nome_mensagem"], texto=texto, codigo=a.get("codigo") or "",
+    data, horario = idiomas.localizar(a["data"], a["horario"], i)
+    msg = email_radio.mensagem(remetente=correio.remetente(), destino=r["email"], municipio=m["nome"], uf=m["uf"], data=data,
+                               horario=horario, empresa=cfg["nome_mensagem"], texto=texto, codigo=a.get("codigo") or "",
                                link_confirmar=f"{url_publica()}/confirmar/{token}", pdf=(nome_pdf, pdf), mp3=mp3,
-                               aviso_ficticio=AVISO_FICTICIO)
+                               aviso_ficticio=AVISO_FICTICIO, idioma=i)
     banco.mudar_status(envio_id, "enviado")
     banco_acesso.registrar("enviou por e-mail", f"envio {envio_id}: aviso {a['id']}, {m['nome']} para {r['nome']} ({r['email']})"
                            f", PDF{' e MP3' if mp3 else ''}", u["id"], u["empresa_id"])
@@ -498,13 +512,14 @@ def pagina_confirmar(token: str) -> HTMLResponse:
     e = banco.envio_pelo_token(token) if _token_valido(token) else None
     if not e:
         return _pagina(confirmacao.pagina("Link inválido", "Este link de confirmação não existe."), 404)
+    i, T = e.get("idioma") or "pt-BR", lambda chave, **v: rotulos.t(e.get("idioma"), chave, **v)
     if e["confirmado_em"]:
-        return _pagina(confirmacao.pagina("Recebimento já confirmado", f"O recebimento do aviso de {e['municipio_nome']} já foi confirmado. Obrigado."))
+        return _pagina(confirmacao.pagina(T("conf_ja"), T("conf_ja_texto", municipio=e["municipio_nome"]), idioma=i))
     if e["token_expira"] < datetime.now(e["token_expira"].tzinfo):
-        return _pagina(confirmacao.pagina("Link vencido", "Este link venceu (vale 7 dias). Fale com a distribuidora."), 410)
-    return _pagina(confirmacao.pagina("Confirmar o recebimento",
-                                      f"{e['radio_nome']}: aviso de desligamento programado de {e['municipio_nome']}, dia {e['data']}, das {e['horario']}.",
-                                      acao=f"/confirmar/{token}"))
+        return _pagina(confirmacao.pagina(T("conf_vencido"), T("conf_vencido_texto"), idioma=i), 410)
+    data, horario = idiomas.localizar(e["data"], e["horario"], i)
+    return _pagina(confirmacao.pagina(T("conf_titulo"), T("conf_texto", radio=e["radio_nome"], municipio=e["municipio_nome"], data=data,
+                                                          horario=horario), acao=f"/confirmar/{token}", idioma=i))
 
 
 @rotas.post("/confirmar/{token}", include_in_schema=False)
@@ -517,4 +532,5 @@ def confirmar(token: str, request: Request) -> HTMLResponse:
         return _pagina(confirmacao.pagina("Não confirmado", "O link não vale mais (já usado, vencido ou inexistente)."), 410)
     banco_acesso.registrar("rádio confirmou o recebimento", f"envio {e['id']}: {e['radio_nome']}, aviso {e['aviso_id']} ({e['municipio_nome']})",
                            None, e["empresa_id"])
-    return _pagina(confirmacao.pagina("Recebimento confirmado", f"Obrigado, {e['radio_nome']}. A distribuidora já sabe que o aviso chegou."))
+    i = (banco.envio_pelo_token(token) or {}).get("idioma") or "pt-BR"
+    return _pagina(confirmacao.pagina(rotulos.t(i, "conf_ok"), rotulos.t(i, "conf_ok_texto", radio=e["radio_nome"]), idioma=i))

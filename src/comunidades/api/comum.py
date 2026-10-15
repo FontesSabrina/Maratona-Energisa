@@ -55,5 +55,9 @@ def config_empresa(empresa_id: int | None) -> dict:
         "alerta_preco": float(escolher("alerta_preco", 0.20)),
         "repeticao_n": int(escolher("repeticao_n", 3)),
         "repeticao_dias": int(escolher("repeticao_dias", 30)),
+        # Fase K: um modelo por idioma (o de português é o modelo_mensagem) e o idioma padrão do aviso
+        "modelos": {"pt-BR": escolher("modelo_mensagem", mensagem.PADRAO), "en": escolher("modelo_mensagem_en", mensagem.PADROES["en"]),
+                    "es": escolher("modelo_mensagem_es", mensagem.PADROES["es"])},
+        "idioma_padrao": escolher("idioma_padrao", DIST.idioma_padrao),
         "padroes": not c,
     }

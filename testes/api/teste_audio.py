@@ -104,7 +104,11 @@ conferir("Consulta: não gera o áudio (403, só quem gera o aviso)", consulta.p
 conferir("Consulta: nem o do comparativo (403)", consulta.post("/api/audio", json={**pedido, "comparativo": True}).status_code == 403)
 conferir("Admin da empresa: pode", cliente("admin@emg.example").post("/api/audio", json=pedido).status_code == 200)
 conferir("Admin do Farol: não pode (403)", cliente("admin@farol.example").post("/api/audio", json=pedido).status_code == 403)
-erros = {"idioma en": op.post("/api/audio", json={**pedido, "idioma": "en"}).status_code,
+ingles = op.post("/api/audio", json={**pedido, "idioma": "en", "texto": "Attention, listeners. On November 20, from 8 a.m. to 2 p.m., "
+                                                                     "there will be a scheduled power outage in Graminha."})
+conferir("inglês (Fase K): MP3 com a voz en_US-ljspeech (domínio público)", ingles.status_code == 200 and ingles.headers.get("content-type") == "audio/mpeg"
+         and len(ingles.content) > 20_000, f"{ingles.status_code} {len(ingles.content)}")
+erros = {"idioma es (sem voz com licença clara)": op.post("/api/audio", json={**pedido, "idioma": "es"}).status_code,
          "texto vazio": op.post("/api/audio", json={**pedido, "texto": "   "}).status_code,
          "texto longo": op.post("/api/audio", json={**pedido, "texto": "palavra " * 500}).status_code,
          "texto acima do limite do comparativo": op.post("/api/audio", json={**pedido, "comparativo": True,
@@ -116,7 +120,7 @@ conferir("erros: idioma sem voz, texto vazio, texto longo demais, campos longos 
 with conectar() as c, c.cursor() as cur:
     cur.execute("SELECT detalhe FROM registro WHERE acao = 'gerou MP3 do aviso'")
     reg = [d for (d,) in cur.fetchall()]
-conferir("registro: áudio gerado (município e duração, sem o texto)", len(reg) == 2 and all("Graminha" not in d for d in reg), str(reg))
+conferir("registro: áudio gerado (município e duração, sem o texto)", len(reg) == 3 and all("Graminha" not in d for d in reg), str(reg))
 # produção no plano gratuito (FAROL_AUDIO=0): a tela é avisada e a API recusa, sem carregar a voz
 app_mod.AUDIO = False
 desligado = op.post("/api/audio", json=pedido)

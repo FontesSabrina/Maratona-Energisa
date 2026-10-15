@@ -27,8 +27,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -37,7 +39,7 @@ from pyproj import Transformer
 
 from .. import senhas
 from ..config import sem_acento
-from ..apresentacao import audio
+from ..apresentacao import audio, traducao
 from ..banco import acesso as banco_acesso
 from ..banco import base_territorial as banco
 from ..banco import rede as banco_rede
@@ -82,6 +84,15 @@ if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
 _log = logging.getLogger("farol.api")
 
 
+@app.exception_handler(StarletteHTTPException)
+async def _erro_http(request, e: StarletteHTTPException):
+    """As mensagens de erro da API no idioma da tela de quem pediu (cabeçalho X-Farol-Idioma; Fase K)."""
+    idioma = traducao.idioma_do_pedido(request.headers.get("x-farol-idioma"))
+    if idioma != traducao.PADRAO and isinstance(e.detail, str):
+        e = StarletteHTTPException(e.status_code, traducao.texto(e.detail, idioma), headers=e.headers)
+    return await http_exception_handler(request, e)
+
+
 @app.exception_handler(Exception)
 def _erro_inesperado(request, erro: Exception) -> JSONResponse:
     """Erro não previsto: nada é gerado nem gravado (o histórico só é gravado no fim de tudo) e a
@@ -90,7 +101,8 @@ def _erro_inesperado(request, erro: Exception) -> JSONResponse:
     codigo = f"ERR-{secrets.token_hex(3).upper()}"
     onde = " <- ".join(f"{Path(q.filename).name}:{q.lineno}" for q in traceback.extract_tb(erro.__traceback__)[-4:][::-1])
     _log.error("%s %s %s em %s", codigo, request.url.path, type(erro).__name__, onde)
-    return JSONResponse({"detail": f"Ocorreu um erro e nada foi gerado (código {codigo})."}, status_code=500)
+    texto = traducao.texto(f"Ocorreu um erro e nada foi gerado (código {codigo}).", request.headers.get("x-farol-idioma"))
+    return JSONResponse({"detail": texto}, status_code=500)
 
 
 _PYDANTIC = {   # tipo do erro de validação -> como a pessoa lê (a mensagem original vem em inglês)
@@ -111,7 +123,8 @@ def _validacao(request, e: RequestValidationError) -> JSONResponse:
     primeiro = (e.errors() or [{}])[0]
     campo = next((str(x) for x in reversed(primeiro.get("loc", ())) if isinstance(x, str) and x not in ("body", "query", "path")), "")
     texto = _PYDANTIC.get(primeiro.get("type"), lambda c: "valor inválido.")(primeiro.get("ctx") or {})
-    return JSONResponse({"detail": f"Confira o campo {campo or 'informado'}: {texto}", "campo": campo or None}, status_code=422,
+    detalhe = traducao.texto(f"Confira o campo {campo or 'informado'}: {texto}", request.headers.get("x-farol-idioma"))
+    return JSONResponse({"detail": detalhe, "campo": campo or None}, status_code=422,
                         headers={"X-Farol-Campo": campo} if campo else None)
 
 
@@ -154,14 +167,18 @@ def tela() -> FileResponse:
 
 
 @app.get("/api/config")
-def config(u: dict = Depends(usuario_atual)) -> dict:
-    """O que a tela precisa da configuração da distribuidora (nada secreto)."""
+def config(request: Request, u: dict = Depends(usuario_atual)) -> dict:
+    """O que a tela precisa da configuração da distribuidora (nada secreto). Os tipos de desligamento vêm no idioma da
+    tela (cabeçalho X-Farol-Idioma); o idioma padrão do aviso é o da empresa (Fase K)."""
+    tela = traducao.idioma_do_pedido(request.headers.get("x-farol-idioma"))
+    cfg = config_empresa(u["empresa_id"]) if u.get("empresa_id") else {}
     return {"distribuidora": DIST.nome, "telefone": DIST.telefone, "aviso_ficticio": AVISO_FICTICIO,
-            "idiomas": {k: v["nome"] for k, v in idiomas.IDIOMAS.items()}, "idioma_padrao": DIST.idioma_padrao,
+            "idiomas": {k: v["nome"] for k, v in idiomas.IDIOMAS.items()}, "idioma_padrao": cfg.get("idioma_padrao") or DIST.idioma_padrao,
+            "audio_idiomas": audio.idiomas_com_voz() if AUDIO else [], "idioma_tela": tela,
             "prazo_legal_horas": DIST.prazo_legal_horas, "prazo_vital_dias_uteis": DIST.prazo_vital_dias_uteis,
             "norma": DIST.norma, "palavras_por_segundo": PALAVRAS_POR_SEGUNDO,
             "limites": {"bytes": leitura.MAX_BYTES, "linhas": MAX_LINHAS}, "audio": AUDIO,
-            "tipos": tipos.ROTULOS, "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO, "email": correio.ligado()}
+            "tipos": tipos.rotulos(tela), "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO, "email": correio.ligado()}
 
 
 @app.get("/api/concessao")
@@ -335,10 +352,10 @@ def _formulario(data: str, horario: str, idioma: str) -> tuple[str, str, str]:
     return data, horario, idioma
 
 
-def _motivo(tipo: str, outro: str | None) -> tuple[str, str]:
-    """O tipo de desligamento (lista fechada ou "Outro" curto e sem dado pessoal) e o texto do motivo."""
+def _motivo(tipo: str, outro: str | None, idioma: str = idiomas.PADRAO) -> tuple[str, str]:
+    """O tipo de desligamento (lista fechada ou "Outro" curto e sem dado pessoal) e o texto do motivo no idioma do aviso."""
     try:
-        return tipos.motivo(tipo, outro)
+        return tipos.motivo(tipo, outro, idioma)
     except ValueError as e:
         raise erro(422, f"Tipo de desligamento: {e}", "tipo_outro" if tipo == "outro" else "tipo") from None
 
@@ -391,7 +408,8 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
         x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
         xy = np.c_[x, y]
         bases = _bases(xy)
-        r = afetados(xy, bases, DIST.regras, data, horario, idioma) if bases else None
+        # o aviso do algoritmo com a data e o horário no formato do idioma (em português, como vieram)
+        r = afetados(xy, bases, DIST.regras, *idiomas.localizar(data, horario, idioma), idioma) if bases else None
         fora = r.fora if r else np.arange(len(v))
         if len(fora):   # dentro da área com a margem, mas fora dos contornos dos municípios (na divisa da concessão)
             linhas_fora = {int(l) for l in v["LINHA"].iloc[fora]}
@@ -445,7 +463,7 @@ async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(..
     """1º passo (Conferir): traduz a planilha e mostra o resultado e as travas. Nada vai para o histórico.
     Devolve o pacote assinado (UCs opacas, 15 minutos) que o 2º passo usa para gerar o aviso."""
     data, horario, idioma = _formulario(data, horario, idioma)
-    tipo, motivo = _motivo(tipo, tipo_outro)
+    tipo, motivo = _motivo(tipo, tipo_outro, idioma)
     modelo = await _ler_e_traduzir(arquivo, aba, u)
     cfg = config_empresa(u["empresa_id"])
     resposta = _resultado(modelo, data, horario, idioma, cfg)
@@ -465,7 +483,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     """2º passo (Gerar aviso): só com o pacote da conferência válido, a caixa "Conferi" marcada, nenhuma
     trava de equipamento vital e, acima do limite de rejeição, a justificativa. Grava no histórico."""
     data, horario, idioma = _formulario(dados.data, dados.horario, dados.idioma)
-    tipo, motivo = _motivo(dados.tipo, dados.tipo_outro)
+    tipo, motivo = _motivo(dados.tipo, dados.tipo_outro, idioma)
     pacote_hash = hashlib.sha256(dados.pacote.encode()).hexdigest()
     if (ja := banco_acesso.aviso_do_pacote(u["empresa_id"], pacote_hash)):   # clique duplo ou reenvio: um aviso só
         raise HTTPException(409, f"Este aviso já foi gerado com esta conferência (aviso nº {ja}). Para outro aviso, confira a planilha de novo.")
@@ -552,13 +570,11 @@ def _alerta_repeticao(resposta: dict, u: dict, cfg: dict) -> str | None:
 
 def _mensagens(municipios: list[dict], cfg: dict, data: str, horario: str, idioma: str, motivo: str, codigo: str = "") -> None:
     """A mensagem da rádio de cada município, pelo modelo da empresa (nucleo/mensagem.py), e o tempo no ar.
-    Só em português (o modelo é escrito em português); nos outros idiomas fica o aviso do algoritmo."""
+    Um modelo por idioma (Fase K): o do idioma do aviso, com a data e as horas no formato dele."""
     for m in municipios:
-        if idioma != idiomas.PADRAO:
-            m["mensagem"], m["segundos_mensagem"] = None, None
-            continue
-        m["mensagem"] = mensagem.montar(cfg["modelo_mensagem"], mensagem.valores_do_municipio(
-            m, distribuidora=cfg["nome_mensagem"], data=data, horario=horario, motivo=motivo, telefone=cfg["telefone"], codigo=codigo))
+        m["mensagem"] = mensagem.montar(cfg["modelos"].get(idioma, cfg["modelo_mensagem"]), mensagem.valores_do_municipio(
+            m, distribuidora=cfg["nome_mensagem"], data=data, horario=horario, motivo=motivo, telefone=cfg["telefone"], codigo=codigo,
+            idioma=idioma))
         m["segundos_mensagem"] = segundos(m["mensagem"])
 
 
@@ -581,7 +597,7 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
                                   pacote_hash)
     resposta.update(id=g["id"], codigo=g["codigo"], criado_em=g["criado_em"].isoformat(), usuario=g["solicitante"],
                     usuario_perfil=PERFIS.get(g["solicitante_perfil"], ""), status="gerado")
-    if "{codigo}" in cfg["modelo_mensagem"]:   # o código só existe depois de gravado: a mensagem é refeita com ele
+    if "{codigo}" in cfg["modelos"].get(idioma, cfg["modelo_mensagem"]):   # o código só existe depois de gravado: a mensagem é refeita com ele
         _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo, g["codigo"])
         _mensagens(municipios, cfg, data, horario, idioma, motivo, g["codigo"])
         banco_acesso.atualizar_municipios(g["id"], u["empresa_id"], municipios)

@@ -19,7 +19,25 @@ TIPOS = {   # código -> como entra na mensagem ("para ...")
 ROTULOS = {"manutencao_preventiva": "Manutenção preventiva", "corretiva_programada": "Manutenção corretiva programada",
            "obra": "Obra ou ampliação da rede", "poda": "Poda de árvores", "troca_equipamento": "Troca de equipamento",
            "outro": "Outro"}
+# Fase K: o motivo (como entra na mensagem) e o rótulo em inglês e em espanhol; o "Outro" vai como foi digitado
+TIPOS_IDIOMA = {
+    "en": {"manutencao_preventiva": "preventive maintenance on the power grid", "corretiva_programada": "scheduled corrective maintenance",
+           "obra": "work to expand the power grid", "poda": "tree trimming near the power lines",
+           "troca_equipamento": "replacement of grid equipment"},
+    "es": {"manutencao_preventiva": "mantenimiento preventivo de la red", "corretiva_programada": "mantenimiento correctivo programado",
+           "obra": "obras de ampliación de la red", "poda": "poda de árboles cerca de la red", "troca_equipamento": "cambio de equipos de la red"},
+}
+ROTULOS_IDIOMA = {
+    "en": {"manutencao_preventiva": "Preventive maintenance", "corretiva_programada": "Scheduled corrective maintenance",
+           "obra": "Grid work or expansion", "poda": "Tree trimming", "troca_equipamento": "Equipment replacement", "outro": "Other"},
+    "es": {"manutencao_preventiva": "Mantenimiento preventivo", "corretiva_programada": "Mantenimiento correctivo programado",
+           "obra": "Obra o ampliación de la red", "poda": "Poda de árboles", "troca_equipamento": "Cambio de equipos", "outro": "Otro"},
+}
 PADRAO = "manutencao_preventiva"
+
+
+def rotulos(idioma: str = "pt-BR") -> dict[str, str]:
+    return ROTULOS_IDIOMA.get(idioma, ROTULOS)
 MAX_OUTRO = 200
 _NUMEROS = re.compile(r"\d[\d.\-/ ]{4,}\d")     # 6 ou mais algarismos seguidos (com pontos, traços, barras)
 _EMAIL = re.compile(r"\S+@\S+")
@@ -46,10 +64,10 @@ def problema_outro(texto: str) -> str | None:
     return None
 
 
-def motivo(tipo: str, outro: str | None = None) -> tuple[str, str]:
-    """(código, texto do motivo) do tipo escolhido; ValueError com a mensagem se não servir."""
+def motivo(tipo: str, outro: str | None = None, idioma: str = "pt-BR") -> tuple[str, str]:
+    """(código, texto do motivo no idioma da mensagem) do tipo escolhido; ValueError com a mensagem se não servir."""
     if tipo in TIPOS:
-        return tipo, TIPOS[tipo]
+        return tipo, TIPOS_IDIOMA.get(idioma, TIPOS)[tipo]
     if tipo == "outro":
         p = problema_outro(outro or "")
         if p:

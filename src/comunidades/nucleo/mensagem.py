@@ -12,11 +12,23 @@ o sufixo serve à tela, não ao ouvinte.
 import re
 import unicodedata
 
+from . import idiomas
+
 CAMPOS = ("distribuidora", "municipio", "data", "inicio", "fim", "motivo", "comunidades", "comunidades_parciais",
           "telefone_atendimento", "codigo")
 PADRAO = ("Atenção, ouvintes. A {distribuidora} informa: no dia {data}, das {inicio} às {fim}, haverá desligamento "
           "programado de energia para {motivo}[ nas comunidades {comunidades}].[ Ficará sem energia parte de: "
           "{comunidades_parciais}.] Programe-se.[ Dúvidas: {telefone_atendimento}.]")
+# um modelo por idioma (Fase K); a data e as horas entram no formato de cada um (nucleo/idiomas.data_falada e inicio_fim)
+PADROES = {
+    "pt-BR": PADRAO,
+    "en": ("Attention, listeners. {distribuidora} announces a scheduled power outage on {data}, from {inicio} to {fim}, "
+           "for {motivo}[ in the communities of {comunidades}].[ Part of {comunidades_parciais} will also be without power.] "
+           "Please plan ahead.[ Questions: {telefone_atendimento}.]"),
+    "es": ("Atención, oyentes. {distribuidora} informa: el {data}, entre las {inicio} y las {fim}, habrá un corte "
+           "programado de energía por {motivo}[ en las comunidades de {comunidades}].[ También quedará sin energía parte de: "
+           "{comunidades_parciais}.] Tome sus precauciones.[ Consultas: {telefone_atendimento}.]"),
+}
 MAX_MODELO = 1500
 MAX_MENSAGEM = 3000
 _CAMPO = re.compile(r"\{([^{}]*)\}")
@@ -54,9 +66,11 @@ def sem_sufixo(nome: str) -> str:
     return re.sub(r" \([^()]*\)$", "", str(nome))
 
 
-def lista_falada(nomes: list[str]) -> str:
-    """['A', 'B', 'C'] -> 'A, B e C' (sem repetir nomes iguais, na ordem)."""
+def lista_falada(nomes: list[str], idioma: str = idiomas.PADRAO) -> str:
+    """['A', 'B', 'C'] -> 'A, B e C' (sem repetir nomes iguais, na ordem); "and" em inglês, "y" (ou "e") em espanhol."""
     vistos = list(dict.fromkeys(n for n in nomes if n))
+    if idioma != idiomas.PADRAO:
+        return idiomas.lista(vistos, idioma)
     return vistos[0] if len(vistos) == 1 else ", ".join(vistos[:-1]) + " e " + vistos[-1] if vistos else ""
 
 
@@ -76,11 +90,12 @@ def montar(modelo: str, valores: dict[str, str]) -> str:
 
 
 def valores_do_municipio(municipio: dict, *, distribuidora: str, data: str, horario: str, motivo: str,
-                         telefone: str = "", codigo: str = "") -> dict[str, str]:
-    """Os valores dos campos para um município do aviso (comunidades como saem da API)."""
-    inicio, _, fim = str(horario).partition(" às ")
+                         telefone: str = "", codigo: str = "", idioma: str = idiomas.PADRAO) -> dict[str, str]:
+    """Os valores dos campos para um município do aviso (comunidades como saem da API), no idioma da mensagem.
+    A data e o horário chegam no formato brasileiro ("20/11", "8h às 14h"); em português, ficam como estão."""
+    inicio, fim = idiomas.inicio_fim(horario, idioma)
     inteiras = [sem_sufixo(c["nome"]) for c in municipio["comunidades"] if not c.get("parcial") and not c.get("fragmento")]
     parciais = [sem_sufixo(c["nome"]) for c in municipio["comunidades"] if c.get("parcial") or c.get("fragmento")]
-    return {"distribuidora": distribuidora, "municipio": municipio["nome"], "data": data, "inicio": inicio, "fim": fim,
-            "motivo": motivo, "comunidades": lista_falada(inteiras), "comunidades_parciais": lista_falada(parciais),
-            "telefone_atendimento": telefone, "codigo": codigo}
+    return {"distribuidora": distribuidora, "municipio": municipio["nome"], "data": idiomas.data_falada(data, idioma),
+            "inicio": inicio, "fim": fim, "motivo": motivo, "comunidades": lista_falada(inteiras, idioma),
+            "comunidades_parciais": lista_falada(parciais, idioma), "telefone_atendimento": telefone, "codigo": codigo}

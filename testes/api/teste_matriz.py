@@ -32,7 +32,7 @@ FAROL, ADM, OP, CON = "admin_farol", "admin_empresa", "operador", "consulta"
 TODOS, EMPRESA, GERA = {FAROL, ADM, OP, CON}, {ADM, OP, CON}, {ADM, OP}
 MATRIZ = {
     ("GET", "/"): PUBLICA, ("GET", "/api/saude"): PUBLICA, ("POST", "/api/entrar"): PUBLICA, ("POST", "/api/sair"): PUBLICA,
-    ("GET", "/api/eu"): TODOS, ("POST", "/api/senha"): TODOS,
+    ("GET", "/api/eu"): TODOS, ("POST", "/api/senha"): TODOS, ("PUT", "/api/eu/preferencias"): TODOS,
     # dados públicos do território (IBGE) e configuração da tela: qualquer pessoa com login
     ("GET", "/api/config"): TODOS, ("GET", "/api/concessao"): TODOS, ("GET", "/api/modelo-planilha"): TODOS,
     ("GET", "/api/municipios/{codigo}/comunidades"): TODOS, ("GET", "/api/municipios/{codigo}/rede"): TODOS,

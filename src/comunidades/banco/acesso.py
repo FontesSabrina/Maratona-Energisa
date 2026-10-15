@@ -89,6 +89,8 @@ DO $$ BEGIN
 END $$;
 -- Fase J: o pacote da conferência gera um aviso só (clique duplo ou reenvio não grava dois)
 ALTER TABLE aviso ADD COLUMN IF NOT EXISTS pacote_hash text;
+-- Fase K/I: preferências da tela do usuário (idioma e acessibilidade); nada sobre deficiência nem motivo
+ALTER TABLE usuario ADD COLUMN IF NOT EXISTS preferencias jsonb NOT NULL DEFAULT '{}';
 CREATE UNIQUE INDEX IF NOT EXISTS aviso_pacote ON aviso (pacote_hash) WHERE pacote_hash IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS registro_hash ON registro (hash);
 CREATE INDEX IF NOT EXISTS aviso_codigo ON aviso (codigo);
@@ -164,7 +166,7 @@ def _executar(sql: str, args=()) -> dict | None:
 
 
 USUARIO = ("u.id, u.empresa_id, u.email, u.nome, u.perfil, u.trocar_senha, u.status, u.tentativas, u.bloqueado_ate,"
-           " u.ultimo_acesso, u.criado_em, u.municipios, e.nome AS empresa_nome, e.sigla AS empresa_sigla, e.status AS empresa_status")
+           " u.ultimo_acesso, u.criado_em, u.municipios, u.preferencias, e.nome AS empresa_nome, e.sigla AS empresa_sigla, e.status AS empresa_status")
 
 
 # ---------- Empresas ----------
@@ -242,6 +244,10 @@ def alterar_usuario(id_: int, perfil: str, status: str, municipios: list[str] | 
               (perfil, status, json.dumps(municipios) if municipios is not None else None, nome, id_))
     if status == "bloqueado":
         encerrar_sessoes(id_)
+
+
+def salvar_preferencias(id_: int, preferencias: dict) -> None:
+    _executar("UPDATE usuario SET preferencias = %s WHERE id = %s", (json.dumps(preferencias), id_))
 
 
 def definir_senha(id_: int, senha_hash: str, trocar_senha: bool) -> None:
