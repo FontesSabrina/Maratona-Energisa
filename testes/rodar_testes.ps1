@@ -31,12 +31,15 @@ $testes = @(
     @{ Nome = "Relatórios completos (Fase H)"; Cmd = "uv run python -W ignore testes/api/teste_relatorios_h.py" },
     @{ Nome = "Registro total (rotas)";        Cmd = "uv run python -W ignore testes/api/teste_registro_total.py" },
     @{ Nome = "Áudio (MP3)";                   Cmd = "uv run python -W ignore testes/api/teste_audio.py" },
+    @{ Nome = "Idiomas (aviso, PDF, e-mail)";  Cmd = "uv run python -W ignore testes/api/teste_idiomas.py" },
+    @{ Nome = "Dicionário da tela";            Cmd = "node testes/navegador/teste_textos.mjs" },
     @{ Nome = "Admin (modelo, Node)";          Cmd = "node testes/admin/teste_modelo.mjs" },
     @{ Nome = "Minimização Leopoldina";        Cmd = "uv run python -m comunidades.validacao.minimizacao" },
     @{ Nome = "Minimização Muriaé";            Cmd = "`$env:FAROL_DISTRIBUIDORA='distribuidoras/demo-muriae.toml'; uv run python -m comunidades.validacao.minimizacao; Remove-Item Env:FAROL_DISTRIBUIDORA" }
 )
 if (-not $Rapido) {
     $testes += @{ Nome = "Tela do app (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py" }
+    $testes += @{ Nome = "Telas nos 3 idiomas (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_idiomas_tela.mjs" }
     $testes += @{ Nome = "Verificação geral (navegador)"; Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_verificacao.mjs --email" }
     if (-not $SemAlgoritmo) {
         $testes += @{ Nome = "Algoritmo (--so-algoritmo)"; Cmd = "uv run comunidades --so-algoritmo" }

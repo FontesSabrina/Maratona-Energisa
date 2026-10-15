@@ -5,25 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Farol · Aviso de desligamento</title>
 <link rel="icon" type="image/svg+xml" href="/assets/marca/farol-pequeno.svg">
-<!-- Leaflet 1.9.4 e IBM Plex vêm do próprio projeto (vendor/): nenhuma CDN. A CSP vem do servidor. -->
+<!-- Leaflet 1.9.4 e IBM Plex vêm do próprio projeto (vendor/): nenhuma CDN. A CSP vem do servidor.
+     Textos: data-t marca o texto em português (a chave); textos.js traz o inglês e o espanhol (Fase K). -->
 <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
 <link rel="stylesheet" href="/assets/app/app.css">
 <script src="/assets/vendor/leaflet/leaflet.js" defer></script>
+<script src="/assets/app/textos.js" defer></script>
 <script src="/assets/app/app.js" defer></script>
 </head>
 <body>
 <header class="topo">
   <div class="marca">
     <img src="/assets/marca/farol.svg" alt="" width="40" height="40">
-    <div><p class="nome">Farol</p><p class="slogan">Cada comunidade avisada pelo nome</p></div>
+    <div><p class="nome">Farol</p><p class="slogan" data-t>Cada comunidade avisada pelo nome</p></div>
   </div>
-  <p class="faixa" id="faixa">Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
+  <p class="faixa" id="faixa" data-t>Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
   <div class="topo-acoes">
-    <button type="button" id="botaoTema" aria-pressed="false">Tema escuro</button>
+    <label class="seletor-idioma"><span data-t>Idioma da tela</span>
+      <select id="idiomaTela">
+        <option value="pt-BR" lang="pt-BR">Português (Brasil)</option><option value="en" lang="en">English</option><option value="es" lang="es">Español</option>
+      </select></label>
+    <button type="button" id="botaoTema" aria-pressed="false" data-t>Tema escuro</button>
     <div class="conta" id="conta" hidden>
       <span id="contaNome"></span>
-      <button type="button" id="botaoAjuda" aria-haspopup="dialog">Ajuda</button>
-      <button type="button" id="sair">Sair</button>
+      <button type="button" id="botaoAjuda" aria-haspopup="dialog" data-t>Ajuda</button>
+      <button type="button" id="sair" data-t>Sair</button>
     </div>
   </div>
 </header>
@@ -32,10 +38,10 @@
 <main id="telaEntrar" class="tela-acesso" hidden>
   <form id="formEntrar" class="cartao acesso" novalidate>
     <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
-    <h1>Entrar no Farol</h1>
-    <label>E-mail <input type="email" id="email" autocomplete="username" required></label>
-    <label>Senha <input type="password" id="senha" autocomplete="current-password" required></label>
-    <button type="submit" class="prim" id="botaoEntrar">Entrar</button>
+    <h1 data-t>Entrar no Farol</h1>
+    <label><span data-t>E-mail</span> <input type="email" id="email" autocomplete="username" required></label>
+    <label><span data-t>Senha</span> <input type="password" id="senha" autocomplete="current-password" required></label>
+    <button type="submit" class="prim" id="botaoEntrar" data-t>Entrar</button>
     <p id="estadoEntrar" class="estado" role="status" aria-live="polite"></p>
   </form>
 </main>
@@ -43,85 +49,86 @@
 <main id="telaSenha" class="tela-acesso" hidden>
   <form id="formSenha" class="cartao acesso" novalidate>
     <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
-    <h1>Crie a sua senha</h1>
-    <p class="ajuda" id="senhaMotivo">Você entrou com uma senha temporária. Crie a sua para continuar.</p>
-    <label>Senha atual (a temporária) <input type="password" id="senhaAtual" autocomplete="current-password" required></label>
-    <label>Senha nova <input type="password" id="senhaNova" autocomplete="new-password" minlength="12" required></label>
-    <label>Repita a senha nova <input type="password" id="senhaNova2" autocomplete="new-password" minlength="12" required></label>
-    <p class="ajuda">Pelo menos 12 caracteres. Uma frase com palavras e números é mais fácil de lembrar e difícil de adivinhar.</p>
-    <button type="submit" class="prim" id="botaoSenha">Salvar a senha</button>
+    <h1 data-t>Crie a sua senha</h1>
+    <p class="ajuda" id="senhaMotivo" data-t>Você entrou com uma senha temporária. Crie a sua para continuar.</p>
+    <label><span data-t>Senha atual (a temporária)</span> <input type="password" id="senhaAtual" autocomplete="current-password" required></label>
+    <label><span data-t>Senha nova</span> <input type="password" id="senhaNova" autocomplete="new-password" minlength="12" required></label>
+    <label><span data-t>Repita a senha nova</span> <input type="password" id="senhaNova2" autocomplete="new-password" minlength="12" required></label>
+    <p class="ajuda" data-t>Pelo menos 12 caracteres. Uma frase com palavras e números é mais fácil de lembrar e difícil de adivinhar.</p>
+    <button type="submit" class="prim" id="botaoSenha" data-t>Salvar a senha</button>
     <p id="estadoSenha" class="estado" role="status" aria-live="polite"></p>
   </form>
 </main>
 
 <main id="telaApp" class="layout" hidden>
-  <section class="painel" aria-label="Painel">
-    <nav class="abas" id="abas" aria-label="Seções"></nav>
-    <nav class="subabas" id="subabas" aria-label="Relatórios" hidden></nav>
+  <section class="painel" aria-label="Painel" data-t-aria-label="Painel">
+    <nav class="abas" id="abas" aria-label="Seções" data-t-aria-label="Seções"></nav>
+    <nav class="subabas" id="subabas" aria-label="Relatórios" data-t-aria-label="Relatórios" hidden></nav>
 
     <p id="estado" class="estado" role="status" aria-live="polite"></p>
 
     <!-- Novo desligamento: funil em 4 passos (planilha, quando, conferir e avisos) -->
     <section id="vista-aviso" class="vista" hidden aria-labelledby="titulo">
-      <h1 id="titulo">Novo desligamento programado</h1>
-      <ol class="funil" id="funil" aria-label="Passos do aviso">
-        <li><button type="button" data-passo="1"><span class="num">1</span><span class="rotulo-passo">Planilha</span></button></li>
-        <li><button type="button" data-passo="2"><span class="num">2</span><span class="rotulo-passo">Quando</span></button></li>
-        <li><button type="button" data-passo="3"><span class="num">3</span><span class="rotulo-passo">Conferir</span></button></li>
-        <li><button type="button" data-passo="4"><span class="num">4</span><span class="rotulo-passo">Avisos</span></button></li>
+      <h1 id="titulo" data-t>Novo desligamento programado</h1>
+      <ol class="funil" id="funil" aria-label="Passos do aviso" data-t-aria-label="Passos do aviso">
+        <li><button type="button" data-passo="1"><span class="num">1</span><span class="rotulo-passo" data-t>Planilha</span></button></li>
+        <li><button type="button" data-passo="2"><span class="num">2</span><span class="rotulo-passo" data-t>Quando</span></button></li>
+        <li><button type="button" data-passo="3"><span class="num">3</span><span class="rotulo-passo" data-t>Conferir</span></button></li>
+        <li><button type="button" data-passo="4"><span class="num">4</span><span class="rotulo-passo" data-t>Avisos</span></button></li>
       </ol>
       <form id="form" class="cartao" novalidate>
         <fieldset id="passo-1">
-          <legend>Planilha das UCs afetadas</legend>
+          <legend data-t>Planilha das UCs afetadas</legend>
           <label class="arquivo" id="zona">
             <input type="file" id="arquivo" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
             <span class="arquivo-icone" aria-hidden="true">⇪</span>
             <span id="arquivoNome">Escolha ou arraste o arquivo (.csv ou .xlsx, até 10 MB)</span>
           </label>
-          <p class="ajuda">Colunas: <code>uc</code>, <code>latitude</code>, <code>longitude</code> e, se tiver, <code>equipamento_vital</code> e <code>classe</code>.
-            <a href="/api/modelo-planilha" download>Baixar o modelo</a></p>
-          <p class="ajuda">A planilha é lida no servidor e descartada: nenhuma UC ou coordenada é guardada. Os pontos das UCs aparecem no mapa só nesta tela, sem o número.
-            Antes de gerar o aviso, você confere os números e o mapa.</p>
+          <p class="ajuda"><span data-t>Colunas:</span> <code>uc</code>, <code>latitude</code>, <code>longitude</code>, <code>equipamento_vital</code>, <code>classe</code>.
+            <a href="/api/modelo-planilha" download data-t>Baixar o modelo</a></p>
+          <p class="ajuda"><span data-t>A planilha é lida no servidor e descartada: nenhuma UC ou coordenada é guardada. Os pontos das UCs aparecem no mapa só nesta tela, sem o número.</span>
+            <span data-t>Antes de gerar o aviso, você confere os números e o mapa.</span></p>
         </fieldset>
         <fieldset id="passo-2" hidden>
-          <legend>Data e horário do desligamento</legend>
+          <legend data-t>Data e horário do desligamento</legend>
           <div class="campos">
-            <label>Data <input type="date" id="data" required></label>
-            <label>Início <input type="time" id="inicio" value="08:00" step="900" required></label>
-            <label>Fim <input type="time" id="fim" value="14:00" step="900" required></label>
+            <label><span data-t>Data (obrigatória)</span> <input type="date" id="data" required></label>
+            <label><span data-t>Início (obrigatório)</span> <input type="time" id="inicio" value="08:00" step="900" required></label>
+            <label><span data-t>Fim (obrigatório)</span> <input type="time" id="fim" value="14:00" step="900" required></label>
           </div>
-          <label>Tipo de desligamento <select id="tipo"></select></label>
-          <label id="tipoOutroRotulo" hidden>Descreva o motivo (até 200 caracteres)
+          <label><span data-t>Tipo de desligamento</span> <select id="tipo"></select></label>
+          <label id="tipoOutroRotulo" hidden><span data-t>Descreva o motivo (até 200 caracteres)</span>
             <input id="tipoOutro" maxlength="200" autocomplete="off" aria-describedby="tipoOutroAjuda"></label>
-          <p class="ajuda" id="tipoOutroAjuda" hidden>Entra na mensagem da rádio ("para …"). Não escreva nome de cliente, número de UC, CPF, telefone nem endereço.</p>
-          <label class="idioma">Idioma do aviso <select id="idioma"></select></label>
-          <label id="abaRotulo" hidden>Aba da planilha (mais de uma tem as colunas) <select id="aba"></select></label>
+          <p class="ajuda" id="tipoOutroAjuda" hidden data-t>Entra na mensagem da rádio ("para …"). Não escreva nome de cliente, número de UC, CPF, telefone nem endereço.</p>
+          <label class="idioma"><span data-t>Idioma do aviso</span> <select id="idioma"></select></label>
+          <p class="ajuda" id="idiomaAudio" hidden></p>
+          <label id="abaRotulo" hidden><span data-t>Aba da planilha (mais de uma tem as colunas)</span> <select id="aba"></select></label>
           <p class="ajuda" id="passo2Arquivo"></p>
         </fieldset>
         <div class="nav-funil">
-          <button type="button" id="voltar" hidden>Voltar</button>
-          <button type="button" class="prim" id="avancar">Avançar</button>
+          <button type="button" id="voltar" hidden data-t>Voltar</button>
+          <button type="button" class="prim" id="avancar" data-t>Avançar</button>
           <button type="submit" class="prim" id="gerar" hidden>Conferir a planilha</button>
         </div>
       </form>
       <div id="lugar-aviso" class="lugar-resultado"></div>
       <div class="nav-funil" id="navResultado" hidden>
-        <button type="button" id="voltarResultado">Voltar</button>
+        <button type="button" id="voltarResultado" data-t>Voltar</button>
         <button type="button" class="prim" id="avancarResultado">Gerar aviso</button>
-        <button type="button" id="verComparativo" hidden>Ver comparativo</button>
-        <button type="button" class="prim" id="novoAviso" hidden>Novo desligamento</button>
+        <button type="button" id="verComparativo" hidden data-t>Ver comparativo</button>
+        <button type="button" class="prim" id="novoAviso" hidden data-t>Novo desligamento</button>
       </div>
     </section>
 
     <!-- Histórico -->
     <section id="vista-historico" class="vista" hidden aria-labelledby="tituloHistorico">
-      <h1 id="tituloHistorico">Histórico de avisos</h1>
-      <p class="ajuda">Só o resultado de cada planilha (municípios, comunidades e o texto do aviso): nenhuma UC ou coordenada fica guardada.</p>
+      <h1 id="tituloHistorico" data-t>Histórico de avisos</h1>
+      <p class="ajuda" data-t>Só o resultado de cada planilha (municípios, comunidades e o texto do aviso): nenhuma UC ou coordenada fica guardada.</p>
       <div class="filtros">
-        <label>Buscar <input type="search" id="buscaHistorico" placeholder="Município ou comunidade" autocomplete="off"></label>
-        <label>Período <select id="periodoHistorico">
-          <option value="">Todos</option><option value="7">Últimos 7 dias</option>
-          <option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label>
+        <label><span data-t>Buscar</span> <input type="search" id="buscaHistorico" placeholder="Município ou comunidade" data-t-placeholder="Município ou comunidade" autocomplete="off"></label>
+        <label><span data-t>Período</span> <select id="periodoHistorico">
+          <option value="" data-t>Todos</option><option value="7" data-t>Últimos 7 dias</option>
+          <option value="30" data-t>Últimos 30 dias</option><option value="90" data-t>Últimos 90 dias</option></select></label>
       </div>
       <p id="contagemHistorico" class="ajuda"></p>
       <div id="listaHistorico" class="lista"></div>
@@ -130,57 +137,54 @@
 
     <!-- Dashboard: números do histórico da empresa -->
     <section id="vista-painel" class="vista" hidden aria-labelledby="tituloPainel">
-      <h1 id="tituloPainel">Dashboard</h1>
-      <p class="ajuda">Números do histórico de avisos da empresa, só agregados. No mapa, os municípios pela quantidade de avisos.</p>
+      <h1 id="tituloPainel" data-t>Dashboard</h1>
+      <p class="ajuda" data-t>Números do histórico de avisos da empresa, só agregados. No mapa, os municípios pela quantidade de avisos.</p>
       <div id="painelDash" class="dash"></div>
     </section>
 
     <!-- Relatórios: o do período (mensal), com filtros, PDF e CSV -->
     <section id="vista-relatorios" class="vista" hidden aria-labelledby="tituloRelatorios">
-      <h1 id="tituloRelatorios">Relatórios</h1>
-      <p class="ajuda">Desligamentos, avisos, envios às rádios, custo, prazo e comunidades. Só números agregados: nenhuma UC nem
-        nome de cliente. Cada relatório (na tela, em PDF, em CSV ou por e-mail) fica na auditoria com o seu nome; o PDF ganha um
-        código de verificação e uma segunda via guardada.</p>
+      <h1 id="tituloRelatorios" data-t>Relatórios</h1>
+      <p class="ajuda" data-t>Desligamentos, avisos, envios às rádios, custo, prazo e comunidades. Só números agregados: nenhuma UC nem nome de cliente. Cada relatório (na tela, em PDF, em CSV ou por e-mail) fica na auditoria com o seu nome; o PDF ganha um código de verificação e uma segunda via guardada.</p>
       <form id="formRelatorio" class="cartao filtros-relatorio" novalidate>
-        <label>Relatório <select id="relQual">
-          <option value="mensal">Mensal (diretoria)</option>
-          <option value="custos">Custos por rádio</option>
-          <option value="comunidades">Comunidades mais afetadas</option>
-          <option value="prazos">Prazos</option>
+        <label><span data-t>Relatório</span> <select id="relQual">
+          <option value="mensal" data-t>Mensal (diretoria)</option>
+          <option value="custos" data-t>Custos por rádio</option>
+          <option value="comunidades" data-t>Comunidades mais afetadas</option>
+          <option value="prazos" data-t>Prazos</option>
         </select></label>
-        <label>Período <select id="relModo"><option value="mes">Mês</option><option value="ano">Ano</option><option value="intervalo">Intervalo</option></select></label>
-        <label id="relMesRotulo">Mês <select id="relMes"></select></label>
-        <label id="relAnoRotulo" hidden>Ano <select id="relAno"></select></label>
-        <label id="relInicioRotulo" hidden>De <input type="date" id="relInicio"></label>
-        <label id="relFimRotulo" hidden>Até <input type="date" id="relFim"></label>
-        <label>Município <select id="relMunicipio"><option value="">Todos</option></select></label>
-        <label>Tipo <select id="relTipo"><option value="">Todos</option></select></label>
-        <label>Rádio <select id="relRadio"><option value="">Todas</option></select></label>
-        <label>Pessoa <select id="relPessoa"><option value="">Todas</option></select></label>
+        <label><span data-t>Período</span> <select id="relModo"><option value="mes" data-t>Mês</option><option value="ano" data-t>Ano</option><option value="intervalo" data-t>Intervalo</option></select></label>
+        <label id="relMesRotulo"><span data-t>Mês</span> <select id="relMes"></select></label>
+        <label id="relAnoRotulo" hidden><span data-t>Ano</span> <select id="relAno"></select></label>
+        <label id="relInicioRotulo" hidden><span data-t>De</span> <input type="date" id="relInicio"></label>
+        <label id="relFimRotulo" hidden><span data-t>Até</span> <input type="date" id="relFim"></label>
+        <label><span data-t>Município</span> <select id="relMunicipio"><option value="" data-t>Todos</option></select></label>
+        <label><span data-t>Tipo</span> <select id="relTipo"><option value="" data-t>Todos</option></select></label>
+        <label><span data-t>Rádio</span> <select id="relRadio"><option value="" data-t>Todas</option></select></label>
+        <label><span data-t>Pessoa</span> <select id="relPessoa"><option value="" data-t>Todas</option></select></label>
         <div class="acoes">
-          <button type="submit" class="prim">Ver o relatório</button>
-          <button type="button" data-rel="pdf">Baixar PDF</button>
-          <button type="button" data-rel="csv">Baixar CSV</button>
+          <button type="submit" class="prim" data-t>Ver o relatório</button>
+          <button type="button" data-rel="pdf" data-t>Baixar PDF</button>
+          <button type="button" data-rel="csv" data-t>Baixar CSV</button>
         </div>
         <div id="relEnviar" class="enviar-relatorio" hidden>
-          <label>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)
+          <label><span data-t>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)</span>
             <input id="relDestinos" maxlength="400" autocomplete="off" inputmode="email" placeholder="diretoria@empresa"></label>
-          <button type="button" data-rel="enviar">Enviar</button>
+          <button type="button" data-rel="enviar" data-t>Enviar</button>
         </div>
       </form>
       <div id="relatorio" class="relatorio"></div>
       <section class="cartao dash-bloco">
-        <h2>Segundas vias</h2>
-        <p class="ajuda">O PDF de cada relatório fica guardado cifrado; a via baixada é idêntica (mesmo SHA-256 do código de verificação).</p>
+        <h2 data-t>Segundas vias</h2>
+        <p class="ajuda" data-t>O PDF de cada relatório fica guardado cifrado; a via baixada é idêntica (mesmo SHA-256 do código de verificação).</p>
         <div id="listaVias"></div>
       </section>
     </section>
 
     <!-- Comparativo: o aviso de hoje (fazenda a fazenda) x o aviso por comunidade -->
     <section id="vista-comparativo" class="vista" hidden aria-labelledby="tituloComparativo">
-      <h1 id="tituloComparativo">Comparativo do aviso</h1>
-      <p class="ajuda">O aviso como é hoje, imóvel por imóvel e rua por rua, ao lado do aviso por comunidade do Farol, para o aviso aberto
-        (o último gerado ou um do histórico). O aviso de hoje sai da coluna <code>local</code> da planilha.</p>
+      <h1 id="tituloComparativo" data-t>Comparativo do aviso</h1>
+      <p class="ajuda" data-t>O aviso como é hoje, imóvel por imóvel e rua por rua, ao lado do aviso por comunidade do Farol, para o aviso aberto (o último gerado ou um do histórico). O aviso de hoje sai da coluna local da planilha.</p>
       <div id="comparativoTotal"></div>
       <div id="comparativo" class="lista"></div>
     </section>
@@ -191,7 +195,7 @@
       <p id="solicitado" class="solicitado"></p>
       <!-- Aviso do histórico: mudar a data ou cancelar (quem gera aviso; tudo vai para a auditoria) -->
       <div id="acoesAviso" class="cartao acoes-aviso" hidden></div>
-      <section id="linhaTempo" class="cartao" hidden aria-label="Linha do tempo do aviso"></section>
+      <section id="linhaTempo" class="cartao" hidden aria-label="Linha do tempo do aviso" data-t-aria-label="Linha do tempo do aviso"></section>
       <!-- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" -->
       <div id="conferencia" class="cartao conferencia" hidden></div>
       <div id="resumo" class="cartao resumo"></div>
@@ -204,16 +208,15 @@
 
     <!-- Usuários da empresa -->
     <section id="vista-usuarios" class="vista" hidden aria-labelledby="tituloUsuarios">
-      <h1 id="tituloUsuarios">Usuários da empresa</h1>
+      <h1 id="tituloUsuarios" data-t>Usuários da empresa</h1>
       <form id="formUsuario" class="cartao formulario" novalidate>
-        <h2>Convidar usuário</h2>
-        <p class="ajuda">Sem senha: o Farol gera uma senha temporária, que aparece uma vez para você passar à pessoa; no primeiro acesso ela
-          cria a própria. Só nome, e-mail da empresa, perfil e municípios: nada de CPF, endereço ou telefone pessoal.</p>
-        <label>Nome <input id="novoNome" required maxlength="120"></label>
-        <label>E-mail da empresa <input type="email" id="novoEmail" required></label>
-        <label>Perfil <select id="novoPerfil"></select></label>
-        <label>Municípios em que atua (Ctrl para escolher vários) <select id="novoMunicipios" multiple size="5"></select></label>
-        <button type="submit" class="prim">Convidar e gerar senha temporária</button>
+        <h2 data-t>Convidar usuário</h2>
+        <p class="ajuda" data-t>Sem senha: o Farol gera uma senha temporária, que aparece uma vez para você passar à pessoa; no primeiro acesso ela cria a própria. Só nome, e-mail da empresa, perfil e municípios: nada de CPF, endereço ou telefone pessoal.</p>
+        <label><span data-t>Nome (obrigatório)</span> <input id="novoNome" required maxlength="120" autocomplete="off"></label>
+        <label><span data-t>E-mail da empresa (obrigatório)</span> <input type="email" id="novoEmail" required autocomplete="off"></label>
+        <label><span data-t>Perfil</span> <select id="novoPerfil"></select></label>
+        <label><span data-t>Municípios em que atua (Ctrl para escolher vários)</span> <select id="novoMunicipios" multiple size="5"></select></label>
+        <button type="submit" class="prim" data-t>Convidar e gerar senha temporária</button>
         <p id="estadoUsuario" class="estado" role="status" aria-live="polite"></p>
       </form>
       <div id="listaUsuarios" class="lista"></div>
@@ -221,32 +224,31 @@
 
     <!-- Rádios da empresa (Admin da empresa) -->
     <section id="vista-radios" class="vista" hidden aria-labelledby="tituloRadios">
-      <h1 id="tituloRadios">Rádios</h1>
-      <p class="ajuda">As rádios que leem o aviso e o que cada uma alcança (municípios inteiros ou comunidades). O Farol sugere a rádio pelas
-        comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
+      <h1 id="tituloRadios" data-t>Rádios</h1>
+      <p class="ajuda" data-t>As rádios que leem o aviso e o que cada uma alcança (municípios inteiros ou comunidades). O Farol sugere a rádio pelas comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
       <form id="formRadio" class="cartao formulario" novalidate>
         <h2 id="formRadioTitulo">Cadastrar rádio</h2>
-        <label>Nome da rádio (obrigatório) <input id="radNome" maxlength="80" autocomplete="off" required></label>
-        <p class="ajuda">Informe o e-mail ou o WhatsApp da rádio (pelo menos um).</p>
+        <label><span data-t>Nome da rádio (obrigatório)</span> <input id="radNome" maxlength="80" autocomplete="off" required></label>
+        <p class="ajuda" data-t>Informe o e-mail ou o WhatsApp da rádio (pelo menos um).</p>
         <div class="campos campos-2">
-          <label>E-mail da rádio <input type="email" id="radEmail" autocomplete="off"></label>
-          <label>WhatsApp da rádio (com DDD) <input id="radWhats" inputmode="tel" autocomplete="off"></label>
+          <label><span data-t>E-mail da rádio</span> <input type="email" id="radEmail" autocomplete="off"></label>
+          <label><span data-t>WhatsApp da rádio (com DDD)</span> <input id="radWhats" inputmode="tel" autocomplete="off"></label>
         </div>
         <div class="campos campos-2">
-          <label>Valor padrão (R$) <input id="radValor" inputmode="decimal" autocomplete="off"></label>
-          <label>Cobrança <select id="radCobranca"><option value="fechado">valor fechado pelo aviso</option><option value="minuto">por minuto no ar</option></select></label>
+          <label><span data-t>Valor padrão (R$)</span> <input id="radValor" inputmode="decimal" autocomplete="off"></label>
+          <label><span data-t>Cobrança</span> <select id="radCobranca"><option value="fechado" data-t>valor fechado pelo aviso</option><option value="minuto" data-t>por minuto no ar</option></select></label>
         </div>
-        <label>Municípios inteiros que alcança (Ctrl para escolher vários) <select id="radMunicipios" multiple size="5"></select></label>
-        <label>Comunidades de um município <select id="radMunCom"><option value="">Escolha o município</option></select></label>
-        <div id="radComunidades" class="checks" aria-label="Comunidades que a rádio alcança"></div>
-        <label class="confirmar" for="radAtiva"><input type="checkbox" id="radAtiva" checked><span>Rádio ativa (aparece no envio)</span></label>
+        <label><span data-t>Municípios inteiros que alcança (Ctrl para escolher vários)</span> <select id="radMunicipios" multiple size="5"></select></label>
+        <label><span data-t>Comunidades de um município</span> <select id="radMunCom"><option value="" data-t>Escolha o município</option></select></label>
+        <div id="radComunidades" class="checks" role="group" aria-label="Comunidades que a rádio alcança" data-t-aria-label="Comunidades que a rádio alcança"></div>
+        <label class="confirmar" for="radAtiva"><input type="checkbox" id="radAtiva" checked><span data-t>Rádio ativa (aparece no envio)</span></label>
         <div class="acoes"><button type="submit" class="prim" id="radSalvar">Cadastrar rádio</button>
-          <button type="button" id="radCancelar" hidden>Cancelar a edição</button></div>
+          <button type="button" id="radCancelar" hidden data-t>Cancelar a edição</button></div>
         <p id="estadoRadio" class="estado" role="status" aria-live="polite"></p>
       </form>
       <section class="cartao" aria-labelledby="tituloPedidos">
-        <h2 id="tituloPedidos">Pedidos de rádio</h2>
-        <p class="ajuda">Rádios que o Operador pediu para cadastrar. Atender abre o cadastro já preenchido; recusar pede o motivo, que o Operador vê.</p>
+        <h2 id="tituloPedidos" data-t>Pedidos de rádio</h2>
+        <p class="ajuda" data-t>Rádios que o Operador pediu para cadastrar. Atender abre o cadastro já preenchido; recusar pede o motivo, que o Operador vê.</p>
         <div id="listaPedidos" class="lista"></div>
       </section>
       <div id="listaRadios" class="lista"></div>
@@ -254,49 +256,54 @@
 
     <!-- Configurações da empresa (Admin da empresa) -->
     <section id="vista-configuracoes" class="vista" hidden aria-labelledby="tituloConfig">
-      <h1 id="tituloConfig">Configurações da empresa</h1>
+      <h1 id="tituloConfig" data-t>Configurações da empresa</h1>
       <form id="formConfig" class="cartao formulario" novalidate>
-        <h2>Mensagem da rádio</h2>
-        <label>Modelo da mensagem <textarea id="cfgModelo" rows="6" maxlength="1500"></textarea></label>
+        <h2 data-t>Mensagem da rádio</h2>
+        <label><span data-t>Idioma padrão do aviso</span> <select id="cfgIdioma"></select></label>
+        <label><span data-t>Modelo da mensagem em português</span> <textarea id="cfgModelo" rows="6" maxlength="1500" lang="pt-BR"></textarea></label>
+        <p class="previa" id="cfgPrevia" lang="pt-BR" aria-live="polite"></p>
+        <label><span data-t>Modelo da mensagem em inglês</span> <textarea id="cfgModeloEn" rows="5" maxlength="1500" lang="en"></textarea></label>
+        <p class="previa" id="cfgPreviaEn" lang="en" aria-live="polite"></p>
+        <label><span data-t>Modelo da mensagem em espanhol</span> <textarea id="cfgModeloEs" rows="5" maxlength="1500" lang="es"></textarea></label>
+        <p class="previa" id="cfgPreviaEs" lang="es" aria-live="polite"></p>
         <p class="ajuda" id="cfgCampos"></p>
-        <p class="previa" id="cfgPrevia" aria-live="polite"></p>
         <div class="campos campos-2">
-          <label>Nome da empresa na mensagem <input id="cfgNome" maxlength="120"></label>
-          <label>Telefone de atendimento <input id="cfgTelefone" maxlength="40"></label>
+          <label><span data-t>Nome da empresa na mensagem</span> <input id="cfgNome" maxlength="120" autocomplete="organization"></label>
+          <label><span data-t>Telefone de atendimento</span> <input id="cfgTelefone" maxlength="40" autocomplete="off" inputmode="tel"></label>
         </div>
-        <h2>Planilha e prazos</h2>
+        <h2 data-t>Planilha e prazos</h2>
         <div class="campos">
-          <label>Limite de rejeição (%) <input type="number" id="cfgLimite" min="0" max="50" step="0.5"></label>
-          <label>Fuso UTM <select id="cfgFuso"></select></label>
-          <label>Antecedência interna (dias) <input type="number" id="cfgAntecedencia" min="1" max="90" step="1"></label>
+          <label><span data-t>Limite de rejeição (%)</span> <input type="number" id="cfgLimite" min="0" max="50" step="0.5"></label>
+          <label><span data-t>Fuso UTM</span> <select id="cfgFuso"></select></label>
+          <label><span data-t>Antecedência interna (dias)</span> <input type="number" id="cfgAntecedencia" min="1" max="90" step="1"></label>
         </div>
-        <h2>Relatórios e alertas</h2>
+        <h2 data-t>Relatórios e alertas</h2>
         <div class="campos">
-          <label>Orçamento anual de rádio (R$; vazio: sem orçamento) <input type="number" id="cfgOrcamento" min="0" step="0.01" inputmode="decimal"></label>
-          <label>Alerta de preço (% acima da média da rádio) <input type="number" id="cfgAlertaPreco" min="0" max="500" step="1"></label>
-          <label>Repetição: desligamentos <input type="number" id="cfgRepN" min="2" max="50" step="1"></label>
-          <label>Repetição: em quantos dias <input type="number" id="cfgRepDias" min="7" max="365" step="1"></label>
+          <label><span data-t>Orçamento anual de rádio (R$; vazio: sem orçamento)</span> <input type="number" id="cfgOrcamento" min="0" step="0.01" inputmode="decimal"></label>
+          <label><span data-t>Alerta de preço (% acima da média da rádio)</span> <input type="number" id="cfgAlertaPreco" min="0" max="500" step="1"></label>
+          <label><span data-t>Repetição: desligamentos</span> <input type="number" id="cfgRepN" min="2" max="50" step="1"></label>
+          <label><span data-t>Repetição: em quantos dias</span> <input type="number" id="cfgRepDias" min="7" max="365" step="1"></label>
         </div>
-        <div class="acoes"><button type="submit" class="prim">Salvar</button><button type="button" id="cfgPadrao">Voltar ao modelo padrão</button></div>
+        <div class="acoes"><button type="submit" class="prim" data-t>Salvar</button><button type="button" id="cfgPadrao" data-t>Voltar aos modelos padrão</button></div>
         <p id="estadoConfig" class="estado" role="status" aria-live="polite"></p>
       </form>
     </section>
 
     <!-- Empresas (Admin do Farol) -->
     <section id="vista-empresas" class="vista" hidden aria-labelledby="tituloEmpresas">
-      <h1 id="tituloEmpresas">Empresas</h1>
+      <h1 id="tituloEmpresas" data-t>Empresas</h1>
       <form id="formEmpresa" class="cartao formulario" novalidate>
         <h2 id="formEmpresaTitulo">Cadastrar empresa</h2>
-        <label>Nome (obrigatório) <input id="empNome" required maxlength="120" autocomplete="organization"></label>
-        <label>CNPJ (opcional; aceita o alfanumérico) <input id="empCnpj" maxlength="18" autocomplete="off"></label>
+        <label><span data-t>Nome (obrigatório)</span> <input id="empNome" required maxlength="120" autocomplete="organization"></label>
+        <label><span data-t>CNPJ (opcional; aceita o alfanumérico)</span> <input id="empCnpj" maxlength="18" autocomplete="off"></label>
         <div class="campos campos-2">
-          <label id="empSiglaRotulo">Sigla (obrigatória) <input id="empSigla" required maxlength="10" autocomplete="off"></label>
-          <label>Domínio dos e-mails (obrigatório) <input id="empDominio" required placeholder="empresa.com.br" autocomplete="off"></label>
+          <label id="empSiglaRotulo"><span data-t>Sigla (obrigatória)</span> <input id="empSigla" required maxlength="10" autocomplete="off"></label>
+          <label><span data-t>Domínio dos e-mails (obrigatório)</span> <input id="empDominio" required placeholder="empresa.com.br" autocomplete="off"></label>
         </div>
-        <label id="empAdminNomeRotulo">Nome do primeiro admin (obrigatório) <input id="empAdminNome" required maxlength="120" autocomplete="off"></label>
-        <label id="empAdminEmailRotulo">E-mail do primeiro admin (obrigatório) <input type="email" id="empAdminEmail" required autocomplete="off"></label>
+        <label id="empAdminNomeRotulo"><span data-t>Nome do primeiro admin (obrigatório)</span> <input id="empAdminNome" required maxlength="120" autocomplete="off"></label>
+        <label id="empAdminEmailRotulo"><span data-t>E-mail do primeiro admin (obrigatório)</span> <input type="email" id="empAdminEmail" required autocomplete="off"></label>
         <div class="acoes"><button type="submit" class="prim" id="empSalvar">Cadastrar empresa</button>
-          <button type="button" id="empCancelar" hidden>Cancelar a edição</button></div>
+          <button type="button" id="empCancelar" hidden data-t>Cancelar a edição</button></div>
         <p id="estadoEmpresa" class="estado" role="status" aria-live="polite"></p>
       </form>
       <div id="listaEmpresas" class="lista"></div>
@@ -304,28 +311,27 @@
 
     <!-- Registro de atividades -->
     <section id="vista-registro" class="vista" hidden aria-labelledby="tituloRegistro">
-      <h1 id="tituloRegistro">Auditoria</h1>
-      <p class="ajuda">Cada ação vira uma linha, com o nome e o perfil de quem fez. Nada é apagado nem alterado, e cada linha
-        guarda o código da anterior: qualquer adulteração quebra a corrente.</p>
-      <div class="acoes"><button type="button" id="verificarAuditoria">Conferir a integridade</button></div>
+      <h1 id="tituloRegistro" data-t>Auditoria</h1>
+      <p class="ajuda" data-t>Cada ação vira uma linha, com o nome e o perfil de quem fez. Nada é apagado nem alterado, e cada linha guarda o código da anterior: qualquer adulteração quebra a corrente.</p>
+      <div class="acoes"><button type="button" id="verificarAuditoria" data-t>Conferir a integridade</button></div>
       <p id="estadoAuditoria" class="estado" role="status" aria-live="polite"></p>
       <form id="formAuditoria" class="cartao filtros-relatorio" novalidate>
         <h2 id="tituloRelAuditoria">Relatório de auditoria</h2>
-        <label>Mês <select id="audMes"></select></label>
-        <label id="audEmpresaRotulo" hidden>Empresa (sigla) <input id="audEmpresa" maxlength="10" autocomplete="off" placeholder="todas"></label>
-        <label>Pessoa (nome) <input id="audPessoa" maxlength="120" autocomplete="off" placeholder="todas"></label>
-        <label>Tipo de ação <select id="audCategoria">
-          <option value="">Todas</option><option value="acesso">Acessos</option><option value="planilha">Planilha</option>
-          <option value="aviso">Avisos</option><option value="radio">Rádios e envios</option><option value="cadastro">Cadastros e configuração</option>
-          <option value="relatorio">Relatórios</option><option value="outros">Outras</option>
+        <label><span data-t>Mês</span> <select id="audMes"></select></label>
+        <label id="audEmpresaRotulo" hidden><span data-t>Empresa (sigla)</span> <input id="audEmpresa" maxlength="10" autocomplete="off" placeholder="todas" data-t-placeholder="todas"></label>
+        <label><span data-t>Pessoa (nome)</span> <input id="audPessoa" maxlength="120" autocomplete="off" placeholder="todas" data-t-placeholder="todas"></label>
+        <label><span data-t>Tipo de ação</span> <select id="audCategoria">
+          <option value="" data-t>Todas</option><option value="acesso" data-t>Acessos</option><option value="planilha" data-t>Planilha</option>
+          <option value="aviso" data-t>Avisos</option><option value="radio" data-t>Rádios e envios</option><option value="cadastro" data-t>Cadastros e configuração</option>
+          <option value="relatorio" data-t>Relatórios</option><option value="outros" data-t>Outras</option>
         </select></label>
-        <label class="confirmar" for="audAcessos"><input type="checkbox" id="audAcessos"><span>Só acessos (entrar, sair, senha)</span></label>
-        <div class="acoes"><button type="button" data-aud="tela" class="prim">Ver o relatório</button><button type="button" data-aud="pdf">Baixar PDF</button>
-          <button type="button" data-aud="csv">Baixar CSV</button><button type="button" data-aud="json">Baixar JSON</button></div>
+        <label class="confirmar" for="audAcessos"><input type="checkbox" id="audAcessos"><span data-t>Só acessos (entrar, sair, senha)</span></label>
+        <div class="acoes"><button type="button" data-aud="tela" class="prim" data-t>Ver o relatório</button><button type="button" data-aud="pdf" data-t>Baixar PDF</button>
+          <button type="button" data-aud="csv" data-t>Baixar CSV</button><button type="button" data-aud="json" data-t>Baixar JSON</button></div>
         <div id="audEnviar" class="enviar-relatorio" hidden>
-          <label>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)
+          <label><span data-t>Enviar o PDF por e-mail (até 5 endereços do domínio da empresa)</span>
             <input id="audDestinos" maxlength="400" autocomplete="off" inputmode="email" placeholder="auditoria@empresa"></label>
-          <button type="button" data-aud="enviar">Enviar</button>
+          <button type="button" data-aud="enviar" data-t>Enviar</button>
         </div>
       </form>
       <div id="docAuditoria" class="relatorio"></div>
@@ -333,32 +339,32 @@
     </section>
   </section>
 
-  <section class="mapa-area" aria-label="Mapa">
-    <div id="mapa" role="region" aria-label="Mapa dos municípios da concessão e das comunidades afetadas"></div>
-    <form class="ir-para" id="irPara" aria-label="Ir para um município" hidden>
-      <label>Estado <select id="filtroUf"></select></label>
-      <label>Município <select id="filtroMunicipio"></select></label>
+  <section class="mapa-area" aria-label="Mapa" data-t-aria-label="Mapa">
+    <div id="mapa" role="region" aria-label="Mapa dos municípios da concessão e das comunidades afetadas" data-t-aria-label="Mapa dos municípios da concessão e das comunidades afetadas"></div>
+    <form class="ir-para" id="irPara" aria-label="Ir para um município" data-t-aria-label="Ir para um município" hidden>
+      <label><span data-t>Estado</span> <select id="filtroUf"></select></label>
+      <label><span data-t>Município</span> <select id="filtroMunicipio"></select></label>
     </form>
-    <ul class="legenda" id="legenda" aria-label="Legenda do mapa">
+    <ul class="legenda" id="legenda" aria-label="Legenda do mapa" data-t-aria-label="Legenda do mapa">
       <li class="legenda-topo"><button type="button" id="botaoLegenda" aria-expanded="true" aria-controls="legenda">
         <span aria-hidden="true" class="seta">▾</span> <span id="botaoLegendaTexto">Minimizar legenda</span></button></li>
-      <li><span class="amostra inteira"></span>Comunidade inteira</li>
-      <li><span class="amostra parte"></span>Parte da comunidade</li>
-      <li><span class="amostra vizinha"></span>Localidade vizinha <button type="button" class="dica" data-dica="vizinha" aria-label="O que é localidade vizinha?">?</button></li>
-      <li><span class="amostra municipio"></span>Município afetado</li>
-      <li class="legenda-painel" hidden><span class="amostra painel-amostra"></span>Mais avisos (dashboard)</li>
-      <li><span class="amostra outra"></span>Outras comunidades</li>
+      <li><span class="amostra inteira"></span><span data-t>Comunidade inteira</span></li>
+      <li><span class="amostra parte"></span><span data-t>Parte da comunidade</span></li>
+      <li><span class="amostra vizinha"></span><span data-t>Localidade vizinha</span> <button type="button" class="dica" data-dica="vizinha" aria-label="O que é localidade vizinha?" data-t-aria-label="O que é localidade vizinha?">?</button></li>
+      <li><span class="amostra municipio"></span><span data-t>Município afetado</span></li>
+      <li class="legenda-painel" hidden><span class="amostra painel-amostra"></span><span data-t>Mais avisos (dashboard)</span></li>
+      <li><span class="amostra outra"></span><span data-t>Outras comunidades</span></li>
       <li class="legenda-rede">
-        <span id="legendaRede" hidden><span><span class="amostra rede"></span>Média tensão (fictícia)</span>
-          <span><span class="amostra chave"></span>Chave (fictícia)</span><span><span class="amostra subestacao-amostra"></span>Subestação (fictícia)</span></span>
+        <span id="legendaRede" hidden><span><span class="amostra rede"></span><span data-t>Média tensão (fictícia)</span></span>
+          <span><span class="amostra chave"></span><span data-t>Chave (fictícia)</span></span><span><span class="amostra subestacao-amostra"></span><span data-t>Subestação (fictícia)</span></span></span>
         <button type="button" id="botaoRede" aria-pressed="true">Esconder rede fictícia</button></li>
       <li id="itemCalor" hidden><button type="button" id="botaoCalor" aria-pressed="false">Mapa de calor (12 meses)</button>
         <span id="legendaCalor" class="legenda-calor" hidden><span>1</span><span class="escala" aria-hidden="true"></span>
-          <span id="calorMax"></span> desligamento(s) por comunidade · clique numa comunidade para ver a ficha</span></li>
+          <span id="calorMax"></span> <span data-t>desligamento(s) por comunidade · clique numa comunidade para ver a ficha</span></span></li>
       <li class="legenda-ucs" hidden>
-        <span><span class="amostra uc"></span>UC da planilha</span>
-        <span><span class="amostra uc corrigida"></span>UC com coordenada corrigida</span>
-        <span><span class="amostra uc fora"></span>UC fora da concessão</span>
+        <span><span class="amostra uc"></span><span data-t>UC da planilha</span></span>
+        <span><span class="amostra uc corrigida"></span><span data-t>UC com coordenada corrigida</span></span>
+        <span><span class="amostra uc fora"></span><span data-t>UC fora da concessão</span></span>
         <button type="button" id="botaoUcs" aria-pressed="true">Esconder UCs</button></li>
     </ul>
   </section>
@@ -367,9 +373,9 @@
 <!-- Ajuda: o caminho do perfil que entrou -->
 <div id="caixaAjuda" class="caixa-senha" role="dialog" aria-modal="true" aria-labelledby="ajudaTitulo" hidden>
   <div class="cartao ajuda-cartao">
-    <h2 id="ajudaTitulo">Ajuda</h2>
+    <h2 id="ajudaTitulo" data-t>Ajuda</h2>
     <div id="ajudaCorpo"></div>
-    <div class="acoes"><button type="button" class="prim" id="ajudaFechar">Fechar</button></div>
+    <div class="acoes"><button type="button" class="prim" id="ajudaFechar" data-t>Fechar</button></div>
   </div>
 </div>
 <!-- Explicação dos termos (botões "?") -->
@@ -378,11 +384,11 @@
 <!-- Senha temporária: aparece uma vez, para o admin passar ao usuário -->
 <div id="caixaSenha" class="caixa-senha" role="alertdialog" aria-labelledby="caixaTitulo" hidden>
   <div class="cartao">
-    <h2 id="caixaTitulo">Senha temporária</h2>
+    <h2 id="caixaTitulo" data-t>Senha temporária</h2>
     <p id="caixaTexto"></p>
     <p class="senha-temp"><code id="caixaSenhaValor"></code></p>
-    <p class="ajuda">Ela não aparece de novo. Passe ao usuário por um canal seguro; no primeiro acesso ele cria a própria senha.</p>
-    <div class="acoes"><button type="button" id="caixaCopiar">Copiar</button><button type="button" class="prim" id="caixaFechar">Fechar</button></div>
+    <p class="ajuda" data-t>Ela não aparece de novo. Passe ao usuário por um canal seguro; no primeiro acesso ele cria a própria senha.</p>
+    <div class="acoes"><button type="button" id="caixaCopiar" data-t>Copiar</button><button type="button" class="prim" id="caixaFechar" data-t>Fechar</button></div>
   </div>
 </div>
 

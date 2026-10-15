@@ -26,9 +26,9 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   - [x] J2 teste de ponta a ponta por item e por perfil
   - [x] J3 erros corrigidos com teste
   - [x] J4 cadastro de rádio só do Admin da empresa + pedidos de rádio
-- [ ] Fase K: idiomas (pt-BR, en, es)
-  - [ ] K1 aviso, mensagem, tipos, PDF, e-mail, comprovante e áudio nos 3 idiomas
-  - [ ] K2 telas nos 3 idiomas
+- [x] Fase K: idiomas (pt-BR, en, es)
+  - [x] K1 aviso, mensagem, tipos, PDF, e-mail, comprovante e áudio nos 3 idiomas
+  - [x] K2 telas nos 3 idiomas
 - [ ] Fase I: acessibilidade e todos os equipamentos
   - [ ] I1 layout por tamanho de tela
   - [ ] I2 texto, cor e movimento
@@ -118,3 +118,27 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Editar empresa muda nome, domínio e CNPJ; a sigla e os e-mails já cadastrados não mudam.
 - Município da concessão sem rede fictícia: 200 com null (antes 404).
 - O banco ganha a coluna aviso.pacote_hash e a tabela pedido_radio pela semente (como nas fases anteriores): rodar `uv run python -m comunidades.semente` no banco local e no de produção.
+
+### Fase K (15/10/2026)
+- K1 (servidor, commit 96464f1): modelo da mensagem por idioma e idioma padrão da empresa; aviso do algoritmo e mensagem com data e
+  hora no formato do idioma (português idêntico ao de antes); tipos, PDF da rádio, e-mail, página de confirmação e comprovante no
+  idioma do aviso; voz en_US-ljspeech (domínio público, MD5 conferido); relatórios e erros da API no idioma de quem pede
+  (X-Farol-Idioma); preferências do usuário (PUT /api/eu/preferencias). teste_idiomas 34/34.
+- K2 (tela): dicionário apresentacao/app/textos.js (a chave é o texto em português; 680 textos en/es), index.html com data-t,
+  seletor de idioma no topo (também em Entrar; sessão antes do login, perfil depois), Intl, <html lang>, lang no aviso e no
+  comparativo, aviso na tela quando o idioma do aviso não tem voz. Testes: teste_textos (447 textos usados, nenhum sem tradução),
+  teste_idiomas_tela 8/8 (todas as telas do Admin da empresa em en e es sem português sobrando), teste_app 110/110 e
+  teste_verificacao 110/110 em português.
+
+## Decisões da Fase K (tomadas sem perguntar: a opção mais segura e mais simples)
+- Espanhol sem áudio: todas as vozes em espanhol do repositório oficial são ajustes da voz "lessac" (dados com licença só de
+  pesquisa) ou não dizem de onde partiram; FAROL_VOZ_ES liga a davefx se a empresa aceitar. A voz pt_BR em uso tem a mesma origem
+  lessac: registrado no ORIGEM.md para revisão antes de uso comercial.
+- Inglês: en_US-ljspeech (dados LJ Speech em domínio público, treinada do zero).
+- A data e o horário continuam guardados no formato brasileiro ("20/11", "8h às 14h"); o idioma do aviso só muda como saem.
+- O aviso do algoritmo em espanhol mantém "20/11, de 8:00 a 14:00" (as regras do mapa, com testes de referência do passo 12);
+  a mensagem da rádio em espanhol usa "20 de noviembre".
+- Mensagens de erro da API: catálogo das fixas e das com partes variáveis (apresentacao/traducao.py); o que não estiver no catálogo
+  fica em português. Relatórios: o documento pronto é traduzido por catálogo (as contas não mudam); em inglês, R$ e % com ponto decimal.
+- Nomes de comunidade, município, pessoa e rádio nunca são traduzidos; o texto do "Outro" vai como foi digitado.
+- O idioma da tela só usa a sessão do navegador antes do login (nada fica no computador) e depois o perfil do usuário.

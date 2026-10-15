@@ -6,6 +6,15 @@
 // Organização: Model (estado e regras puras), View (desenha a partir do estado) e Controller (eventos).
 
 // ======================= Model: estado da tela e regras puras (não toca no HTML) =======================
+// Idioma da tela (Fase K): a chave é o próprio texto em português; textos.js traz o inglês e o espanhol.
+// Partes variáveis entre chaves: t('Planilha: {nome}', { nome }). Sem tradução, fica o português.
+let IDIOMA = 'pt-BR';
+const IDIOMAS_TELA = ['pt-BR', 'en', 'es'];
+function t(chave, v = {}) {
+  const texto = IDIOMA === 'pt-BR' ? chave : (TEXTOS[IDIOMA]?.[chave] ?? chave);
+  return texto.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m));
+}
+
 const estado = {
   usuario: null,           // /api/eu (perfil, empresa, ações permitidas)
   tela: 'carregando',      // carregando | entrar | senha | app
@@ -65,7 +74,7 @@ const pode = acao => !!estado.usuario?.acoes.includes(acao);
 const vistasDoPerfil = () => MENUS[estado.usuario?.perfil] || [];
 const menuAtual = v => vistasDoPerfil().some(([x]) => x === v) ? v : RELATORIOS.some(([x]) => x === v) ? 'relatorios' : v;
 
-// a ajuda de cada perfil: o caminho, na ordem em que se usa
+// a ajuda de cada perfil: o caminho, na ordem em que se usa (os textos são chaves do dicionário)
 const AJUDA = {
   operador: [
     ['Novo aviso', 'Escolha a planilha das UCs afetadas (.xlsx ou .csv, até 10 MB) e, no passo 2, a data, o horário e o tipo do desligamento.'],
@@ -109,12 +118,13 @@ function montarMensagem(modelo, v) {
 const FUSOS_UTM = [[31978, 'UTM 18S'], [31979, 'UTM 19S'], [31980, 'UTM 20S'], [31981, 'UTM 21S'], [31982, 'UTM 22S'], [31983, 'UTM 23S'],
   [31984, 'UTM 24S'], [31985, 'UTM 25S']];
 const municipiosDaConcessao = () => (estado.concessao?.features || []).map(f => [f.properties.codigo_ibge, `${f.properties.nome}/${f.properties.uf}`])
-  .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  .sort((a, b) => a[1].localeCompare(b[1], IDIOMA));
 const nomeMunicipio = cod => municipiosDaConcessao().find(([c]) => c === cod)?.[1] || cod;
 const temaAtual = () => document.documentElement.dataset.tema || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
 
-const fmt = n => Number(n).toLocaleString('pt-BR');
-const dataHora = iso => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+// números, datas e moeda no formato do idioma da tela (Intl); o valor continua em reais
+const fmt = n => Number(n).toLocaleString(IDIOMA);
+const dataHora = iso => new Date(iso).toLocaleString(IDIOMA, { dateStyle: 'short', timeStyle: 'short' });
 
 // "08:00" -> "8h", "08:30" -> "8h30" (como o aviso fala)
 function horaTexto(hhmm) {
@@ -126,55 +136,59 @@ const dataTexto = iso => { const [, m, d] = iso.split('-'); return `${d}/${m}`; 
 const dataLonga = iso => { const [a, m, d] = iso.split('-'); return `${d}/${m}/${a}`; };
 
 function validarArquivo(arquivo) {
-  if (!arquivo) return 'Escolha a planilha das UCs afetadas.';
-  if (!/\.(csv|xlsx)$/i.test(arquivo.name)) return 'A planilha tem de ser .csv ou .xlsx.';
-  if (estado.config && arquivo.size > estado.config.limites.bytes) return 'A planilha passa de 10 MB.';
+  if (!arquivo) return t('Escolha a planilha das UCs afetadas.');
+  if (!/\.(csv|xlsx)$/i.test(arquivo.name)) return t('A planilha tem de ser .csv ou .xlsx.');
+  if (estado.config && arquivo.size > estado.config.limites.bytes) return t('A planilha passa de 10 MB.');
   return null;
 }
 
 // os campos do passo 2 com problema: [[id do campo, texto], ...] (a planilha é conferida à parte, no passo 1)
 function validarFormulario({ data, inicio, fim, tipo, tipoOutro }) {
-  return [!data && ['data', 'Informe a data do desligamento.'], !inicio && ['inicio', 'Informe o horário de início.'],
-    !fim && ['fim', 'Informe o horário de fim.'], inicio && fim && fim <= inicio && ['fim', 'O fim tem de ser depois do início.'],
-    tipo === 'outro' && tipoOutro.trim().length < 3 && ['tipoOutro', 'Descreva o motivo do desligamento (de 3 a 200 caracteres).']].filter(Boolean);
+  return [!data && ['data', t('Informe a data do desligamento.')], !inicio && ['inicio', t('Informe o horário de início.')],
+    !fim && ['fim', t('Informe o horário de fim.')], inicio && fim && fim <= inicio && ['fim', t('O fim tem de ser depois do início.')],
+    tipo === 'outro' && tipoOutro.trim().length < 3 && ['tipoOutro', t('Descreva o motivo do desligamento (de 3 a 200 caracteres).')]].filter(Boolean);
 }
 
 // "Solicitado por Fulana (Operador) em 14/10/2026 às 10:32 · código de verificação FRL-…" (o nome vem do login)
 function solicitadoTexto(r) {
   if (!r?.id || !r.criado_em) return '';
   const q = new Date(r.criado_em);
-  return `Solicitado por ${r.usuario || '—'}${r.usuario_perfil ? ` (${r.usuario_perfil})` : ''} em ${q.toLocaleDateString('pt-BR')} às `
-    + `${q.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}${r.codigo ? ` · código de verificação ${r.codigo}` : ''}`;
+  return t('Solicitado por {nome}{perfil} em {data} às {hora}{codigo}', { nome: r.usuario || '—', perfil: r.usuario_perfil ? ` (${t(r.usuario_perfil)})` : '',
+    data: q.toLocaleDateString(IDIOMA), hora: q.toLocaleTimeString(IDIOMA, { hour: '2-digit', minute: '2-digit' }),
+    codigo: r.codigo ? t(' · código de verificação {codigo}', { codigo: r.codigo }) : '' });
 }
 
 // [campo, problema] da senha nova, ou null
 function validarSenhaNova(nova, repetida) {
-  if (nova.length < 12) return ['senhaNova', 'A senha nova precisa ter pelo menos 12 caracteres.'];
-  if (nova !== repetida) return ['senhaNova2', 'As duas senhas novas não são iguais.'];
+  if (nova.length < 12) return ['senhaNova', t('A senha nova precisa ter pelo menos 12 caracteres.')];
+  if (nova !== repetida) return ['senhaNova2', t('As duas senhas novas não são iguais.')];
   return null;
 }
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/i;   // a mesma regra do servidor (nucleo/acesso.py)
 
-// o áudio vale enquanto o texto não muda; só em português por enquanto
+// o áudio vale enquanto o texto não muda
 const audioAtual = codigo => estado.audios[codigo]?.texto === estado.avisos[codigo] ? estado.audios[codigo] : null;
 // o servidor pode estar sem a voz (FAROL_AUDIO=0, em produção no plano gratuito)
 const audioLigado = () => estado.config?.audio !== false;
+// a voz do idioma do aviso existe? (espanhol: sem voz com licença clara; a tela avisa)
+const vozDoIdioma = idioma => (estado.config?.audio_idiomas || ['pt-BR']).includes(idioma);
 // gerar o áudio é de quem gera o aviso (Consulta só lê; a API também recusa)
-const temAudio = () => audioLigado() && pode('gerar_aviso') && estado.formulario?.idioma === 'pt-BR';
+const temAudio = () => audioLigado() && pode('gerar_aviso') && vozDoIdioma(estado.formulario?.idioma || 'pt-BR');
 
 // 754 s -> "12 min 34 s"
-const tempoNoAr = s => s < 60 ? `${fmt(s)} s` : `${fmt(Math.floor(s / 60))} min${s % 60 ? ` ${s % 60} s` : ''}`;
+const tempoNoAr = s => s < 60 ? t('{n} s', { n: fmt(s) }) : s % 60 ? t('{min} min {s} s', { min: fmt(Math.floor(s / 60)), s: s % 60 })
+  : t('{min} min', { min: fmt(Math.floor(s / 60)) });
 
 const palavras = texto => texto.trim().split(/\s+/).filter(Boolean).length;
 const segundos = texto => Math.round(palavras(texto) / (estado.config?.palavras_por_segundo || 2.5));
 
 // como a comunidade entra no aviso: inteira, parte ou localidade vizinha (fragmento)
 const situacao = c => c.fragmento ? 'vizinha' : c.parcial ? 'parte' : 'inteira';
-const ROTULO = { inteira: 'inteira', parte: 'parte', vizinha: 'localidade vizinha' };
+const ROTULO = { inteira: 'inteira', parte: 'parte', vizinha: 'localidade vizinha' };   // chaves do dicionário
 // homônimos vêm como "Piacatuba (Tebas)"; na tela, o nome sem o sufixo e o distrito uma vez só
 // (o distrito com o nome do município é a "Sede", como no aviso)
 const semSufixo = nome => nome.replace(/ \(.*\)$/, '');
-const distritoTexto = (c, m) => c.distrito === m.nome ? 'Sede' : c.distrito;
+const distritoTexto = (c, m) => c.distrito === m.nome ? t('Sede') : c.distrito;
 const nomeComDistrito = (c, m) => `${semSufixo(c.nome)} (${distritoTexto(c, m)})`;
 const homonimo = c => / \(.*\)$/.test(c.nome);
 
@@ -187,15 +201,15 @@ const passoMaximo = () => gerado() ? 4 : temResultadoNovo() ? 3 : estado.arquivo
 const MAX_JUSTIFICATIVA = 300;
 function problemaParaGerar() {
   const c = estado.resultado?.conferencia;
-  if (!c || !estado.resultado.pacote) return 'Confira a planilha primeiro.';
-  if (c.vital_bloqueio.length) return 'Bloqueado: há equipamento vital com problema. Corrija a planilha e importe de novo.';
+  if (!c || !estado.resultado.pacote) return t('Confira a planilha primeiro.');
+  if (c.vital_bloqueio.length) return t('Bloqueado: há equipamento vital com problema. Corrija a planilha e importe de novo.');
   const j = estado.justificativa.trim();
-  if (c.rejeicao.acima && !j) return `Mais de ${pct(c.rejeicao.limite)} das linhas foram rejeitadas: escreva a justificativa.`;
-  if (j.length > MAX_JUSTIFICATIVA) return `A justificativa pode ter no máximo ${MAX_JUSTIFICATIVA} caracteres.`;
-  if (!estado.conferi) return 'Marque "Conferi os números e o mapa" para gerar o aviso.';
+  if (c.rejeicao.acima && !j) return t('Mais de {limite} das linhas foram rejeitadas: escreva a justificativa.', { limite: pct(c.rejeicao.limite) });
+  if (j.length > MAX_JUSTIFICATIVA) return t('A justificativa pode ter no máximo {n} caracteres.', { n: MAX_JUSTIFICATIVA });
+  if (!estado.conferi) return t('Marque "Conferi os números e o mapa" para gerar o aviso.');
   return null;
 }
-const pct = f => `${(f * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+const pct = f => `${(f * 100).toLocaleString(IDIOMA, { maximumFractionDigits: 1 })}%`;
 
 // o texto da rádio: o final guardado, a mensagem pelo modelo da empresa ou (em outro idioma) o aviso do algoritmo
 const textoGerado = m => m.mensagem || m.aviso;
@@ -219,13 +233,13 @@ function previaEconomia({ cobranca, valor, segundosFarol, segundosHoje, custoAnt
   return { custo: valor, economia: custoAntigo != null ? Math.round((custoAntigo - valor) * 100) / 100 : null,
     tipo: custoAntigo != null ? 'informada' : null, tempo };
 }
-const dinheiro = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dinheiro = v => Number(v).toLocaleString(IDIOMA, { style: 'currency', currency: 'BRL' });
 // os últimos 12 meses ("2026-10"), do mais recente ao mais antigo, para os filtros dos relatórios
 function ultimosMeses(hoje = new Date()) {
   const saida = [];
   for (let i = 0; i < 12; i++) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    saida.push([`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })]);
+    saida.push([`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, d.toLocaleDateString(IDIOMA, { month: 'long', year: 'numeric' })]);
   }
   return saida;
 }
@@ -236,15 +250,16 @@ const filtrosRelatorio = () => Object.fromEntries([...periodoRelatorio(), ['muni
   ['radio', $('relRadio').value], ['pessoa', $('relPessoa').value]].filter(([, v]) => v));
 const TIPOS_RELATORIO = { mensal: 'mes', custos: 'ano', comunidades: 'ano', prazos: 'mes' };   // tipo -> período padrão
 const consulta = f => new URLSearchParams(f).toString();
+// rótulos fixos: a chave em português, traduzida ao desenhar (t(COBRANCA[x]))
 const COBRANCA = { fechado: 'valor fechado pelo aviso', minuto: 'por minuto no ar' };
 const CANAL = { email: 'e-mail', whatsapp: 'WhatsApp', copia: 'cópia da mensagem' };
 const SITUACAO_ENVIO = { preparando: 'preparando', enviado: 'enviado', entregue: 'entregue ao servidor de e-mail', falhou: 'falhou',
   confirmado: 'a rádio confirmou' };
-const tempoArTexto = s => s == null ? '' : s >= 0 ? `${tempoNoAr(s)} a menos no ar` : `${tempoNoAr(-s)} a mais no ar`;
+const tempoArTexto = s => s == null ? '' : s >= 0 ? t('{tempo} a menos no ar', { tempo: tempoNoAr(s) }) : t('{tempo} a mais no ar', { tempo: tempoNoAr(-s) });
 function economiaTexto(e) {
-  const partes = [`custo ${dinheiro(e.custo)}`];
-  if (e.economia != null) partes.push(`economia ${e.economia_tipo || e.tipo} ${dinheiro(e.economia)}`);
-  else partes.push('economia: só com o aviso de hoje ou o custo antigo informado');
+  const partes = [t('custo {valor}', { valor: dinheiro(e.custo) })];
+  if (e.economia != null) partes.push(t('economia {tipo} {valor}', { tipo: t(e.economia_tipo || e.tipo), valor: dinheiro(e.economia) }));
+  else partes.push(t('economia: só com o aviso de hoje ou o custo antigo informado'));
   if ((e.tempo_economizado ?? e.tempo) != null) partes.push(tempoArTexto(e.tempo_economizado ?? e.tempo));
   return partes.join(' · ');
 }
@@ -259,7 +274,7 @@ function historicoFiltrado() {
 }
 
 const MES_CURTO = mes => { const [a, m] = mes.split('-').map(Number);
-  return `${new Date(a, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}/${String(a).slice(2)}`; };
+  return `${new Date(a, m - 1, 1).toLocaleDateString(IDIOMA, { month: 'short' }).replace('.', '')}/${String(a).slice(2)}`; };
 
 function grupos(m) {
   const g = { inteira: [], parte: [], vizinha: [] };
@@ -299,20 +314,20 @@ function no(tag, props = {}, ...filhos) {
 
 function desenharTema() {
   const escuro = temaAtual() === 'escuro';
-  $('botaoTema').textContent = escuro ? 'Tema claro' : 'Tema escuro';
+  $('botaoTema').textContent = escuro ? t('Tema claro') : t('Tema escuro');
   $('botaoTema').setAttribute('aria-pressed', String(escuro));
 }
 
 function desenharAjuda() {
   const passos = AJUDA[estado.usuario?.perfil] || [];
-  $('ajudaTitulo').textContent = `Ajuda · ${estado.usuario?.perfil_nome || ''}`;
-  $('ajudaCorpo').replaceChildren(no('ol', { classe: 'passos-ajuda' }, passos.map(([t, d]) => no('li', {}, no('strong', { texto: t }), no('span', { texto: ` ${d}` })))),
-    no('p', { classe: 'ajuda', texto: 'Os botões "?" ao lado dos termos explicam cada um. Tudo o que você faz fica na auditoria com o seu nome.' }),
-    no('p', { classe: 'ajuda', texto: estado.config?.aviso_ficticio || '' }));
+  $('ajudaTitulo').textContent = t('Ajuda · {perfil}', { perfil: t(estado.usuario?.perfil_nome || '') });
+  $('ajudaCorpo').replaceChildren(no('ol', { classe: 'passos-ajuda' }, passos.map(([tit, d]) => no('li', {}, no('strong', { texto: t(tit) }), no('span', { texto: ` ${t(d)}` })))),
+    no('p', { classe: 'ajuda', texto: t('Os botões "?" ao lado dos termos explicam cada um. Tudo o que você faz fica na auditoria com o seu nome.') }),
+    no('p', { classe: 'ajuda', texto: t(estado.config?.aviso_ficticio || '') }));
 }
 
 // um "?" ao lado de um termo: o botão (alvo de 44 px) e a explicação em DICAS
-const dica = (chave, termo) => no('button', { type: 'button', classe: 'dica', 'data-dica': chave, 'aria-label': `O que é ${termo}?`, texto: '?' });
+const dica = (chave, termo) => no('button', { type: 'button', classe: 'dica', 'data-dica': chave, 'aria-label': t('O que é {termo}?', { termo: t(termo) }), texto: '?' });
 
 function desenharTela() {
   $('telaEntrar').hidden = estado.tela !== 'entrar';
@@ -322,18 +337,18 @@ function desenharTela() {
   $('itemCalor').hidden = !estado.usuario || !pode('ver_historico');
   if (estado.usuario) {
     const u = estado.usuario;
-    $('contaNome').textContent = `${u.nome} · ${u.perfil_nome}${u.empresa_sigla ? ' · ' + u.empresa_sigla : ''}`;
+    $('contaNome').textContent = `${u.nome} · ${t(u.perfil_nome)}${u.empresa_sigla ? ' · ' + u.empresa_sigla : ''}`;
   }
 }
 
 function desenharAbas() {
   const atual = menuAtual(estado.vista);
   $('abas').replaceChildren(...vistasDoPerfil().map(([v, rotulo]) =>
-    no('button', { type: 'button', 'data-vista': v, 'aria-current': atual === v ? 'page' : null, texto: rotulo })));
+    no('button', { type: 'button', 'data-vista': v, 'aria-current': atual === v ? 'page' : null, texto: t(rotulo) })));
   const noGrupo = RELATORIOS.some(([v]) => v === estado.vista) && pode('ver_historico') && !(estado.usuario?.perfil === 'consulta' && estado.vista === 'painel');
   $('subabas').hidden = !noGrupo;
   $('subabas').replaceChildren(...(noGrupo ? RELATORIOS.map(([v, rotulo]) =>
-    no('button', { type: 'button', 'data-vista': v, 'aria-current': estado.vista === v ? 'page' : null, texto: rotulo })) : []));
+    no('button', { type: 'button', 'data-vista': v, 'aria-current': estado.vista === v ? 'page' : null, texto: t(rotulo) })) : []));
   for (const v of VISTAS) $(`vista-${v}`).hidden = estado.vista !== v;
   // o resultado aparece só na vista de onde veio (um aviso novo em "Novo aviso", um antigo no "Histórico");
   // no funil, o passo 3 mostra a conferência e o 4, os avisos
@@ -363,14 +378,14 @@ function desenharFunil() {
   $('navResultado').hidden = n < 3 || !temResultadoNovo();
   $('avancarResultado').hidden = n !== 3;
   // passo 3: antes de gerar, o botão gera (se as travas deixarem); depois, só leva aos avisos
-  $('avancarResultado').textContent = gerado() ? 'Avançar para os avisos' : estado.enviando ? 'Gerando…' : 'Gerar aviso';
+  $('avancarResultado').textContent = gerado() ? t('Avançar para os avisos') : estado.enviando ? t('Gerando…') : t('Gerar aviso');
   $('avancarResultado').disabled = !gerado() && (estado.enviando || !!problemaParaGerar());
   const motivo = $('motivoGerar');
-  if (motivo) motivo.textContent = n === 3 && !gerado() ? (problemaParaGerar() || 'Tudo conferido: pode gerar o aviso.') : '';
+  if (motivo) motivo.textContent = n === 3 && !gerado() ? (problemaParaGerar() || t('Tudo conferido: pode gerar o aviso.')) : '';
   $('abaRotulo').hidden = !estado.abas.length;
   $('novoAviso').hidden = n !== 4;
   $('verComparativo').hidden = n !== 4 || !pode('ver_historico');
-  $('passo2Arquivo').textContent = estado.arquivo ? `Planilha: ${estado.arquivo.name}` : '';
+  $('passo2Arquivo').textContent = estado.arquivo ? t('Planilha: {nome}', { nome: estado.arquivo.name }) : '';
   if (estado.resultado && estado.origem === 'novo') $('tituloResultado').textContent = tituloResultado();
 }
 
@@ -378,10 +393,10 @@ function desenharEstado() {
   $('estado').textContent = estado.mensagem;
   $('estado').classList.toggle('erro', estado.erro);
   $('gerar').disabled = estado.enviando;
-  $('gerar').textContent = estado.enviando ? 'Gerando…' : 'Gerar aviso';
+  $('gerar').textContent = estado.enviando ? t('Gerando…') : t('Conferir a planilha');
   $('arquivoNome').textContent = estado.arquivo
-    ? `${estado.arquivo.name} (${fmt(Math.ceil(estado.arquivo.size / 1024))} KB)`
-    : 'Escolha ou arraste o arquivo (.csv ou .xlsx, até 10 MB)';
+    ? t('{nome} ({kb} KB)', { nome: estado.arquivo.name, kb: fmt(Math.ceil(estado.arquivo.size / 1024)) })
+    : t('Escolha ou arraste o arquivo (.csv ou .xlsx, até 10 MB)');
   $('zona').classList.toggle('escolhido', !!estado.arquivo);
   desenharFunil();
 }
@@ -430,7 +445,7 @@ function mostrarErros(lugar, erros) {
   for (const [id, texto] of validos) erroNoCampo($(id), texto);
   lugar.classList.add('com-erros');
   const resumo = no('div', { classe: 'resumo-erros', role: 'alert', tabindex: '-1' },
-    no('p', { texto: validos.length === 1 ? 'Corrija o campo abaixo:' : `Corrija os ${validos.length} campos abaixo:` }),
+    no('p', { texto: validos.length === 1 ? t('Corrija o campo abaixo:') : t('Corrija os {n} campos abaixo:', { n: validos.length }) }),
     no('ul', {}, validos.map(([id, texto]) => no('li', {}, no('a', { href: `#${id}`, 'data-campo-erro': id, texto })))));
   lugar.prepend(resumo);
   (validos.length === 1 ? $(validos[0][0]) : resumo).focus();
@@ -448,49 +463,54 @@ function desenharResumo() {
   const ucs = r.municipios.reduce((s, m) => s + m.ucs, 0);
   const dl = no('dl', { classe: 'numeros' },
     [['linhas lidas', p.linhas], ['UCs localizadas', ucs], ['com problema', p.total_problemas], ['fora da concessão', r.fora_da_concessao.ucs]]
-      .map(([t, v]) => no('div', {}, no('dt', { texto: t }), no('dd', { texto: fmt(v) }))));
-  const filhos = [dl, no('p', { classe: 'prazo', texto: `Antecedência mínima do aviso: ${r.prazo.antecedencia_minima} (${r.prazo.norma}).` })];
-  if (!r.municipios.length) filhos.push(no('p', { classe: 'alerta', texto: 'Nenhuma UC da planilha caiu na área de concessão. Confira as coordenadas.' }));
+      .map(([rot, v]) => no('div', {}, no('dt', { texto: t(rot) }), no('dd', { texto: fmt(v) }))));
+  const filhos = [dl, no('p', { classe: 'prazo', texto: t('Antecedência mínima do aviso: {prazo} ({norma}).', { prazo: r.prazo.antecedencia_minima, norma: r.prazo.norma }) })];
+  if (!r.municipios.length) filhos.push(no('p', { classe: 'alerta', texto: t('Nenhuma UC da planilha caiu na área de concessão. Confira as coordenadas.') }));
   if (r.fora_da_concessao.ucs && r.fora_da_concessao.linhas.length) {
     const mais = r.fora_da_concessao.ucs > r.fora_da_concessao.linhas.length ? '…' : '';
-    filhos.push(no('p', { classe: 'alerta', texto: `${fmt(r.fora_da_concessao.ucs)} UC(s) fora da área de concessão, sem aviso: linha(s) ${r.fora_da_concessao.linhas.join(', ')}${mais}.` }));
+    filhos.push(no('p', { classe: 'alerta', texto: t('{n} UC(s) fora da área de concessão, sem aviso: linha(s) {linhas}{mais}.',
+      { n: fmt(r.fora_da_concessao.ucs), linhas: r.fora_da_concessao.linhas.join(', '), mais }) }));
   }
-  filhos.push(no('p', { classe: 'ajuda', texto: r.aviso_ficticio }));
+  filhos.push(no('p', { classe: 'ajuda', texto: t(r.aviso_ficticio) }));
   $('resumo').replaceChildren(...filhos);
 }
 
-const tempoTexto = texto => `${fmt(palavras(texto))} palavras · cerca de ${fmt(segundos(texto))} s no ar`;
+const tempoTexto = texto => t('{palavras} palavras · cerca de {segundos} s no ar', { palavras: fmt(palavras(texto)), segundos: fmt(segundos(texto)) });
+// o aviso no idioma em que foi gerado: o atributo lang faz o leitor de tela pronunciar certo (Fase K)
+const idiomaDoAviso = () => estado.formulario?.idioma || 'pt-BR';
 
 function desenharMunicipios() {
   const editavel = pode('gerar_aviso');
   const cartoes = estado.resultado.municipios.map(m => {
     const g = grupos(m), cod = m.codigo_ibge, texto = estado.avisos[cod];
-    const area = no('textarea', { id: `aviso-${cod}`, 'aria-label': `Aviso de ${m.nome}`, 'data-codigo': cod, readonly: !editavel });
+    const area = no('textarea', { id: `aviso-${cod}`, 'data-codigo': cod, readonly: !editavel, lang: idiomaDoAviso() });
     area.value = texto;
     const vital = m.equipamento_vital;
     const listas = no('div', { classe: 'listas' },
       ['inteira', 'parte', 'vizinha'].filter(s => g[s].length).map(s => no('p', {},
-        no('span', { classe: `etiqueta ${s}`, texto: { inteira: 'Inteiras', parte: 'Em parte', vizinha: 'Vizinhas' }[s] }),
+        no('span', { classe: `etiqueta ${s}`, texto: t({ inteira: 'Inteiras', parte: 'Em parte', vizinha: 'Vizinhas' }[s]) }),
         g[s].map(c => `${homonimo(c) ? nomeComDistrito(c, m) : c.nome}: ${fmt(c.afetadas)}`).join(', '))),
-      no('p', { classe: 'ajuda', texto: `Equipamento vital: ${fmt(vital.sim)} sim, ${fmt(vital.nao)} não` + (vital.a_confirmar ? `, ${fmt(vital.a_confirmar)} a confirmar` : '') + '. Depois do nome, UCs afetadas da comunidade.' }));
+      no('p', { classe: 'ajuda', texto: t('Equipamento vital: {sim} sim, {nao} não', { sim: fmt(vital.sim), nao: fmt(vital.nao) })
+        + (vital.a_confirmar ? t(', {n} a confirmar', { n: fmt(vital.a_confirmar) }) : '') + t('. Depois do nome, UCs afetadas da comunidade.') }));
     return no('article', { classe: 'cartao municipio', 'data-codigo': cod },
       no('div', { classe: 'mun-cab' }, no('h3', { texto: `${m.nome}/${m.uf}` }),
-        no('span', { classe: 'meta', texto: `${fmt(m.ucs)} UCs · ${fmt(m.comunidades.length)} comunidades` })),
+        no('span', { classe: 'meta', texto: t('{ucs} UCs · {comunidades} comunidades', { ucs: fmt(m.ucs), comunidades: fmt(m.comunidades.length) }) })),
       listas,
       no('div', { classe: 'bloco-aviso' },
-      no('label', { for: area.id, texto: editavel ? 'Aviso para a rádio (pode editar)' : 'Aviso para a rádio' }), area,
+      no('label', { for: area.id, texto: editavel ? t('Aviso para a rádio (pode editar)') : t('Aviso para a rádio') }), area,
       no('p', { classe: 'tempo', id: `tempo-${cod}`, texto: tempoTexto(texto) }),
       no('p', { id: `final-${cod}`, classe: 'ajuda' }),
       no('div', { classe: 'acoes' },
-        editavel && estado.resultado.id && no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: 'Baixar PDF para a rádio' }),
-        no('button', { type: 'button', 'data-acao': 'copiar', 'data-codigo': cod, texto: 'Copiar texto' }),
-        temAudio() && no('button', { type: 'button', 'data-acao': 'ouvir', 'data-codigo': cod, texto: 'Ouvir' }),
-        temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: 'Baixar áudio (MP3)' }),
-        editavel && no('button', { type: 'button', 'data-acao': 'restaurar', 'data-codigo': cod, texto: 'Desfazer edição' })),
+        editavel && estado.resultado.id && no('button', { type: 'button', classe: 'prim', 'data-acao': 'pdf', 'data-codigo': cod, texto: t('Baixar PDF para a rádio') }),
+        no('button', { type: 'button', 'data-acao': 'copiar', 'data-codigo': cod, texto: t('Copiar texto') }),
+        temAudio() && no('button', { type: 'button', 'data-acao': 'ouvir', 'data-codigo': cod, texto: t('Ouvir') }),
+        temAudio() && no('button', { type: 'button', 'data-acao': 'audio', 'data-codigo': cod, texto: t('Baixar áudio (MP3)') }),
+        editavel && no('button', { type: 'button', 'data-acao': 'restaurar', 'data-codigo': cod, texto: t('Desfazer edição') })),
       no('div', { id: `tocador-${cod}`, classe: 'tocador' }),
-      temAudio() || !pode('gerar_aviso') ? null : no('p', { classe: 'ajuda', texto: audioLigado() ? 'Áudio só para avisos em português, por enquanto.'
-        : 'O áudio do aviso está desligado neste servidor.' }),
-      no('section', { id: `envio-${cod}`, classe: 'envio-radio', 'data-codigo': cod, 'aria-label': `Envio para a rádio: ${m.nome}` })));
+      temAudio() || !pode('gerar_aviso') ? null : no('p', { classe: 'ajuda', texto: audioLigado()
+        ? t('Áudio indisponível em espanhol: nenhuma voz em espanhol com licença clara (veja ORIGEM.md). Use o texto e o PDF.')
+        : t('O áudio do aviso está desligado neste servidor.') }),
+      no('section', { id: `envio-${cod}`, classe: 'envio-radio', 'data-codigo': cod, 'aria-label': t('Envio para a rádio: {nome}', { nome: m.nome }) })));
   });
   $('municipios').replaceChildren(...cartoes);
   for (const m of estado.resultado.municipios) { desenharFinal(m.codigo_ibge); desenharTocador(m.codigo_ibge); desenharEnvio(m); }
@@ -501,42 +521,43 @@ function desenharEnvio(m) {
   const cod = m.codigo_ibge, lugar = $(`envio-${cod}`), r = estado.resultado;
   if (!lugar) return;
   const feitos = estado.envios.filter(e => e.municipio === cod);
-  const lista = feitos.length ? [no('h4', { texto: 'Envios para a rádio' }), no('ul', { classe: 'envios' }, feitos.map(e => no('li', {},
-    no('span', { classe: `chip envio ${e.status}`, texto: SITUACAO_ENVIO[e.status] + (e.confirmado_em ? ` em ${dataHora(e.confirmado_em)}` : '') }),
-    no('span', { texto: `${e.radio_nome} · ${CANAL[e.canal]}${e.destino && e.canal !== 'copia' ? ` (${e.destino})` : ''}` }),
-    no('span', { classe: 'meta', texto: `${dinheiro(e.valor)} (${COBRANCA[e.cobranca]}) · ${economiaTexto(e)} · por ${e.por} em ${dataHora(e.criado_em)}` }),
-    e.arquivos.length ? no('span', { classe: 'acoes' }, e.arquivos.map(t => no('button', { type: 'button', 'data-arquivo': t, 'data-envio-id': e.id,
-      texto: t === 'pdf' ? 'PDF enviado' : 'MP3 enviado' }))) : null)))] : [];
+  const lista = feitos.length ? [no('h4', { texto: t('Envios para a rádio') }), no('ul', { classe: 'envios' }, feitos.map(e => no('li', {},
+    no('span', { classe: `chip envio ${e.status}`, texto: t(SITUACAO_ENVIO[e.status]) + (e.confirmado_em ? t(' em {quando}', { quando: dataHora(e.confirmado_em) }) : '') }),
+    no('span', { texto: `${e.radio_nome} · ${t(CANAL[e.canal])}${e.destino && e.canal !== 'copia' ? ` (${e.destino})` : ''}` }),
+    no('span', { classe: 'meta', texto: t('{valor} ({cobranca}) · {economia} · por {nome} em {quando}', { valor: dinheiro(e.valor),
+      cobranca: t(COBRANCA[e.cobranca]), economia: economiaTexto(e), nome: e.por, quando: dataHora(e.criado_em) }) }),
+    e.arquivos.length ? no('span', { classe: 'acoes' }, e.arquivos.map(tipo => no('button', { type: 'button', 'data-arquivo': tipo, 'data-envio-id': e.id,
+      texto: tipo === 'pdf' ? t('PDF enviado') : t('MP3 enviado') }))) : null)))] : [];
   if (!(r.id && pode('gerar_aviso') && r.status !== 'cancelado')) return lugar.replaceChildren(...lista);
   const s = estado.sugestao[cod] || { radios: [], sem_radio: [] }, cobrem = new Map(s.radios.map(x => [x.radio_id, x]));
-  const ordem = [...estado.radios].sort((a, b) => (cobrem.has(b.id) - cobrem.has(a.id)) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const ordem = [...estado.radios].sort((a, b) => (cobrem.has(b.id) - cobrem.has(a.id)) || a.nome.localeCompare(b.nome, IDIOMA));
   // a rádio escolhida saiu da lista, ou a lista chegou depois (rádio cadastrada com o aviso aberto): volta à primeira, com o valor dela
   if (estado.escolha[cod] && !ordem.some(x => String(x.id) === String(estado.escolha[cod].radioId)))
     estado.escolha[cod] = { ...escolhaPadrao(ordem[0]), pedido: estado.escolha[cod].pedido };
   const e = estado.escolha[cod] ||= escolhaPadrao(ordem[0]);
-  const alcance = x => cobrem.has(x.id) ? (cobrem.get(x.id).municipio_inteiro ? ' · alcança o município' : ` · alcança ${cobrem.get(x.id).comunidades} comunidade(s)`)
-    : ' · fora do alcance cadastrado';
+  const alcance = x => cobrem.has(x.id) ? (cobrem.get(x.id).municipio_inteiro ? t(' · alcança o município')
+    : t(' · alcança {n} comunidade(s)', { n: cobrem.get(x.id).comunidades })) : t(' · fora do alcance cadastrado');
   const sel = no('select', { 'data-envio': 'radioId', id: `radio-${cod}` },
     ordem.map(x => no('option', { value: String(x.id), texto: x.nome + alcance(x), selected: String(x.id) === String(e.radioId) })));
-  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { id: `${nome}-${cod}`, 'data-envio': nome, value: e[nome] ?? '',
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: t(rotulo) }, no('input', { id: `${nome}-${cod}`, 'data-envio': nome, value: e[nome] ?? '',
     autocomplete: 'off', ...extra }));
-  const blocos = [no('h4', { texto: 'Enviar para a rádio' })];
+  const blocos = [no('h4', { texto: t('Enviar para a rádio') })];
   if (s.sem_radio.length) blocos.push(no('p', { classe: 'alerta-amarelo', role: 'status' }, no('span', { 'aria-hidden': 'true', texto: '⚠ ' }),
-    `Sem rádio cadastrada para: ${s.sem_radio.join(', ')}.`));
-  if (ordem.length) blocos.push(no('label', { for: `radio-${cod}`, texto: 'Rádio' }), sel,
+    t('Sem rádio cadastrada para: {lista}.', { lista: s.sem_radio.join(', ') })));
+  if (ordem.length) blocos.push(no('label', { for: `radio-${cod}`, texto: t('Rádio') }), sel,
     no('div', { classe: 'campos' }, campo('Valor deste envio (R$, obrigatório)', 'valor', { inputmode: 'decimal', placeholder: '0,00' }),
-      no('label', { texto: 'Cobrança' }, no('select', { id: `cobranca-${cod}`, 'data-envio': 'cobranca' },
-        Object.entries(COBRANCA).map(([k, t]) => no('option', { value: k, texto: t, selected: k === e.cobranca })))),
-      campo('Quanto custaria do jeito antigo (R$, opcional)', 'antigo', { inputmode: 'decimal', placeholder: 'opcional' })),
+      no('label', { texto: t('Cobrança') }, no('select', { id: `cobranca-${cod}`, 'data-envio': 'cobranca' },
+        Object.entries(COBRANCA).map(([k, rot]) => no('option', { value: k, texto: t(rot), selected: k === e.cobranca })))),
+      campo('Quanto custaria do jeito antigo (R$, opcional)', 'antigo', { inputmode: 'decimal', placeholder: t('opcional') })),
     no('p', { classe: 'economia-linha' }, no('span', { classe: 'economia', id: `previa-${cod}`, 'aria-live': 'polite' }), dica('economia', 'economia calculada e informada')),
     no('div', { classe: 'acoes' },
-      estado.config?.email !== false ? no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'email', texto: 'Enviar por e-mail' }) : null,
-      no('button', { type: 'button', 'data-envio-acao': 'whatsapp', texto: 'Enviar por WhatsApp' }),
-      no('button', { type: 'button', 'data-envio-acao': 'copia', texto: 'Copiar mensagem' })),
-    estado.config?.email === false ? no('p', { classe: 'ajuda', texto: 'O envio por e-mail está desligado neste servidor.' }) : null);
-  else blocos.push(no('p', { classe: 'ajuda', texto: pode('gerenciar_radios') ? 'Nenhuma rádio ativa cadastrada ainda: cadastre em Rádios.'
-    : 'Nenhuma rádio ativa cadastrada ainda: peça o cadastro ao Admin da empresa.' }),
-    pode('gerenciar_radios') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-envio-acao': 'ir-radios', texto: 'Ir para Rádios' })) : null);
+      estado.config?.email !== false ? no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'email', texto: t('Enviar por e-mail') }) : null,
+      no('button', { type: 'button', 'data-envio-acao': 'whatsapp', texto: t('Enviar por WhatsApp') }),
+      no('button', { type: 'button', 'data-envio-acao': 'copia', texto: t('Copiar mensagem') })),
+    estado.config?.email === false ? no('p', { classe: 'ajuda', texto: t('O envio por e-mail está desligado neste servidor.') }) : null);
+  else blocos.push(no('p', { classe: 'ajuda', texto: pode('gerenciar_radios') ? t('Nenhuma rádio ativa cadastrada ainda: cadastre em Rádios.')
+    : t('Nenhuma rádio ativa cadastrada ainda: peça o cadastro ao Admin da empresa.') }),
+    pode('gerenciar_radios') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-envio-acao': 'ir-radios', texto: t('Ir para Rádios') })) : null);
   if (pode('pedir_radio')) blocos.push(formPedidoRadio(m, e));
   lugar.replaceChildren(...blocos, ...lista);
   desenharPrevia(cod);
@@ -551,36 +572,37 @@ function escolhaPadrao(radio) {
 function formPedidoRadio(m, e) {
   const cod = m.codigo_ibge, p = e.pedido ||= { aberto: false, nome: '', cidade: m.nome, contato: '', observacao: '' };
   const botao = no('button', { type: 'button', 'data-envio-acao': 'pedir', 'aria-expanded': String(p.aberto), 'aria-controls': `pedido-${cod}`,
-    texto: 'Pedir cadastro de rádio' });
+    texto: t('Pedir cadastro de rádio') });
   if (!p.aberto) return no('div', { classe: 'acoes' }, botao);
-  const campo = (rotulo, nome, extra = {}) => no('label', { texto: rotulo }, no('input', { id: `pedido-${nome}-${cod}`, 'data-pedido-campo': nome,
+  const campo = (rotulo, nome, extra = {}) => no('label', { texto: t(rotulo) }, no('input', { id: `pedido-${nome}-${cod}`, 'data-pedido-campo': nome,
     value: p[nome], autocomplete: 'off', ...extra }));
   const meus = (estado.meusPedidos || []).slice(0, 5);
   return no('div', { classe: 'pedido-radio com-erros', id: `pedido-${cod}` }, no('div', { classe: 'acoes' }, botao),
-    no('p', { classe: 'ajuda', texto: 'O Admin da empresa recebe o pedido e cadastra a rádio (ou explica por que não). Só dados da rádio: nada de cliente.' }),
+    no('p', { classe: 'ajuda', texto: t('O Admin da empresa recebe o pedido e cadastra a rádio (ou explica por que não). Só dados da rádio: nada de cliente.') }),
     campo('Nome da rádio (obrigatório)', 'nome', { maxlength: '80' }), campo('Cidade da rádio (obrigatória)', 'cidade', { maxlength: '80' }),
     campo('Contato da rádio: e-mail ou telefone (opcional)', 'contato', { maxlength: '120' }),
     campo('Observação (opcional)', 'observacao', { maxlength: '300' }),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'enviar-pedido', texto: 'Enviar o pedido' })),
-    meus.length ? no('div', {}, no('h5', { texto: 'Seus pedidos de rádio' }), no('ul', { classe: 'envios' }, meus.map(x => no('li', {},
-      no('span', { classe: `chip ${x.status === 'recusado' ? 'cancelado' : ''}`, texto: SITUACAO_PEDIDO[x.status] }),
-      no('span', { texto: `${x.nome} (${x.cidade}) · ${dataHora(x.criado_em)}${x.motivo_recusa ? ` · motivo: ${x.motivo_recusa}` : ''}` }))))) : null);
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'prim', 'data-envio-acao': 'enviar-pedido', texto: t('Enviar o pedido') })),
+    meus.length ? no('div', {}, no('h5', { texto: t('Seus pedidos de rádio') }), no('ul', { classe: 'envios' }, meus.map(x => no('li', {},
+      no('span', { classe: `chip ${x.status === 'recusado' ? 'cancelado' : ''}`, texto: t(SITUACAO_PEDIDO[x.status]) }),
+      no('span', { texto: t('{nome} ({cidade}) · {quando}', { nome: x.nome, cidade: x.cidade, quando: dataHora(x.criado_em) })
+        + (x.motivo_recusa ? t(' · motivo: {motivo}', { motivo: x.motivo_recusa }) : '') }))))) : null);
 }
 
 function desenharPrevia(cod) {
   const lugar = $(`previa-${cod}`), e = estado.escolha[cod];
   if (!lugar || !e) return;
   const m = estado.resultado.municipios.find(x => x.codigo_ibge === cod), valor = reaisNumero(e.valor), antigo = reaisNumero(e.antigo);
-  if (valor === null || Number.isNaN(valor)) return lugar.textContent = 'Informe o valor do envio em R$.';
-  if (Number.isNaN(antigo)) return lugar.textContent = 'O custo antigo tem de ser um valor em R$.';
+  if (valor === null || Number.isNaN(valor)) return lugar.textContent = t('Informe o valor do envio em R$.');
+  if (Number.isNaN(antigo)) return lugar.textContent = t('O custo antigo tem de ser um valor em R$.');
   lugar.textContent = economiaTexto(previaEconomia({ cobranca: e.cobranca, valor, segundosFarol: segundos(estado.avisos[cod]),
     segundosHoje: m.hoje?.segundos ?? null, custoAntigo: antigo }));
 }
 
 function desenharFinal(codigo) {
   const f = estado.finais[codigo];
-  $(`final-${codigo}`).replaceChildren(...(f ? [no('span', { classe: 'selo final', texto: 'Texto final guardado no histórico' }),
-    f !== estado.avisos[codigo] ? ' (o texto mudou depois; baixe o PDF ou copie de novo para guardar)' : ''] : []));
+  $(`final-${codigo}`).replaceChildren(...(f ? [no('span', { classe: 'selo final', texto: t('Texto final guardado no histórico') }),
+    f !== estado.avisos[codigo] ? t(' (o texto mudou depois; baixe o PDF ou copie de novo para guardar)') : ''] : []));
 }
 
 function desenharTempo(codigo) {
@@ -596,20 +618,20 @@ function desenharTocador(codigo) {
   if (!lugar) return;
   if (!a) return lugar.replaceChildren();
   if (lugar.querySelector('audio')?.src === a.url) return;
-  lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': 'Áudio do aviso' }),
-    no('span', { classe: 'ajuda', texto: `${fmt(Math.round(a.segundos))} s de áudio (voz sintetizada)` }));
+  lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': t('Áudio do aviso') }),
+    no('span', { classe: 'ajuda', texto: t('{s} s de áudio (voz sintetizada)', { s: fmt(Math.round(a.segundos)) }) }));
 }
 
 function desenharProblemas() {
   const p = estado.resultado.planilha;
   $('problemas').hidden = !p.problemas.length;
   if (!p.problemas.length) return;
-  $('problemasTitulo').textContent = `${fmt(p.total_problemas)} linha(s) com problema`;
+  $('problemasTitulo').textContent = t('{n} linha(s) com problema', { n: fmt(p.total_problemas) });
   const motivos = no('ul', {}, Object.entries(p.problemas_por_motivo).map(([m, n]) => no('li', { texto: `${m}: ${fmt(n)}` })));
-  const tabela = no('table', {}, no('thead', {}, no('tr', {}, no('th', { texto: 'Linha' }), no('th', { texto: 'Problema' }))),
+  const tabela = no('table', {}, no('thead', {}, no('tr', {}, no('th', { scope: 'col', texto: t('Linha') }), no('th', { scope: 'col', texto: t('Problema') }))),
     no('tbody', {}, p.problemas.map(x => no('tr', {}, no('td', { texto: String(x.linha) }), no('td', { texto: x.motivo })))));
   $('problemasCorpo').replaceChildren(motivos, tabela,
-    p.total_problemas > p.problemas.length ? no('p', { classe: 'ajuda', texto: `Mostrando as primeiras ${fmt(p.problemas.length)}.` }) : '');
+    p.total_problemas > p.problemas.length ? no('p', { classe: 'ajuda', texto: t('Mostrando as primeiras {n}.', { n: fmt(p.problemas.length) }) }) : '');
 }
 
 // ---- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" ----
@@ -617,57 +639,61 @@ function desenharConferencia() {
   const r = estado.resultado, c = r?.conferencia, lugar = $('conferencia');
   lugar.hidden = !c || estado.origem !== 'novo';
   if (lugar.hidden) return lugar.replaceChildren();
-  const t = r.traducao, n = c.numeros, ja = gerado();
+  const tr = r.traducao, n = c.numeros, ja = gerado();
   const numeros = no('dl', { classe: 'numeros' }, [['clientes no aviso', n.clientes], ['municípios', n.municipios], ['comunidades', n.comunidades],
     ['com equipamento vital', n.equipamento_vital], ['corrigidas', n.corrigidas], ['rejeitadas', n.rejeitadas]]
-    .map(([rot, v]) => no('div', {}, no('dt', { texto: rot }), no('dd', { texto: fmt(v) }))));
-  const arquivo = no('p', { classe: 'ajuda', texto: `Arquivo ${t.arquivo.nome}` + (t.arquivo.aba ? `, aba ${t.arquivo.aba}` : '')
-    + ` · ${fmt(t.arquivo.linhas)} linhas · colunas reconhecidas: ${t.colunas.join(', ')} · ${fmt(t.arquivo.colunas_ignoradas)} coluna(s) ignorada(s)`
-    + ` · tradutor ${t.versao}` });
-  const blocos = [no('h3', { texto: 'Conferência da planilha' }), arquivo, numeros,
-    no('p', { classe: 'dicas' }, no('span', { classe: 'ajuda', texto: 'O que é: ' }),
-      no('span', { texto: 'UC' }), dica('uc', 'UC'), no('span', { texto: 'equipamento vital' }), dica('vital', 'equipamento vital'),
-      no('span', { texto: 'corrigida' }), dica('corrigida', 'linha corrigida'), no('span', { texto: 'rejeitada' }), dica('rejeitada', 'linha rejeitada'),
-      no('span', { texto: 'limite de rejeição' }), dica('limite', 'limite de rejeição'))];
-  if (n.vital_a_confirmar) blocos.push(no('p', { classe: 'ajuda', texto: `${fmt(n.vital_a_confirmar)} cliente(s) sem a informação de equipamento vital (a confirmar).` }));
+    .map(([rot, v]) => no('div', {}, no('dt', { texto: t(rot) }), no('dd', { texto: fmt(v) }))));
+  const arquivo = no('p', { classe: 'ajuda', texto: t('Arquivo {nome}', { nome: tr.arquivo.nome }) + (tr.arquivo.aba ? t(', aba {aba}', { aba: tr.arquivo.aba }) : '')
+    + t(' · {linhas} linhas · colunas reconhecidas: {colunas} · {ignoradas} coluna(s) ignorada(s)', { linhas: fmt(tr.arquivo.linhas),
+      colunas: tr.colunas.join(', '), ignoradas: fmt(tr.arquivo.colunas_ignoradas) }) + t(' · tradutor {versao}', { versao: tr.versao }) });
+  const blocos = [no('h3', { texto: t('Conferência da planilha') }), arquivo, numeros,
+    no('p', { classe: 'dicas' }, no('span', { classe: 'ajuda', texto: t('O que é: ') }),
+      no('span', { texto: t('UC') }), dica('uc', 'UC'), no('span', { texto: t('equipamento vital') }), dica('vital', 'equipamento vital'),
+      no('span', { texto: t('corrigida') }), dica('corrigida', 'linha corrigida'), no('span', { texto: t('rejeitada') }), dica('rejeitada', 'linha rejeitada'),
+      no('span', { texto: t('limite de rejeição') }), dica('limite', 'limite de rejeição'))];
+  if (n.vital_a_confirmar) blocos.push(no('p', { classe: 'ajuda', texto: t('{n} cliente(s) sem a informação de equipamento vital (a confirmar).', { n: fmt(n.vital_a_confirmar) }) }));
   if (c.vital_bloqueio.length) blocos.push(no('div', { classe: 'alerta-vermelho', role: 'alert' },
-    no('strong', { texto: `Bloqueado: ${fmt(c.vital_bloqueio.length)} linha(s) com equipamento vital rejeitada(s), corrigida(s) ou fora da concessão` }),
-    no('ul', {}, c.vital_bloqueio.map(x => no('li', { texto: `Linha ${x.linha}: ${x.texto}${x.motivo ? ` (${x.motivo})` : ''}` }))),
-    no('p', { texto: 'Quem usa equipamento vital tem de ser avisado com certeza. Corrija essas linhas na planilha e importe de novo.' })));
+    no('strong', {}, no('span', { 'aria-hidden': 'true', texto: '⛔ ' }), t('Bloqueado: {n} linha(s) com equipamento vital rejeitada(s), corrigida(s) ou fora da concessão',
+      { n: fmt(c.vital_bloqueio.length) })),
+    no('ul', {}, c.vital_bloqueio.map(x => no('li', { texto: t('Linha {linha}: {texto}', { linha: x.linha, texto: x.texto }) + (x.motivo ? ` (${x.motivo})` : '') }))),
+    no('p', { texto: t('Quem usa equipamento vital tem de ser avisado com certeza. Corrija essas linhas na planilha e importe de novo.') })));
   if (c.suspeitos.length) blocos.push(no('div', { classe: 'alerta-amarelo' },
-    no('strong', { texto: 'Pontos suspeitos: confira no mapa antes de marcar "Conferi"' }),
+    no('strong', {}, no('span', { 'aria-hidden': 'true', texto: '⚠ ' }), t('Pontos suspeitos: confira no mapa antes de marcar "Conferi"')),
     no('ul', {}, c.suspeitos.map(x => no('li', { texto: x.tipo === 'repeticao' ? `${x.texto}: ${x.comunidades.join('; ')}`
-      : `${x.texto}${x.municipio ? ` · ${x.municipio} (a maioria em ${x.maioria})` : ''}: `
-      + `${fmt(x.ucs)} UC(s), linha(s) ${x.linhas.slice(0, 30).join(', ')}${x.linhas.length > 30 ? '…' : ''}` })))));
+      : `${x.texto}${x.municipio ? t(' · {municipio} (a maioria em {maioria})', { municipio: x.municipio, maioria: x.maioria }) : ''}: `
+      + t('{n} UC(s), linha(s) {linhas}', { n: fmt(x.ucs), linhas: x.linhas.slice(0, 30).join(', ') + (x.linhas.length > 30 ? '…' : '') }) })))));
   for (const [campo, rotulo] of [['circuito', 'circuito'], ['transformador', 'transformador']]) {
     const g = r.rede?.[campo];
     if (!g || !g.total) continue;
     blocos.push(no('details', { classe: 'corrigidas' },
-      no('summary', { texto: `Por ${rotulo}: ${fmt(g.total)} código(s)` + (g.sem_codigo ? `, ${fmt(g.sem_codigo)} UC(s) sem código` : '') }),
-      no('p', { classe: 'ajuda', texto: `Confira se bate com a parte da rede que vai ser desligada. ${g.total > g.grupos.length ? `Os ${g.grupos.length} maiores.` : ''}` }),
-      no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, no('th', { texto: rotulo[0].toUpperCase() + rotulo.slice(1) }), no('th', { texto: 'UCs' }))),
+      no('summary', { texto: t('Por {rotulo}: {n} código(s)', { rotulo: t(rotulo), n: fmt(g.total) }) + (g.sem_codigo ? t(', {n} UC(s) sem código', { n: fmt(g.sem_codigo) }) : '') }),
+      no('p', { classe: 'ajuda', texto: t('Confira se bate com a parte da rede que vai ser desligada.') + (g.total > g.grupos.length ? ` ${t('Os {n} maiores.', { n: g.grupos.length })}` : '') }),
+      no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, no('th', { scope: 'col', texto: t(rotulo[0].toUpperCase() + rotulo.slice(1)) }),
+        no('th', { scope: 'col', texto: t('UCs') }))),
         no('tbody', {}, g.grupos.map(x => no('tr', {}, no('td', { texto: x.codigo }), no('td', { texto: fmt(x.ucs) }))))))));
   }
-  if (t.corrigidas.length) blocos.push(no('details', { classe: 'corrigidas' },
-    no('summary', { texto: `${fmt(n.corrigidas)} linha(s) com a coordenada corrigida (em roxo no mapa)` }),
-    no('ul', {}, t.corrigidas.map(x => no('li', { texto: `Linha ${x.linha}: ${x.correcao}` })))));
+  if (tr.corrigidas.length) blocos.push(no('details', { classe: 'corrigidas' },
+    no('summary', { texto: t('{n} linha(s) com a coordenada corrigida (em roxo no mapa)', { n: fmt(n.corrigidas) }) }),
+    no('ul', {}, tr.corrigidas.map(x => no('li', { texto: t('Linha {linha}: {texto}', { linha: x.linha, texto: x.correcao }) })))));
   if (c.rejeicao.acima) {
     const area = no('textarea', { id: 'justificativa', maxlength: String(MAX_JUSTIFICATIVA), rows: '3', readonly: ja,
       'aria-describedby': 'contaJustificativa' });
     area.value = estado.justificativa;
     blocos.push(no('div', { classe: 'alerta-amarelo' },
-      no('strong', { texto: `${fmt(c.rejeicao.rejeitadas)} de ${fmt(c.rejeicao.total)} linhas rejeitadas (${pct(c.rejeicao.fracao)}), acima do limite de ${pct(c.rejeicao.limite)}` }),
-      no('label', { for: 'justificativa', texto: 'Justificativa para continuar (fica na auditoria com o seu nome)' }), area,
-      no('p', { classe: 'ajuda', id: 'contaJustificativa', texto: `${estado.justificativa.length} de ${MAX_JUSTIFICATIVA} caracteres` })));
+      no('strong', {}, no('span', { 'aria-hidden': 'true', texto: '⚠ ' }), t('{rejeitadas} de {total} linhas rejeitadas ({fracao}), acima do limite de {limite}',
+        { rejeitadas: fmt(c.rejeicao.rejeitadas), total: fmt(c.rejeicao.total), fracao: pct(c.rejeicao.fracao), limite: pct(c.rejeicao.limite) })),
+      no('label', { for: 'justificativa', texto: t('Justificativa para continuar (fica na auditoria com o seu nome)') }), area,
+      no('p', { classe: 'ajuda', id: 'contaJustificativa', texto: t('{n} de {max} caracteres', { n: estado.justificativa.length, max: MAX_JUSTIFICATIVA }) })));
   }
   const caixa = no('input', { type: 'checkbox', id: 'conferi', disabled: ja || !!c.vital_bloqueio.length });
   caixa.checked = estado.conferi || ja;
-  blocos.push(no('label', { classe: 'confirmar', for: 'conferi' }, caixa, no('span', { texto: 'Conferi os números e o mapa' })));
+  blocos.push(no('label', { classe: 'confirmar', for: 'conferi' }, caixa, no('span', { texto: t('Conferi os números e o mapa') })));
   blocos.push(no('p', { classe: 'ajuda', id: 'motivoGerar', 'aria-live': 'polite' }));
   blocos.push(no('div', { classe: 'acoes' },
-    ja ? null : no('button', { type: 'button', 'data-conf': 'relatorio', texto: 'Baixar relatório (CSV)' }),
-    pode('baixar_json') ? no('button', { type: 'button', 'data-conf': 'json', texto: 'Baixar JSON (com as UCs)' }) : null));
-  if (!ja && r.pacote_vence) blocos.push(no('p', { classe: 'ajuda', texto: `A conferência vale até ${new Date(r.pacote_vence).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}; depois, importe a planilha de novo.` }));
+    ja ? null : no('button', { type: 'button', 'data-conf': 'relatorio', texto: t('Baixar relatório (CSV)') }),
+    pode('baixar_json') ? no('button', { type: 'button', 'data-conf': 'json', texto: t('Baixar JSON (com as UCs)') }) : null));
+  if (!ja && r.pacote_vence) blocos.push(no('p', { classe: 'ajuda', texto: t('A conferência vale até {hora}; depois, importe a planilha de novo.',
+    { hora: new Date(r.pacote_vence).toLocaleTimeString(IDIOMA, { hour: '2-digit', minute: '2-digit' }) }) }));
   lugar.replaceChildren(...blocos);
   desenharFunil();
 }
@@ -675,24 +701,26 @@ function desenharConferencia() {
 // quem pediu, quando e o código; no histórico, mudar a data ou cancelar (quem gera aviso)
 function desenharSolicitado() {
   const r = estado.resultado;
-  const partes = r ? [solicitadoTexto(r), r.desligamento ? `Tipo: ${r.desligamento.rotulo} (${r.desligamento.motivo})` : ''].filter(Boolean) : [];
-  $('solicitado').replaceChildren(...partes.map(t => no('span', { texto: t })), r?.codigo ? dica('codigo', 'código de verificação') : '',
-    r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Desligamento cancelado' }) : '');
-  if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: 'Comprovante (PDF)' }),
-    no('button', { type: 'button', id: 'verLinhaTempo', 'aria-controls': 'linhaTempo', texto: 'Linha do tempo' }));
+  const tipoRot = r?.desligamento ? (estado.config?.tipos?.[r.desligamento.tipo] || r.desligamento.rotulo) : '';
+  const partes = r ? [solicitadoTexto(r), r.desligamento ? t('Tipo: {rotulo} ({motivo})', { rotulo: tipoRot, motivo: r.desligamento.motivo }) : '',
+    r.id && estado.formulario?.idioma ? t('Idioma: {idioma}', { idioma: estado.config?.idiomas?.[estado.formulario.idioma] || estado.formulario.idioma }) : ''].filter(Boolean) : [];
+  $('solicitado').replaceChildren(...partes.map(x => no('span', { texto: x })), r?.codigo ? dica('codigo', 'código de verificação') : '',
+    r?.status === 'cancelado' ? no('span', { classe: 'chip cancelado' }, no('span', { 'aria-hidden': 'true', texto: '✕ ' }), t('Desligamento cancelado')) : '');
+  if (r?.id && pode('ver_historico')) $('solicitado').append(no('button', { type: 'button', id: 'baixarComprovante', texto: t('Comprovante (PDF)') }),
+    no('button', { type: 'button', id: 'verLinhaTempo', 'aria-controls': 'linhaTempo', texto: t('Linha do tempo') }));
   if (!r?.id || estado.linhaTempo?.aviso !== r.id) { estado.linhaTempo = null; $('linhaTempo').hidden = true; $('linhaTempo').replaceChildren(); }
   const lugar = $('acoesAviso');
   lugar.hidden = !(r && estado.origem === 'historico' && pode('gerar_aviso') && r.status !== 'cancelado');
   if (lugar.hidden) return lugar.replaceChildren();
-  lugar.replaceChildren(no('h3', { texto: 'Mudou alguma coisa?' }),
+  lugar.replaceChildren(no('h3', { texto: t('Mudou alguma coisa?') }),
     no('div', { classe: 'campos' },
-      no('label', { texto: 'Nova data ' }, no('input', { type: 'date', id: 'novaData' })),
-      no('label', { texto: 'Início ' }, no('input', { type: 'time', id: 'novoInicio', value: '08:00', step: '900' })),
-      no('label', { texto: 'Fim ' }, no('input', { type: 'time', id: 'novoFim', value: '14:00', step: '900' }))),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-aviso': 'data', texto: 'Mudar a data' })),
-    no('label', { texto: 'Motivo do cancelamento (vai para a auditoria; sem nome de cliente)' },
+      no('label', {}, no('span', { texto: t('Nova data') }), ' ', no('input', { type: 'date', id: 'novaData' })),
+      no('label', {}, no('span', { texto: t('Início') }), ' ', no('input', { type: 'time', id: 'novoInicio', value: '08:00', step: '900' })),
+      no('label', {}, no('span', { texto: t('Fim') }), ' ', no('input', { type: 'time', id: 'novoFim', value: '14:00', step: '900' }))),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-aviso': 'data', texto: t('Mudar a data') })),
+    no('label', { texto: t('Motivo do cancelamento (vai para a auditoria; sem nome de cliente)') },
       no('input', { id: 'motivoCancelar', maxlength: '200', autocomplete: 'off' })),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'perigo', 'data-aviso': 'cancelar', texto: 'Cancelar o desligamento' })));
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', classe: 'perigo', 'data-aviso': 'cancelar', texto: t('Cancelar o desligamento') })));
 }
 
 function desenharResultado() {
@@ -702,15 +730,16 @@ function desenharResultado() {
   if (!estado.resultado) return;
   const r = estado.resultado, f = estado.formulario;
   $('tituloResultado').textContent = estado.origem === 'historico'
-    ? `Aviso de ${f.data}, ${f.horario} · gerado em ${dataHora(r.criado_em)}${r.usuario ? ' por ' + r.usuario : ''}`
+    ? t('Aviso de {data}, {horario} · gerado em {quando}', { data: f.data, horario: f.horario, quando: dataHora(r.criado_em) })
+      + (r.usuario ? t(' por {nome}', { nome: r.usuario }) : '')
     : tituloResultado();
   desenharResumo(); desenharMunicipios(); desenharProblemas(); desenharComparativo();
 }
 
 function tituloResultado() {
   const f = estado.formulario;
-  return `${estado.passo === 4 ? 'Avisos para a rádio' : 'Conferir o resultado'} · ${f.data}, ${f.horario}`
-    + (estado.resultado?.id ? ` · aviso nº ${estado.resultado.id}` : '');
+  return t('{titulo} · {data}, {horario}', { titulo: estado.passo === 4 ? t('Avisos para a rádio') : t('Conferir o resultado'), data: f.data, horario: f.horario })
+    + (estado.resultado?.id ? t(' · aviso nº {id}', { id: estado.resultado.id }) : '');
 }
 
 function desenharHistorico() {
@@ -725,54 +754,57 @@ function desenharHistorico() {
       no('span', { classe: 'hist-corpo' },
         no('strong', { texto: `${a.data}, ${a.horario}` }),
         no('span', { classe: 'chips' }, a.municipios.length ? a.municipios.map(m => no('span', { classe: 'chip', texto: `${m.nome}/${m.uf}` }))
-          : no('span', { classe: 'chip vazio', texto: 'nenhum município' })),
-        no('span', { classe: 'meta', texto: `${fmt(ucs)} UCs · ${fmt(com)} comunidades · cerca de ${fmt(seg)} s no ar` }),
-        no('span', { classe: 'meta', texto: `${solicitadoTexto(a) || `Gerado em ${dataHora(a.criado_em)}`} · aviso nº ${a.id}` }),
-        no('span', { classe: 'chips' }, a.desligamento ? no('span', { classe: 'chip tipo', texto: a.desligamento.rotulo }) : null,
-          a.status === 'cancelado' ? no('span', { classe: 'chip cancelado', texto: 'Cancelado' }) : null,
-          a.municipios.some(m => m.texto_final) ? no('span', { classe: 'selo final', texto: 'Texto final guardado' }) : null)));
+          : no('span', { classe: 'chip vazio', texto: t('nenhum município') })),
+        no('span', { classe: 'meta', texto: t('{ucs} UCs · {comunidades} comunidades · cerca de {segundos} s no ar', { ucs: fmt(ucs), comunidades: fmt(com), segundos: fmt(seg) }) }),
+        no('span', { classe: 'meta', texto: t('{texto} · aviso nº {id}', { texto: solicitadoTexto(a) || t('Gerado em {quando}', { quando: dataHora(a.criado_em) }), id: a.id }) }),
+        no('span', { classe: 'chips' }, a.desligamento ? no('span', { classe: 'chip tipo', texto: estado.config?.tipos?.[a.desligamento.tipo] || a.desligamento.rotulo }) : null,
+          a.idioma && a.idioma !== 'pt-BR' ? no('span', { classe: 'chip', lang: a.idioma, texto: estado.config?.idiomas?.[a.idioma] || a.idioma }) : null,
+          a.status === 'cancelado' ? no('span', { classe: 'chip cancelado' }, no('span', { 'aria-hidden': 'true', texto: '✕ ' }), t('Cancelado')) : null,
+          a.municipios.some(m => m.texto_final) ? no('span', { classe: 'selo final' }, no('span', { 'aria-hidden': 'true', texto: '✓ ' }), t('Texto final guardado')) : null)));
   });
   const total = estado.historico.length;
-  $('contagemHistorico').textContent = total ? (lista.length === total ? `${fmt(total)} aviso(s).` : `${fmt(lista.length)} de ${fmt(total)} aviso(s).`) : '';
+  $('contagemHistorico').textContent = total ? (lista.length === total ? t('{n} aviso(s).', { n: fmt(total) }) : t('{n} de {total} aviso(s).', { n: fmt(lista.length), total: fmt(total) })) : '';
   $('listaHistorico').replaceChildren(...(itens.length ? itens
-    : [no('p', { classe: 'ajuda', texto: total ? 'Nenhum aviso com esse filtro.' : 'Nenhum aviso gerado ainda.' })]));
+    : [no('p', { classe: 'ajuda', texto: total ? t('Nenhum aviso com esse filtro.') : t('Nenhum aviso gerado ainda.') })]));
 }
 
 // ---- Comparativo: o aviso de hoje (fazenda a fazenda) x o aviso por comunidade ----
 function desenharComparativo() {
   const c = estado.painel?.comparativo;
   $('comparativoTotal').replaceChildren(...(c && c.municipios ? [no('div', { classe: 'cartao comp-total' },
-    no('h2', { texto: 'Em todo o histórico da empresa' }),
-    no('p', { texto: `${fmt(c.municipios)} aviso(s) por município com o aviso de hoje: ${tempoNoAr(c.segundos_hoje)} no ar fazenda a fazenda `
-      + `(${fmt(c.locais)} locais citados) contra ${tempoNoAr(c.segundos_farol)} por comunidade (${fmt(c.comunidades)} comunidades).` }),
-    no('p', { classe: 'comp-economia', texto: `${fmt(Math.round(100 * (1 - c.segundos_farol / Math.max(1, c.segundos_hoje))))}% menos tempo no ar` }))] : []));
+    no('h2', { texto: t('Em todo o histórico da empresa') }),
+    no('p', { texto: t('{n} aviso(s) por município com o aviso de hoje: {hoje} no ar fazenda a fazenda ({locais} locais citados) contra {farol} por comunidade ({comunidades} comunidades).',
+      { n: fmt(c.municipios), hoje: tempoNoAr(c.segundos_hoje), locais: fmt(c.locais), farol: tempoNoAr(c.segundos_farol), comunidades: fmt(c.comunidades) }) }),
+    no('p', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - c.segundos_farol / Math.max(1, c.segundos_hoje)))) }) }))] : []));
   const r = estado.resultado;
   if (!r) return $('comparativo').replaceChildren(no('p', { classe: 'ajuda cartao',
-    texto: 'Gere um aviso em "Novo aviso" (com a coluna local na planilha) ou abra um aviso do Histórico para comparar.' }));
+    texto: t('Gere um aviso em "Novo aviso" (com a coluna local na planilha) ou abra um aviso do Histórico para comparar.') }));
   $('comparativo').replaceChildren(...r.municipios.map(m => {
     const cod = m.codigo_ibge, hoje = m.hoje, texto = estado.avisos[cod], seg = segundos(texto);
     const lado = (classe, titulo, numeros, corpo, acao) => no('section', { classe: `comp-lado ${classe}` },
       no('h3', { texto: titulo }), no('p', { classe: 'comp-numeros', texto: numeros }), corpo,
-      acao && temAudio() ? no('button', { type: 'button', 'data-comp': acao, 'data-codigo': cod, texto: 'Ouvir' }) : null,
+      acao && temAudio() && (acao === 'farol' || vozDoIdioma('pt-BR')) ? no('button', { type: 'button', 'data-comp': acao, 'data-codigo': cod, texto: t('Ouvir') }) : null,
       acao ? no('div', { id: `tocador-${acao}-${cod}`, classe: 'tocador' }) : null);
-    const caixa = t => no('div', { classe: 'texto-longo', tabindex: '0', texto: t });
+    // o aviso de hoje é sempre em português; o do Farol, no idioma do aviso (lang para o leitor de tela)
+    const caixa = (txt, lang) => no('div', { classe: 'texto-longo', tabindex: '0', texto: txt, lang });
     const ladoHoje = hoje
-      ? lado('hoje', 'Hoje: fazenda a fazenda', `${fmt(hoje.locais)} locais · ${fmt(hoje.palavras)} palavras · cerca de ${tempoNoAr(hoje.segundos)} no ar`,
-        hoje.texto ? caixa(hoje.texto) : no('p', { classe: 'ajuda', texto: 'O histórico guarda só as contagens do aviso de hoje (o texto lista imóveis e ruas).' }),
+      ? lado('hoje', t('Hoje: fazenda a fazenda'), t('{locais} locais · {palavras} palavras · cerca de {tempo} no ar',
+          { locais: fmt(hoje.locais), palavras: fmt(hoje.palavras), tempo: tempoNoAr(hoje.segundos) }),
+        hoje.texto ? caixa(hoje.texto, 'pt-BR') : no('p', { classe: 'ajuda', texto: t('O histórico guarda só as contagens do aviso de hoje (o texto lista imóveis e ruas).') }),
         hoje.texto ? 'hoje' : null)
-      : lado('hoje', 'Hoje: fazenda a fazenda', 'sem o aviso de hoje',
-        no('p', { classe: 'ajuda', texto: 'A planilha não trouxe a coluna local (o que o aviso de hoje cita para cada UC: o imóvel no rural, a rua no urbano). Sem ela não dá para montar o aviso de hoje.' }), null);
-    const ladoFarol = lado('farol', 'Farol: por comunidade', `${fmt(m.comunidades.length)} comunidades · ${fmt(palavras(texto))} palavras · cerca de ${tempoNoAr(seg)} no ar`,
-      caixa(texto), 'farol');
-    const barras = hoje ? no('div', { classe: 'comp-barras', role: 'img', 'aria-label': `Hoje ${tempoNoAr(hoje.segundos)}, Farol ${tempoNoAr(seg)}` },
-      no('span', { classe: 'comp-rotulo', texto: 'Hoje' }), no('span', { classe: 'comp-barra hoje' }, no('span', { estilo: { width: '100%' } })),
+      : lado('hoje', t('Hoje: fazenda a fazenda'), t('sem o aviso de hoje'),
+        no('p', { classe: 'ajuda', texto: t('A planilha não trouxe a coluna local (o que o aviso de hoje cita para cada UC: o imóvel no rural, a rua no urbano). Sem ela não dá para montar o aviso de hoje.') }), null);
+    const ladoFarol = lado('farol', t('Farol: por comunidade'), t('{comunidades} comunidades · {palavras} palavras · cerca de {tempo} no ar',
+      { comunidades: fmt(m.comunidades.length), palavras: fmt(palavras(texto)), tempo: tempoNoAr(seg) }), caixa(texto, idiomaDoAviso()), 'farol');
+    const barras = hoje ? no('div', { classe: 'comp-barras', role: 'img', 'aria-label': t('Hoje {hoje}, Farol {farol}', { hoje: tempoNoAr(hoje.segundos), farol: tempoNoAr(seg) }) },
+      no('span', { classe: 'comp-rotulo', texto: t('Hoje') }), no('span', { classe: 'comp-barra hoje' }, no('span', { estilo: { width: '100%' } })),
       no('span', { classe: 'comp-tempo', texto: tempoNoAr(hoje.segundos) }),
       no('span', { classe: 'comp-rotulo', texto: 'Farol' }),
       no('span', { classe: 'comp-barra farol' }, no('span', { estilo: { width: `${Math.max(1, Math.round(100 * seg / Math.max(1, hoje.segundos)))}%` } })),
       no('span', { classe: 'comp-tempo', texto: tempoNoAr(seg) })) : null;
     return no('article', { classe: 'cartao comp', 'data-codigo': cod },
       no('div', { classe: 'mun-cab' }, no('h2', { texto: `${m.nome}/${m.uf}` }),
-        hoje ? no('span', { classe: 'comp-economia', texto: `${fmt(Math.round(100 * (1 - seg / Math.max(1, hoje.segundos))))}% menos tempo no ar` }) : null),
+        hoje ? no('span', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - seg / Math.max(1, hoje.segundos)))) }) }) : null),
       barras, no('div', { classe: 'comp-lados' }, ladoHoje, ladoFarol));
   }));
 }
@@ -780,7 +812,7 @@ function desenharComparativo() {
 // ---- Relatório do período (mensal) ----
 function desenharFiltrosRelatorio() {
   const op = estado.opcoesRelatorio;
-  if (!$('relMes').options.length) $('relMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
+  if (!$('relMes').options.length) $('relMes').replaceChildren(...ultimosMeses().map(([v, rot]) => no('option', { value: v, texto: rot })));
   if (!$('relAno').options.length) {
     const ano = new Date().getFullYear();
     $('relAno').replaceChildren(...[ano, ano - 1, ano - 2].map(a => no('option', { value: String(a), texto: String(a) })));
@@ -792,20 +824,21 @@ function desenharFiltrosRelatorio() {
   if (!op) return;
   const preencher = (id, todos, itens) => {
     const atual = $(id).value;
-    $(id).replaceChildren(no('option', { value: '', texto: todos }), ...itens.map(([v, t]) => no('option', { value: String(v), texto: t, selected: String(v) === atual })));
+    $(id).replaceChildren(no('option', { value: '', texto: t(todos) }), ...itens.map(([v, rot]) => no('option', { value: String(v), texto: rot, selected: String(v) === atual })));
   };
   preencher('relMunicipio', 'Todos', op.municipios);
-  preencher('relTipo', 'Todos', op.tipos.map(t => [t, op.rotulos_tipos[t] || t]));
+  preencher('relTipo', 'Todos', op.tipos.map(x => [x, estado.config?.tipos?.[x] || op.rotulos_tipos[x] || x]));
   preencher('relRadio', 'Todas', op.radios);
   preencher('relPessoa', 'Todas', op.pessoas.map(p => [p, p]));
 }
 
 // o documento do relatório (o mesmo do PDF e do CSV): alertas, resumo com as comparações (↑↓ %), seções e "Como calculamos"
 function documentoNaTela(doc, subtitulo) {
-  const tabela = (cab, linhas) => linhas.length
-    ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' }, no('thead', {}, no('tr', {}, cab.map(t => no('th', { texto: t })))),
-      no('tbody', {}, linhas.map(l => no('tr', {}, l.map(v => no('td', { texto: v == null || v === '' ? '—' : String(v) })))))))
-    : no('p', { classe: 'ajuda', texto: 'Nada neste período.' });
+  const tabela = (cab, linhas, titulo = '') => linhas.length
+    ? no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': titulo }, no('table', { classe: 'tabela' }, no('caption', { classe: 'visualmente-oculto', texto: titulo }),
+      no('thead', {}, no('tr', {}, cab.map(c => no('th', { scope: 'col', texto: c })))),
+      no('tbody', {}, linhas.map(l => no('tr', {}, l.map((v, i) => no(i ? 'td' : 'th', { scope: i ? null : 'row', texto: v == null || v === '' ? '—' : String(v) })))))))
+    : no('p', { classe: 'ajuda', texto: t('Nada neste período.') });
   const grafico = s => {
     const f = v => s.formato === 'dinheiro' ? dinheiro(v) : fmt(v);
     const itens = s.rotulos.map((r, i) => {
@@ -813,28 +846,28 @@ function documentoNaTela(doc, subtitulo) {
       return { r, v: Number((projetado ? s.projecao[i] : s.valores[i]) || 0), projetado };
     });
     const max = Math.max(1, ...itens.map(x => x.v));
-    if (!itens.length) return no('p', { classe: 'ajuda', texto: 'Nada neste período.' });
+    if (!itens.length) return no('p', { classe: 'ajuda', texto: t('Nada neste período.') });
     return no('div', { classe: 'barras grafico-doc', estilo: { gridTemplateColumns: `repeat(${itens.length}, minmax(0, 1fr))` }, role: 'img',
-      'aria-label': itens.map(x => `${x.r}: ${f(x.v)}${x.projetado ? ' (projeção)' : ''}`).join(', ') },
-      itens.map(x => no('div', { classe: 'barra-mes', title: `${x.r}: ${f(x.v)}${x.projetado ? ' (projeção)' : ''}` },
+      'aria-label': itens.map(x => `${x.r}: ${f(x.v)}${x.projetado ? t(' (projeção)') : ''}`).join(', ') },
+      itens.map(x => no('div', { classe: 'barra-mes', title: `${x.r}: ${f(x.v)}${x.projetado ? t(' (projeção)') : ''}` },
         no('span', { classe: 'barra-valor', texto: x.v && s.formato !== 'dinheiro' ? f(x.v) : '' }),
         no('span', { classe: `barra${x.projetado ? ' barra-projecao' : ''}`, estilo: { height: `${Math.round(x.v / max * 100)}%` } }),
         no('span', { classe: 'barra-mes-rotulo', texto: x.r }))));
   };
-  const conteudo = s => s.tipo === 'tabela' ? tabela(s.colunas, s.linhas) : s.tipo === 'grafico' ? grafico(s)
-    : s.tipo === 'lista' ? (s.itens.length ? no('ul', { classe: 'como' }, s.itens.map(t => no('li', { texto: t }))) : no('p', { classe: 'ajuda', texto: 'Nada.' }))
+  const conteudo = s => s.tipo === 'tabela' ? tabela(s.colunas, s.linhas, s.titulo) : s.tipo === 'grafico' ? grafico(s)
+    : s.tipo === 'lista' ? (s.itens.length ? no('ul', { classe: 'como' }, s.itens.map(x => no('li', { texto: x }))) : no('p', { classe: 'ajuda', texto: t('Nada.') }))
     : no('p', { texto: s.texto });
-  const chip = c => no('span', { classe: `chip comp ${c.texto[0] === '↑' ? 'sobe' : c.texto[0] === '↓' ? 'desce' : ''}`, texto: `${c.texto} vs ${c.contra}` });
+  const chip = c => no('span', { classe: `chip comp ${c.texto[0] === '↑' ? 'sobe' : c.texto[0] === '↓' ? 'desce' : ''}`, texto: t('{texto} vs {contra}', c) });
   return [
     no('h2', { classe: 'subtitulo', texto: doc.titulo }),
     subtitulo ? no('p', { classe: 'ajuda', texto: subtitulo }) : null,
-    ...(doc.alertas || []).map(a => no('div', { classe: 'alerta-amarelo', role: 'status' }, no('strong', { texto: a }))),
+    ...(doc.alertas || []).map(a => no('div', { classe: 'alerta-amarelo', role: 'status' }, no('strong', {}, no('span', { 'aria-hidden': 'true', texto: '⚠ ' }), a))),
     no('div', { classe: 'kpis' }, doc.resumo.map(i => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: i.rotulo }),
       no('strong', { classe: 'kpi-valor', texto: i.valor }),
       i.comparacoes?.length ? no('span', { classe: 'kpi-extra comps' }, i.comparacoes.map(chip)) : null))),
     ...doc.secoes.map(s => no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: s.titulo }), conteudo(s))),
-    no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: 'Como calculamos' }),
-      no('ul', { classe: 'como' }, doc.como_calculamos.map(t => no('li', { texto: t })))),
+    no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: t('Como calculamos') }),
+      no('ul', { classe: 'como' }, doc.como_calculamos.map(x => no('li', { texto: x })))),
   ];
 }
 
@@ -847,63 +880,64 @@ function desenharRelatorio() {
 
 function desenharVias() {
   const vias = estado.vias || [];
-  $('listaVias').replaceChildren(vias.length ? no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
-    no('thead', {}, no('tr', {}, ['Relatório', 'Gerado por', 'Quando', 'Código', ''].map(t => no('th', { texto: t })))),
-    no('tbody', {}, vias.slice(0, 30).map(v => no('tr', {}, no('td', { texto: v.titulo }), no('td', { texto: v.por }),
+  $('listaVias').replaceChildren(vias.length ? no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Segundas vias') }, no('table', { classe: 'tabela' },
+    no('caption', { classe: 'visualmente-oculto', texto: t('Segundas vias') }),
+    no('thead', {}, no('tr', {}, ['Relatório', 'Gerado por', 'Quando', 'Código', 'Ações'].map(c => no('th', { scope: 'col', texto: t(c) })))),
+    no('tbody', {}, vias.slice(0, 30).map(v => no('tr', {}, no('th', { scope: 'row', texto: v.titulo }), no('td', { texto: v.por }),
       no('td', { texto: dataHora(v.criado_em) }), no('td', { texto: v.codigo }),
-      no('td', {}, no('button', { type: 'button', 'data-via': String(v.id), texto: 'Baixar a via' })))))))
-    : no('p', { classe: 'ajuda', texto: 'Nenhum relatório em PDF ainda. Cada PDF gerado ganha uma segunda via guardada, igual (mesmo SHA-256).' }));
+      no('td', {}, no('button', { type: 'button', 'data-via': String(v.id), 'aria-label': `${t('Baixar a via')}: ${v.titulo}`, texto: t('Baixar a via') })))))))
+    : no('p', { classe: 'ajuda', texto: t('Nenhum relatório em PDF ainda. Cada PDF gerado ganha uma segunda via guardada, igual (mesmo SHA-256).') }));
 }
 
 // ---- Dashboard: só números do histórico da empresa ----
 function desenharPainel() {
   const d = estado.painel;
   if (!d) return $('painelDash').replaceChildren();
-  const t = d.totais;
-  const kpi = (rotulo, valor, extra) => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: rotulo }),
+  const tot = d.totais;
+  const kpi = (rotulo, valor, extra) => no('div', { classe: 'kpi' }, no('span', { classe: 'kpi-rotulo', texto: t(rotulo) }),
     no('strong', { classe: 'kpi-valor', texto: valor }), extra ? no('span', { classe: 'kpi-extra', texto: extra }) : null);
-  const mesKpi = d.mes ? no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: `Este mês (${d.mes.mes})` }),
+  const mesKpi = d.mes ? no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: t('Este mês ({mes})', { mes: d.mes.mes }) }),
     no('div', { classe: 'kpis' },
-      kpi('Gasto com rádio', dinheiro(d.mes.gasto), `${fmt(d.mes.envios)} envio(s), ${fmt(d.mes.confirmados)} confirmado(s)`),
+      kpi('Gasto com rádio', dinheiro(d.mes.gasto), t('{envios} envio(s), {confirmados} confirmado(s)', { envios: fmt(d.mes.envios), confirmados: fmt(d.mes.confirmados) })),
       kpi('Economizado', dinheiro(Number(d.mes.economia_calculada) + Number(d.mes.economia_informada)),
-        `${dinheiro(d.mes.economia_calculada)} calculada · ${dinheiro(d.mes.economia_informada)} informada`),
+        t('{calculada} calculada · {informada} informada', { calculada: dinheiro(d.mes.economia_calculada), informada: dinheiro(d.mes.economia_informada) })),
       kpi('Desligamentos', fmt(d.mes.desligamentos), tempoArTexto(d.mes.tempo_economizado)),
-      kpi('No prazo', d.mes.pct_no_prazo == null ? '—' : `${d.mes.pct_no_prazo.toLocaleString('pt-BR')}%`, `${fmt(d.mes.com_envio)} com envio`))) : null;
+      kpi('No prazo', d.mes.pct_no_prazo == null ? '—' : `${d.mes.pct_no_prazo.toLocaleString(IDIOMA)}%`, t('{n} com envio', { n: fmt(d.mes.com_envio) })))) : null;
   const kpis = no('div', { classe: 'kpis' },
-    kpi('Avisos gerados', fmt(t.avisos), `${fmt(t.ultimos_30_dias)} nos últimos 30 dias`),
-    kpi('UCs avisadas', fmt(t.ucs)),
-    kpi('Comunidades citadas', fmt(t.comunidades)),
-    kpi('Municípios', fmt(t.municipios)),
-    kpi('Com equipamento vital', fmt(t.com_equipamento_vital), 'avisos com prazo de 5 dias úteis'),
-    kpi('Tempo médio no ar', `${fmt(t.segundos_medio)} s`, `${fmt(t.textos_finais)} de ${fmt(t.avisos_municipio)} textos finais guardados`));
+    kpi('Avisos gerados', fmt(tot.avisos), t('{n} nos últimos 30 dias', { n: fmt(tot.ultimos_30_dias) })),
+    kpi('UCs avisadas', fmt(tot.ucs)),
+    kpi('Comunidades citadas', fmt(tot.comunidades)),
+    kpi('Municípios', fmt(tot.municipios)),
+    kpi('Com equipamento vital', fmt(tot.com_equipamento_vital), t('avisos com prazo de 5 dias úteis')),
+    kpi('Tempo médio no ar', t('{n} s', { n: fmt(tot.segundos_medio) }), t('{n} de {total} textos finais guardados', { n: fmt(tot.textos_finais), total: fmt(tot.avisos_municipio) })));
   const maxMes = Math.max(1, ...d.por_mes.map(m => m.avisos));
-  const meses = no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: 'Avisos por mês' }),
-    no('div', { classe: 'barras', role: 'img', 'aria-label': d.por_mes.map(m => `${MES_CURTO(m.mes)}: ${m.avisos}`).join(', ') },
-      d.por_mes.map(m => no('div', { classe: 'barra-mes', title: `${MES_CURTO(m.mes)}: ${fmt(m.avisos)} aviso(s), ${fmt(m.ucs)} UCs` },
+  const meses = no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: t('Avisos por mês') }),
+    no('div', { classe: 'barras', role: 'img', 'aria-label': d.por_mes.map(m => t('{mes}: {n}', { mes: MES_CURTO(m.mes), n: m.avisos })).join(', ') },
+      d.por_mes.map(m => no('div', { classe: 'barra-mes', title: t('{mes}: {n} aviso(s), {ucs} UCs', { mes: MES_CURTO(m.mes), n: fmt(m.avisos), ucs: fmt(m.ucs) }) },
         no('span', { classe: 'barra-valor', texto: m.avisos ? fmt(m.avisos) : '' }),
         no('span', { classe: 'barra', estilo: { height: `${Math.round(m.avisos / maxMes * 100)}%` } }),
         no('span', { classe: 'barra-mes-rotulo', texto: MES_CURTO(m.mes) })))));
   const ranking = (titulo, itens, rotulo, vazio) => {
     const max = Math.max(1, ...itens.map(i => i.avisos));
-    return no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: titulo }),
+    return no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: t(titulo) }),
       itens.length ? no('ol', { classe: 'ranking' }, itens.map(i => no('li', {},
         no('span', { classe: 'ranking-nome', texto: rotulo(i) }),
-        no('span', { classe: 'ranking-barra' }, no('span', { estilo: { width: `${Math.round(i.avisos / max * 100)}%` } })),
-        no('span', { classe: 'ranking-valor', texto: `${fmt(i.avisos)} · ${fmt(i.ucs)} UCs` }))))
-        : no('p', { classe: 'ajuda', texto: vazio }));
+        no('span', { classe: 'ranking-barra', 'aria-hidden': 'true' }, no('span', { estilo: { width: `${Math.round(i.avisos / max * 100)}%` } })),
+        no('span', { classe: 'ranking-valor', texto: t('{n} · {ucs} UCs', { n: fmt(i.avisos), ucs: fmt(i.ucs) }) }))))
+        : no('p', { classe: 'ajuda', texto: t(vazio) }));
   };
-  const proximos = no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: 'Próximos desligamentos' }),
+  const proximos = no('div', { classe: 'cartao dash-bloco' }, no('h2', { texto: t('Próximos desligamentos') }),
     d.proximos.length ? no('ul', { classe: 'proximos' }, d.proximos.map(x => no('li', {},
       no('span', { classe: 'chip', texto: dataLonga(x.data) }),
-      no('span', { texto: `${x.horario} · ${x.municipios.join(', ') || 'nenhum município'} · ${fmt(x.ucs)} UCs` }))))
-      : no('p', { classe: 'ajuda', texto: 'Nenhum desligamento com data a partir de hoje.' }));
+      no('span', { texto: t('{horario} · {municipios} · {ucs} UCs', { horario: x.horario, municipios: x.municipios.join(', ') || t('nenhum município'), ucs: fmt(x.ucs) }) }))))
+      : no('p', { classe: 'ajuda', texto: t('Nenhum desligamento com data a partir de hoje.') }));
   $('painelDash').replaceChildren(...[mesKpi].filter(Boolean), kpis, meses, proximos,
     ranking('Municípios com mais avisos', d.municipios, i => `${i.nome}/${i.uf}`, 'Nenhum aviso ainda.'),
     ranking('Comunidades mais citadas', d.comunidades, i => `${semSufixo(i.nome)} (${i.municipio})`, 'Nenhum aviso ainda.'));
 }
 
 function desenharUsuarios() {
-  $('novoPerfil').replaceChildren(...Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === 'operador' })));
+  $('novoPerfil').replaceChildren(...Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: t(n), selected: k === 'operador' })));
   if (!$('novoMunicipios').options.length) $('novoMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
   const campo = (rotulo, el) => no('label', { classe: 'campo-linha' }, no('span', { texto: rotulo }), el);
   $('listaUsuarios').replaceChildren(...estado.usuarios.map(x => {
@@ -911,58 +945,60 @@ function desenharUsuarios() {
     nome.value = x.nome;
     return no('div', { classe: 'item usuario-linha com-erros', 'data-usuario': x.id },
       no('div', {}, no('strong', { texto: x.nome }), no('br'),
-        no('span', { classe: 'meta', texto: `${x.email} · ${x.ultimo_acesso ? 'último acesso ' + dataHora(x.ultimo_acesso) : 'nunca entrou'}`
-          + (x.trocar_senha ? ' · senha temporária' : '') }), no('br'),
-        no('span', { classe: 'meta', texto: `Municípios: ${x.municipios.length ? x.municipios.map(nomeMunicipio).join(', ') : 'todos (nenhum escolhido)'}` }),
-        x.status === 'bloqueado' ? no('span', { classe: 'chip cancelado', texto: 'Bloqueado' }) : null),
+        no('span', { classe: 'meta', texto: t('{email} · {acesso}', { email: x.email, acesso: x.ultimo_acesso ? t('último acesso {quando}', { quando: dataHora(x.ultimo_acesso) }) : t('nunca entrou') })
+          + (x.trocar_senha ? t(' · senha temporária') : '') }), no('br'),
+        no('span', { classe: 'meta', texto: t('Municípios: {lista}', { lista: x.municipios.length ? x.municipios.map(nomeMunicipio).join(', ') : t('todos (nenhum escolhido)') }) }),
+        x.status === 'bloqueado' ? no('span', { classe: 'chip cancelado' }, no('span', { 'aria-hidden': 'true', texto: '✕ ' }), t('Bloqueado')) : null),
       no('div', { classe: 'controles' },
-        campo(`Nome de ${x.nome}`, nome),
-        campo(`Perfil de ${x.nome}`, no('select', { id: `usu-${x.id}-perfil`, 'data-campo': 'perfil' },
-          Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.perfil })))),
-        campo(`Situação de ${x.nome}`, no('select', { id: `usu-${x.id}-status`, 'data-campo': 'status' },
-          [['ativo', 'Ativo'], ['bloqueado', 'Bloqueado']].map(([k, n]) => no('option', { value: k, texto: n, selected: k === x.status })))),
-        campo(`Municípios de ${x.nome} (Ctrl para vários)`, no('select', { id: `usu-${x.id}-municipios`, 'data-campo': 'municipios', multiple: true, size: '3' },
+        campo(t('Nome de {nome}', { nome: x.nome }), nome),
+        campo(t('Perfil de {nome}', { nome: x.nome }), no('select', { id: `usu-${x.id}-perfil`, 'data-campo': 'perfil' },
+          Object.entries(estado.perfis).map(([k, n]) => no('option', { value: k, texto: t(n), selected: k === x.perfil })))),
+        campo(t('Situação de {nome}', { nome: x.nome }), no('select', { id: `usu-${x.id}-status`, 'data-campo': 'status' },
+          [['ativo', 'Ativo'], ['bloqueado', 'Bloqueado']].map(([k, n]) => no('option', { value: k, texto: t(n), selected: k === x.status })))),
+        campo(t('Municípios de {nome} (Ctrl para vários)', { nome: x.nome }), no('select', { id: `usu-${x.id}-municipios`, 'data-campo': 'municipios', multiple: true, size: '3' },
           municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n, selected: x.municipios.includes(c) })))),
-        no('button', { type: 'button', 'data-acao-usuario': 'salvar', texto: 'Salvar' }),
-        no('button', { type: 'button', 'data-acao-usuario': 'senha', texto: 'Nova senha temporária' })));
+        no('button', { type: 'button', 'data-acao-usuario': 'salvar', 'aria-label': `${t('Salvar')}: ${x.nome}`, texto: t('Salvar') }),
+        no('button', { type: 'button', 'data-acao-usuario': 'senha', 'aria-label': `${t('Nova senha temporária')}: ${x.nome}`, texto: t('Nova senha temporária') })));
   }));
 }
 
 function desenharEmpresas() {
-  const linhas = estado.empresas.map(e => no('tr', { 'data-empresa': e.id }, no('td', { texto: e.nome }), no('td', { texto: e.sigla }),
+  const linhas = estado.empresas.map(e => no('tr', { 'data-empresa': e.id }, no('th', { scope: 'row', texto: e.nome }), no('td', { texto: e.sigla }),
     no('td', { classe: 'codigo', texto: e.cnpj || '—' }), no('td', { texto: e.dominio }),
-    no('td', {}, no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}`, texto: e.status === 'suspensa' ? 'Suspensa' : 'Ativa' })),
+    no('td', {}, no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}` }, no('span', { 'aria-hidden': 'true', texto: e.status === 'suspensa' ? '✕ ' : '✓ ' }),
+      e.status === 'suspensa' ? t('Suspensa') : t('Ativa'))),
     no('td', { texto: fmt(e.usuarios) }), no('td', { texto: fmt(e.avisos) }),
-    no('td', {}, no('span', { classe: 'acoes' }, no('button', { type: 'button', 'data-empresa-acao': 'editar', 'aria-label': `Editar ${e.nome}`, texto: 'Editar' }),
+    no('td', {}, no('span', { classe: 'acoes' }, no('button', { type: 'button', 'data-empresa-acao': 'editar', 'aria-label': t('Editar {nome}', { nome: e.nome }), texto: t('Editar') }),
       no('button', { type: 'button', classe: e.status === 'ativa' ? 'perigo' : '', 'data-empresa-acao': e.status === 'ativa' ? 'suspensa' : 'ativa',
-        'aria-label': `${e.status === 'ativa' ? 'Suspender' : 'Reativar'} ${e.nome}`, texto: e.status === 'ativa' ? 'Suspender' : 'Reativar' })))));
-  $('listaEmpresas').replaceChildren(no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
-    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Ações'].map(t => no('th', { texto: t })))),
+        'aria-label': t(e.status === 'ativa' ? 'Suspender {nome}' : 'Reativar {nome}', { nome: e.nome }), texto: e.status === 'ativa' ? t('Suspender') : t('Reativar') })))));
+  $('listaEmpresas').replaceChildren(no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Empresas') }, no('table', { classe: 'tabela' },
+    no('caption', { classe: 'visualmente-oculto', texto: t('Empresas') }),
+    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Ações'].map(c => no('th', { scope: 'col', texto: t(c) })))),
     no('tbody', {}, linhas))));
 }
 
 // ---- Rádios (Admin da empresa) ----
 function desenharRadios() {
   const r = estado.radioEditando, p = estado.pedidoAtendendo;
-  $('formRadioTitulo').textContent = r ? `Editar ${r.nome}` : p ? `Cadastrar a rádio pedida por ${p.por}` : 'Cadastrar rádio';
-  $('radSalvar').textContent = r ? 'Salvar alterações' : 'Cadastrar rádio';
+  $('formRadioTitulo').textContent = r ? t('Editar {nome}', { nome: r.nome }) : p ? t('Cadastrar a rádio pedida por {nome}', { nome: p.por }) : t('Cadastrar rádio');
+  $('radSalvar').textContent = r ? t('Salvar alterações') : t('Cadastrar rádio');
   $('radCancelar').hidden = !r && !p;
   desenharPedidos();
   if (!$('radMunicipios').options.length) {
     $('radMunicipios').replaceChildren(...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
-    $('radMunCom').replaceChildren(no('option', { value: '', texto: 'Escolha o município' }), ...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
+    $('radMunCom').replaceChildren(no('option', { value: '', texto: t('Escolha o município') }), ...municipiosDaConcessao().map(([c, n]) => no('option', { value: c, texto: n })));
   }
   desenharComunidadesRadio();
   $('listaRadios').replaceChildren(...(estado.radiosAdmin.length ? estado.radiosAdmin.map(x => no('div', { classe: 'item', 'data-radio': x.id },
-    no('strong', { texto: x.nome + (x.ativa ? '' : ' (inativa)') }),
+    no('strong', { texto: x.nome + (x.ativa ? '' : t(' (inativa)')) }),
     no('span', { classe: 'meta', texto: [x.email, x.whatsapp].filter(Boolean).join(' · ') }),
-    no('span', { classe: 'meta', texto: `${x.valor_padrao ? dinheiro(x.valor_padrao) : 'sem valor padrão'} (${COBRANCA[x.cobranca]}) · alcança `
-      + [x.alcance.municipios.map(nomeMunicipio).join(', '), x.alcance.comunidades.length ? `${x.alcance.comunidades.length} comunidade(s)` : '']
-        .filter(Boolean).join(' e ') || 'nada cadastrado' }),
-    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-radio-acao': 'editar', 'aria-label': `Editar ${x.nome}`, texto: 'Editar' }),
+    no('span', { classe: 'meta', texto: t('{valor} ({cobranca}) · alcança {alcance}', { valor: x.valor_padrao ? dinheiro(x.valor_padrao) : t('sem valor padrão'),
+      cobranca: t(COBRANCA[x.cobranca]), alcance: [x.alcance.municipios.map(nomeMunicipio).join(', '), x.alcance.comunidades.length
+        ? t('{n} comunidade(s)', { n: x.alcance.comunidades.length }) : ''].filter(Boolean).join(t(' e ')) || t('nada cadastrado') }) }),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-radio-acao': 'editar', 'aria-label': t('Editar {nome}', { nome: x.nome }), texto: t('Editar') }),
       no('button', { type: 'button', 'data-radio-acao': x.ativa ? 'desativar' : 'reativar', classe: x.ativa ? 'perigo' : '',
-        'aria-label': `${x.ativa ? 'Desativar' : 'Reativar'} ${x.nome}`, texto: x.ativa ? 'Desativar' : 'Reativar' }))))
-    : [no('p', { classe: 'ajuda', texto: 'Nenhuma rádio cadastrada.' })]));
+        'aria-label': t(x.ativa ? 'Desativar {nome}' : 'Reativar {nome}', { nome: x.nome }), texto: x.ativa ? t('Desativar') : t('Reativar') }))))
+    : [no('p', { classe: 'ajuda', texto: t('Nenhuma rádio cadastrada.') })]));
 }
 
 const SITUACAO_PEDIDO = { aberto: 'aberto', atendido: 'atendido', recusado: 'recusado' };
@@ -973,15 +1009,16 @@ function desenharPedidos() {
     const aberto = p.status === 'aberto';
     return no('div', { classe: 'item com-erros', 'data-pedido': p.id },
       no('strong', { texto: `${p.nome} (${p.cidade})` }),
-      no('span', { classe: `chip ${p.status === 'recusado' ? 'cancelado' : ''}`, texto: SITUACAO_PEDIDO[p.status] }),
-      no('span', { classe: 'meta', texto: [p.contato && `contato da rádio: ${p.contato}`, p.observacao].filter(Boolean).join(' · ') || 'sem contato nem observação' }),
-      no('span', { classe: 'meta', texto: `pedido por ${p.por} em ${dataHora(p.criado_em)}` + (p.resolvido_por ? ` · ${p.status} por ${p.resolvido_por} em ${dataHora(p.resolvido_em)}` : '')
-        + (p.motivo_recusa ? ` · motivo: ${p.motivo_recusa}` : '') }),
+      no('span', { classe: `chip ${p.status === 'recusado' ? 'cancelado' : ''}`, texto: t(SITUACAO_PEDIDO[p.status]) }),
+      no('span', { classe: 'meta', texto: [p.contato && t('contato da rádio: {contato}', { contato: p.contato }), p.observacao].filter(Boolean).join(' · ') || t('sem contato nem observação') }),
+      no('span', { classe: 'meta', texto: t('pedido por {nome} em {quando}', { nome: p.por, quando: dataHora(p.criado_em) })
+        + (p.resolvido_por ? t(' · {situacao} por {nome} em {quando}', { situacao: t(SITUACAO_PEDIDO[p.status]), nome: p.resolvido_por, quando: dataHora(p.resolvido_em) }) : '')
+        + (p.motivo_recusa ? t(' · motivo: {motivo}', { motivo: p.motivo_recusa }) : '') }),
       aberto ? no('div', { classe: 'acoes' },
-        no('button', { type: 'button', classe: 'prim', 'data-pedido-acao': 'atender', 'aria-label': `Atender o pedido da ${p.nome}`, texto: 'Atender (cadastrar)' }),
-        no('label', { texto: 'Motivo da recusa (o Operador vê) ' }, no('input', { id: `pedido-motivo-${p.id}`, 'data-pedido-motivo': '', maxlength: '300', autocomplete: 'off' })),
-        no('button', { type: 'button', 'data-pedido-acao': 'recusar', 'aria-label': `Recusar o pedido da ${p.nome}`, texto: 'Recusar' })) : null);
-  }) : [no('p', { classe: 'ajuda', texto: 'Nenhum pedido de rádio.' })]));
+        no('button', { type: 'button', classe: 'prim', 'data-pedido-acao': 'atender', 'aria-label': t('Atender o pedido da {nome}', { nome: p.nome }), texto: t('Atender (cadastrar)') }),
+        no('label', {}, no('span', { texto: t('Motivo da recusa (o Operador vê)') }), ' ', no('input', { id: `pedido-motivo-${p.id}`, 'data-pedido-motivo': '', maxlength: '300', autocomplete: 'off' })),
+        no('button', { type: 'button', 'data-pedido-acao': 'recusar', 'aria-label': t('Recusar o pedido da {nome}', { nome: p.nome }), texto: t('Recusar') })) : null);
+  }) : [no('p', { classe: 'ajuda', texto: t('Nenhum pedido de rádio.') })]));
 }
 
 function desenharComunidadesRadio() {
@@ -996,21 +1033,25 @@ function desenharComunidadesRadio() {
     vistas.add(chave);
     lista.push([chave, nome, dist]);
   }
-  lista.sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
+  lista.sort((a, b) => a[1].localeCompare(b[1], IDIOMA));
   $('radComunidades').replaceChildren(resumo, ...lista.map(([chave, nome, dist]) => no('label', { classe: 'check' },
     no('input', { type: 'checkbox', 'data-comunidade': chave, checked: marcadas.has(chave) }),
-    no('span', { texto: `${nome} (${dist === nomeMunicipio(cod).split('/')[0] ? 'Sede' : dist})` }))));
+    no('span', { texto: `${nome} (${dist === nomeMunicipio(cod).split('/')[0] ? t('Sede') : dist})` }))));
 }
 
-const resumoComunidades = () => estado.alcanceComunidades.length ? `Comunidades escolhidas: ${estado.alcanceComunidades
-  .map(c => `${c.nome} (${c.distrito === nomeMunicipio(c.municipio).split('/')[0] ? 'Sede' : c.distrito})`).join(', ')}.` : '';
+const resumoComunidades = () => estado.alcanceComunidades.length ? t('Comunidades escolhidas: {lista}.', { lista: estado.alcanceComunidades
+  .map(c => `${c.nome} (${c.distrito === nomeMunicipio(c.municipio).split('/')[0] ? t('Sede') : c.distrito})`).join(', ') }) : '';
 
 // ---- Configurações da empresa (Admin da empresa) ----
 function desenharConfig() {
   const c = estado.configuracao;
   if (!c) return;
-  if (!$('cfgFuso').options.length) $('cfgFuso').replaceChildren(...FUSOS_UTM.map(([k, t]) => no('option', { value: String(k), texto: `${t} (EPSG:${k})` })));
+  if (!$('cfgFuso').options.length) $('cfgFuso').replaceChildren(...FUSOS_UTM.map(([k, rot]) => no('option', { value: String(k), texto: `${rot} (EPSG:${k})` })));
+  $('cfgIdioma').replaceChildren(...Object.entries(estado.config?.idiomas || { 'pt-BR': 'Português' }).map(([k, nome]) => no('option', { value: k, lang: k, texto: nome })));
+  $('cfgIdioma').value = c.idioma_padrao || 'pt-BR';
   $('cfgModelo').value = c.modelo_mensagem;
+  $('cfgModeloEn').value = c.modelos?.en || '';
+  $('cfgModeloEs').value = c.modelos?.es || '';
   $('cfgNome').value = c.nome_mensagem;
   $('cfgTelefone').value = c.telefone || '';
   $('cfgLimite').value = String(Math.round(c.limite_rejeicao * 1000) / 10);
@@ -1020,24 +1061,31 @@ function desenharConfig() {
   $('cfgAlertaPreco').value = String(Math.round((c.alerta_preco ?? 0.2) * 100));
   $('cfgRepN').value = String(c.repeticao_n ?? 3);
   $('cfgRepDias').value = String(c.repeticao_dias ?? 30);
-  $('cfgCampos').textContent = `Campos: ${c.campos.map(x => `{${x}}`).join(' ')}. Trecho entre [colchetes] some se algum campo dentro dele ficar vazio.`;
+  $('cfgCampos').textContent = t('Campos: {campos}. Trecho entre [colchetes] some se algum campo dentro dele ficar vazio.', { campos: c.campos.map(x => `{${x}}`).join(' ') });
   desenharPreviaConfig();
 }
 
+// a prévia de cada modelo, com um exemplo no formato do idioma (a mesma regra do servidor: nucleo/mensagem.py e nucleo/idiomas.py)
+const EXEMPLOS_MENSAGEM = {
+  'pt-BR': { data: '20/11', inicio: '8h', fim: '14h', motivo: 'manutenção preventiva na rede', comunidades: 'Graminha, Boa Sorte e São Pedro' },
+  en: { data: 'November 20', inicio: '8 a.m.', fim: '2 p.m.', motivo: 'preventive maintenance on the power grid', comunidades: 'Graminha, Boa Sorte and São Pedro' },
+  es: { data: '20 de noviembre', inicio: '8:00', fim: '14:00', motivo: 'mantenimiento preventivo de la red', comunidades: 'Graminha, Boa Sorte y São Pedro' },
+};
 function desenharPreviaConfig() {
-  $('cfgPrevia').textContent = 'Exemplo: ' + montarMensagem($('cfgModelo').value, { distribuidora: $('cfgNome').value, municipio: 'Leopoldina', data: '20/11',
-    inicio: '8h', fim: '14h', motivo: 'manutenção preventiva na rede', comunidades: 'Graminha, Boa Sorte e São Pedro',
-    comunidades_parciais: 'Tomé Nogueira', telefone_atendimento: $('cfgTelefone').value, codigo: 'FRL-0000-0000-0000' });
+  for (const [idioma, modelo, previa] of [['pt-BR', 'cfgModelo', 'cfgPrevia'], ['en', 'cfgModeloEn', 'cfgPreviaEn'], ['es', 'cfgModeloEs', 'cfgPreviaEs']])
+    $(previa).textContent = t('Exemplo: {texto}', { texto: montarMensagem($(modelo).value, { distribuidora: $('cfgNome').value, municipio: 'Leopoldina',
+      ...EXEMPLOS_MENSAGEM[idioma], comunidades_parciais: 'Tomé Nogueira', telefone_atendimento: $('cfgTelefone').value, codigo: 'FRL-0000-0000-0000' }) });
 }
 
 function desenharRegistro() {
-  const linhas = estado.registro.map(r => no('tr', {}, no('td', { texto: dataHora(r.quando) }),
-    no('td', { texto: r.usuario ? `${r.usuario}${r.perfil ? ` (${r.perfil})` : ''}` : '—' }),
+  const linhas = estado.registro.map(r => no('tr', {}, no('th', { scope: 'row', texto: dataHora(r.quando) }),
+    no('td', { texto: r.usuario ? `${r.usuario}${r.perfil ? ` (${t(r.perfil)})` : ''}` : '—' }),
     no('td', { texto: r.empresa || '—' }), no('td', { texto: r.acao }), no('td', { texto: r.detalhe }),
     no('td', { classe: 'codigo', texto: r.codigo || '' })));
-  $('listaRegistro').replaceChildren(no('table', { classe: 'tabela' },
-    no('thead', {}, no('tr', {}, ['Quando', 'Quem', 'Empresa', 'O quê', 'Detalhe', 'Código'].map(t => no('th', { texto: t })))),
-    no('tbody', {}, linhas)));
+  $('listaRegistro').replaceChildren(no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Auditoria') }, no('table', { classe: 'tabela' },
+    no('caption', { classe: 'visualmente-oculto', texto: t('Auditoria') }),
+    no('thead', {}, no('tr', {}, ['Quando', 'Quem', 'Empresa', 'O quê', 'Detalhe', 'Código'].map(c => no('th', { scope: 'col', texto: t(c) })))),
+    no('tbody', {}, linhas))));
 }
 
 function mostrarSenhaTemporaria(texto, senha) {
@@ -1069,7 +1117,7 @@ function trocarFundoDoMapa() {
 function iniciarMapa() {
   if (mapa) return;
   mapa = L.map('mapa', { zoomControl: true, attributionControl: false, minZoom: 5, maxZoom: 16 });
-  atribuicao = L.control.attribution({ prefix: 'Concessão e comunidades: IBGE · Leaflet' }).addTo(mapa);
+  atribuicao = L.control.attribution({ prefix: t('Concessão e comunidades: IBGE · Leaflet') }).addTo(mapa);
   trocarFundoDoMapa();
   mapa.setView([-21.0, -42.6], 8);
   mapa.on('moveend', aoMoverMapa);
@@ -1078,7 +1126,7 @@ function iniciarMapa() {
 // municípios da concessão que aparecem na tela (pelo retângulo do contorno)
 const municipiosNaTela = () => !camadaConcessao ? [] : camadaConcessao.getLayers()
   .filter(l => mapa.getBounds().intersects(l.getBounds())).map(l => l.feature.properties);
-const distritoDe = (distrito, municipio) => distrito === municipio ? 'Sede' : distrito;
+const distritoDe = (distrito, municipio) => distrito === municipio ? t('Sede') : distrito;
 
 // comunidades dos municípios na tela, fora os do aviso (esses a desenharComunidades destaca)
 function desenharBase() {
@@ -1095,7 +1143,7 @@ function desenharBase() {
     onEachFeature: (f, l) => {
       l.bindTooltip(() => no('span', {
         texto: `${semSufixo(f.properties.nome)} (${distritoDe(f.properties.distrito, f.properties.municipio)}) · ${f.properties.municipio}`
-          + (estado.calor ? ` · ${fmt(desligamentosDe(f.properties))} desligamento(s) em 12 meses` : '') }), { sticky: true });
+          + (estado.calor ? t(' · {n} desligamento(s) em 12 meses', { n: fmt(desligamentosDe(f.properties)) }) : '') }), { sticky: true });
       l.on('click', e => abrirFicha(e.latlng, f.properties.codigo_ibge, f.properties.nome, f.properties.distrito));
     },
   }).addTo(mapa);
@@ -1131,8 +1179,8 @@ const ESCALA_CALOR = ['#FFF3C4', '#F5B83D', '#D9480F', '#8B1A1A'];
 function estiloCalor(p) {
   const n = estado.calor ? desligamentosDe(p) : 0;
   if (!n) return { fillOpacity: 0 };
-  const t = n / Math.max(1, estado.calor.maximo);
-  return { fillColor: ESCALA_CALOR[Math.min(3, Math.floor(t * 4 - 1e-9))], fillOpacity: .6 };
+  const fr = n / Math.max(1, estado.calor.maximo);
+  return { fillColor: ESCALA_CALOR[Math.min(3, Math.floor(fr * 4 - 1e-9))], fillOpacity: .6 };
 }
 
 async function alternarCalor() {
@@ -1142,35 +1190,35 @@ async function alternarCalor() {
     if (e.status !== 401) avisar(e.message, true);
   }
   $('botaoCalor').setAttribute('aria-pressed', String(!!estado.calor));
-  $('botaoCalor').textContent = estado.calor ? 'Esconder mapa de calor' : 'Mapa de calor (12 meses)';
+  $('botaoCalor').textContent = estado.calor ? t('Esconder mapa de calor') : t('Mapa de calor (12 meses)');
   $('legendaCalor').hidden = !estado.calor;
   $('calorMax').textContent = estado.calor ? fmt(estado.calor.maximo) : '';
   desenharBase(); desenharComunidades();
-  if (estado.calor && mapa.getZoom() < ZOOM_COMUNIDADES) avisar('O mapa de calor aparece de perto: aproxime num município (ou clique nele).');
+  if (estado.calor && mapa.getZoom() < ZOOM_COMUNIDADES) avisar(t('O mapa de calor aparece de perto: aproxime num município (ou clique nele).'));
 }
 
 // a ficha abre num balão do mapa: contagens, rádios que alcançam e os botões do relatório da comunidade
 async function abrirFicha(latlng, municipio, nome, distrito) {
   if (!pode('ver_historico') || !municipio) return;
   const filtros = { municipio, nome: semSufixo(nome), ...(distrito ? { distrito } : {}) };
-  const caixa = no('div', { classe: 'ficha', role: 'dialog', 'aria-label': `Ficha de ${semSufixo(nome)}` }, no('p', { texto: 'Carregando a ficha…' }));
+  const caixa = no('div', { classe: 'ficha', role: 'dialog', 'aria-label': t('Ficha de {nome}', { nome: semSufixo(nome) }) }, no('p', { texto: t('Carregando a ficha…') }));
   L.popup({ maxWidth: 300 }).setLatLng(latlng).setContent(caixa).openOn(mapa);
   try {
     const f = estado.ficha = await api(`/api/comunidades/ficha?${consulta(filtros)}`);
-    const linha = (rotulo, valor) => [no('dt', { texto: rotulo }), no('dd', { texto: valor })];
+    const linha = (rotulo, valor) => [no('dt', { texto: t(rotulo) }), no('dd', { texto: valor })];
     caixa.replaceChildren(
       no('h3', { texto: `${f.nome}${f.distrito ? ` (${f.distrito})` : ''}` }),
-      no('p', { classe: 'ajuda', texto: `${f.municipio || ''} · últimos 12 meses · dados de demonstração (fictícios)` }),
-      no('dl', {}, ...linha('Desligamentos', fmt(f.desligamentos)), ...linha('Horas sem luz', `${fmt(f.horas)} h`),
+      no('p', { classe: 'ajuda', texto: t('{municipio} · últimos 12 meses · dados de demonstração (fictícios)', { municipio: f.municipio || '' }) }),
+      no('dl', {}, ...linha('Desligamentos', fmt(f.desligamentos)), ...linha('Horas sem luz', t('{n} h', { n: fmt(f.horas) })),
         ...linha('UCs afetadas (soma)', fmt(f.ucs_afetadas)), ...linha('Endereços (IBGE)', f.enderecos == null ? '—' : fmt(f.enderecos)),
-        ...linha('No prazo', f.pct_no_prazo == null ? '—' : `${f.pct_no_prazo.toLocaleString('pt-BR')}%`),
-        ...linha('Este mês', `${fmt(f.mes_atual)}${f.comparacao ? ` (${f.comparacao} vs mês anterior)` : ''}`),
+        ...linha('No prazo', f.pct_no_prazo == null ? '—' : `${f.pct_no_prazo.toLocaleString(IDIOMA)}%`),
+        ...linha('Este mês', `${fmt(f.mes_atual)}${f.comparacao ? t(' ({comparacao} vs mês anterior)', { comparacao: f.comparacao }) : ''}`),
         ...linha('Último', f.ultimo ? dataLonga(f.ultimo.dia) : '—'), ...linha('Próximo', f.proximo ? dataLonga(f.proximo.dia) : '—')),
-      no('p', { texto: f.radios.length ? `Rádios que alcançam: ${f.radios.join(', ')}` : 'Nenhuma rádio cadastrada alcança esta comunidade.' }),
-      no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'pdf', texto: 'Relatório desta comunidade (PDF)' })),
-      pode('enviar_relatorio') ? no('label', { texto: 'Enviar por e-mail (domínio da empresa) ' },
-        no('input', { 'data-ficha-destinos': '', maxlength: '400', autocomplete: 'off', inputmode: 'email' })) : null,
-      pode('enviar_relatorio') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'enviar', texto: 'Enviar' })) : null);
+      no('p', { texto: f.radios.length ? t('Rádios que alcançam: {lista}', { lista: f.radios.join(', ') }) : t('Nenhuma rádio cadastrada alcança esta comunidade.') }),
+      no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'pdf', texto: t('Relatório desta comunidade (PDF)') })),
+      pode('enviar_relatorio') ? no('label', {}, no('span', { texto: t('Enviar por e-mail (domínio da empresa)') }), ' ',
+        no('input', { 'data-ficha-destinos': '', maxlength: '400', autocomplete: 'email', inputmode: 'email' })) : null,
+      pode('enviar_relatorio') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-ficha': 'enviar', texto: t('Enviar') })) : null);
     caixa.addEventListener('click', async evento => {
       const b = evento.target.closest('button[data-ficha]');
       if (!b) return;
@@ -1178,13 +1226,13 @@ async function abrirFicha(latlng, municipio, nome, distrito) {
       try {
         if (b.dataset.ficha === 'pdf') {
           await baixarDaApi(`/api/relatorios/comunidade.pdf?${consulta(filtros)}`, { method: 'GET' }, 'farol-comunidade.pdf');
-          avisar(`Relatório de ${f.nome} baixado, com o seu nome e o código de verificação (registrado na auditoria).`);
+          avisar(t('Relatório de {nome} baixado, com o seu nome e o código de verificação (registrado na auditoria).', { nome: f.nome }));
         } else {
           const destinos = destinatarios(caixa.querySelector('[data-ficha-destinos]').value);
-          if (!destinos.length) return avisar('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).', true);
-          if (!confirm(`Enviar o relatório de ${f.nome} (PDF) para ${destinos.join(', ')}?`)) return;
+          if (!destinos.length) return avisar(t('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).'), true);
+          if (!confirm(t('Enviar o relatório de {nome} (PDF) para {destinos}?', { nome: f.nome, destinos: destinos.join(', ') }))) return;
           const r = await api('/api/relatorios/comunidade/enviar', { method: 'POST', json: { filtros, destinatarios: destinos } });
-          avisar(`Relatório de ${f.nome} enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
+          avisar(t('Relatório de {nome} enviado para {destinos} (código {codigo}).', { nome: f.nome, destinos: r.destinatarios.join(', '), codigo: r.codigo }));
         }
       } catch (e) {
         if (e.status !== 401) avisar(e.message, true);
@@ -1193,7 +1241,7 @@ async function abrirFicha(latlng, municipio, nome, distrito) {
       }
     });
   } catch (e) {
-    caixa.replaceChildren(no('p', { texto: e.status === 401 ? 'A sessão acabou.' : e.message }));
+    caixa.replaceChildren(no('p', { texto: e.status === 401 ? t('A sessão acabou.') : e.message }));
   }
 }
 
@@ -1203,10 +1251,11 @@ function desenharRede() {
   camadaRede?.remove();
   camadaRede = null;
   const botao = $('botaoRede');
-  botao.textContent = estado.verRede ? 'Esconder rede fictícia' : 'Mostrar rede fictícia';
+  botao.textContent = estado.verRede ? t('Esconder rede fictícia') : t('Mostrar rede fictícia');
   botao.setAttribute('aria-pressed', String(estado.verRede));
   $('legendaRede').hidden = !estado.verRede;
   atribuicao?.removeAttribution(CREDITO_REDE);
+  atribuicao?.removeAttribution(t(CREDITO_REDE));
   if (!mapa || !estado.verRede || mapa.getZoom() < ZOOM_COMUNIDADES) return;
   telaRede ||= L.canvas({ padding: .3 });
   const partes = [];
@@ -1216,28 +1265,28 @@ function desenharRede() {
     const cor = a => CORES_ALIMENTADOR[(parseInt(a.split('-').pop(), 10) - 1) % CORES_ALIMENTADOR.length] || COR.info;
     partes.push(L.geoJSON(r.alimentadores, {
       style: f => ({ color: cor(f.properties.alimentador), weight: 2.2, opacity: .9 }),
-      onEachFeature: (f, l) => l.bindTooltip(() => no('span', { texto: `Alimentador ${f.properties.alimentador} (fictício) · ${m.nome}` }), { sticky: true }),
+      onEachFeature: (f, l) => l.bindTooltip(() => no('span', { texto: t('Alimentador {alimentador} (fictício) · {municipio}', { alimentador: f.properties.alimentador, municipio: m.nome }) }), { sticky: true }),
     }));
     if (mapa.getZoom() >= ZOOM_TRAFOS)
       for (const [lat, lon] of r.trafos)
         partes.push(L.circleMarker([lat, lon], { renderer: telaRede, radius: 2.5, weight: 0, fillColor: COR.cinza, fillOpacity: .9, interactive: false }));
     for (const [lat, lon, codigo, alim, jusante] of r.chaves)
       partes.push(L.circleMarker([lat, lon], { radius: 4.5, weight: 1.5, color: '#FFFFFF', fillColor: cor(alim), fillOpacity: 1 })
-        .bindTooltip(() => no('span', { texto: `Chave ${codigo} (fictícia) · alimentador ${alim} · ${fmt(jusante)} unidades a jusante` })));
+        .bindTooltip(() => no('span', { texto: t('Chave {codigo} (fictícia) · alimentador {alimentador} · {n} unidades a jusante', { codigo, alimentador: alim, n: fmt(jusante) }) })));
     const se = r.subestacao;
     partes.push(L.marker(se.ponto, { keyboard: false, icon: L.divIcon({ className: 'subestacao', html: no('span'), iconSize: [16, 16] }) })
       .bindTooltip(() => no('span', { texto: se.nome })));
   }
   if (!partes.length) return;
   camadaRede = L.layerGroup(partes).addTo(mapa);
-  atribuicao.addAttribution(CREDITO_REDE);
+  atribuicao.addAttribution(t(CREDITO_REDE));
 }
 
 function desenharLegenda() {
   const min = estado.legendaMinimizada;
   $('legenda').classList.toggle('minimizada', min);
   $('botaoLegenda').setAttribute('aria-expanded', String(!min));
-  $('botaoLegendaTexto').textContent = min ? 'Legenda' : 'Minimizar legenda';
+  $('botaoLegendaTexto').textContent = min ? t('Legenda') : t('Minimizar legenda');
   $('botaoLegenda').querySelector('.seta').textContent = min ? '▸' : '▾';
 }
 
@@ -1276,7 +1325,7 @@ async function alternarRede() {
   estado.verRede = !estado.verRede;
   desenharRede();
   if (estado.verRede && mapa.getZoom() >= ZOOM_COMUNIDADES) { await buscarNaTela(); desenharRede(); }
-  else if (estado.verRede) avisar('A rede fictícia aparece de perto: aproxime num município (ou clique nele).');
+  else if (estado.verRede) avisar(t('A rede fictícia aparece de perto: aproxime num município (ou clique nele).'));
 }
 
 // "Ir para": o estado e o município da concessão (a lista sai do contorno da concessão)
@@ -1286,9 +1335,10 @@ function desenharIrPara() {
   if (!feicoes.length) return;
   const ufs = [...new Set(feicoes.map(f => f.properties.uf))].sort();
   const uf = $('filtroUf').value || '';
-  if (!$('filtroUf').options.length) $('filtroUf').replaceChildren(no('option', { value: '', texto: 'Todos' }), ...ufs.map(u => no('option', { value: u, texto: u })));
-  $('filtroMunicipio').replaceChildren(no('option', { value: '', texto: 'Escolha' }), ...feicoes.filter(f => !uf || f.properties.uf === uf)
-    .map(f => [f.properties.codigo_ibge, f.properties.nome]).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'))
+  if (!$('filtroUf').options.length) $('filtroUf').replaceChildren(no('option', { value: '', texto: t('Todos') }), ...ufs.map(u => no('option', { value: u, texto: u })));
+  else $('filtroUf').options[0].textContent = t('Todos');
+  $('filtroMunicipio').replaceChildren(no('option', { value: '', texto: t('Escolha') }), ...feicoes.filter(f => !uf || f.properties.uf === uf)
+    .map(f => [f.properties.codigo_ibge, f.properties.nome]).sort((a, b) => a[1].localeCompare(b[1], IDIOMA))
     .map(([c, n]) => no('option', { value: c, texto: n })));
 }
 
@@ -1321,7 +1371,7 @@ function desenharConcessao() {
         : { color: COR.cinza, weight: .8, fillColor: COR.cinza, fillOpacity: .05 },
     onEachFeature: (f, l) => {
       l.bindTooltip(() => no('span', { texto: `${f.properties.nome}/${f.properties.uf}`
-        + (contagem ? ` · ${fmt(contagem[f.properties.codigo_ibge] || 0)} aviso(s)` : '') }), { sticky: true });
+        + (contagem ? t(' · {n} aviso(s)', { n: fmt(contagem[f.properties.codigo_ibge] || 0) }) : '') }), { sticky: true });
       // de longe, clicar no município aproxima nele (e aparecem as comunidades)
       l.on('click', () => { if (mapa.getZoom() < ZOOM_COMUNIDADES) mapa.fitBounds(l.getBounds(), { padding: [20, 20] }); });
     },
@@ -1356,9 +1406,9 @@ function desenharComunidades() {
     onEachFeature: (f, l) => {
       const { c, m } = f.properties;
       l.on('click', e => abrirFicha(e.latlng, m?.codigo_ibge || f.properties.codigo_ibge, c?.nome || f.properties.nome, c ? c.distrito : f.properties.distrito));
-      if (!c) return l.bindTooltip(() => no('span', { texto: `${semSufixo(f.properties.nome)} · fora do aviso` }), { sticky: true });
-      l.bindTooltip(() => no('span', {}, no('strong', { texto: nomeComDistrito(c, m) }), ` · ${ROTULO[situacao(c)]}`, no('br'),
-        `${fmt(c.afetadas)} UCs afetadas · ${fmt(c.total)} endereços na comunidade`), { sticky: true });
+      if (!c) return l.bindTooltip(() => no('span', { texto: t('{nome} · fora do aviso', { nome: semSufixo(f.properties.nome) }) }), { sticky: true });
+      l.bindTooltip(() => no('span', {}, no('strong', { texto: nomeComDistrito(c, m) }), ` · ${t(ROTULO[situacao(c)])}`, no('br'),
+        t('{ucs} UCs afetadas · {total} endereços na comunidade', { ucs: fmt(c.afetadas), total: fmt(c.total) })), { sticky: true });
     },
   }).addTo(mapa);
   mapa.fitBounds(camadaComunidades.getBounds(), { padding: [30, 30], maxZoom: 13 });
@@ -1374,7 +1424,7 @@ function desenharUcs() {
   camadaUcs = null;
   const r = estado.resultado, botao = $('botaoUcs');
   botao.closest('li').hidden = !temPontos();
-  botao.textContent = estado.verUcs ? 'Esconder UCs' : 'Mostrar UCs';
+  botao.textContent = estado.verUcs ? t('Esconder UCs') : t('Mostrar UCs');
   botao.setAttribute('aria-pressed', String(estado.verUcs));
   if (!temPontos() || !estado.verUcs) return;
   telaUcs ||= L.canvas({ padding: .3 });
@@ -1385,12 +1435,12 @@ function desenharUcs() {
     for (const [lat, lon, i] of m.pontos || []) {
       const c = m.comunidades[i];
       marcas.push(ponto(lat, lon, c && situacao(c) !== 'vizinha' ? COR.ambarForte : COR.cinza,
-        c ? `UC da planilha · ${nomeComDistrito(c, m)}` : `UC da planilha · ${m.nome}`));
+        t('UC da planilha · {nome}', { nome: c ? nomeComDistrito(c, m) : m.nome })));
     }
   }
-  for (const [lat, lon] of r.pontos_fora || []) marcas.push(ponto(lat, lon, COR.erro, 'UC fora da concessão'));
+  for (const [lat, lon] of r.pontos_fora || []) marcas.push(ponto(lat, lon, COR.erro, t('UC fora da concessão')));
   // as corrigidas por último (por cima), com a cor própria
-  for (const [lat, lon] of r.pontos_corrigidos || []) marcas.push(ponto(lat, lon, COR.corrigida, 'UC com coordenada corrigida (confira)'));
+  for (const [lat, lon] of r.pontos_corrigidos || []) marcas.push(ponto(lat, lon, COR.corrigida, t('UC com coordenada corrigida (confira)')));
   camadaUcs = L.layerGroup(marcas).addTo(mapa);
   if (!camadaComunidades && marcas.length) mapa.fitBounds(L.featureGroup(marcas).getBounds(), { padding: [30, 30], maxZoom: 13 });
 }
@@ -1403,15 +1453,18 @@ const SEM_CONEXAO = 'Sem conexão com o servidor: o pedido não foi concluído. 
 const ERRO_SERVIDOR = 'O servidor teve um problema e nada foi salvo. Tente de novo em instantes; se continuar, avise o suporte.';
 
 // fetch com a falha de rede traduzida (o navegador diria só "Failed to fetch")
-async function buscar(url, opcoes) {
-  try { return await fetch(url, { credentials: 'same-origin', ...opcoes }); } catch (e) { throw new ErroApi(0, SEM_CONEXAO); }
+// o idioma da tela vai em todo pedido (X-Farol-Idioma): o servidor responde os erros e os relatórios nele
+async function buscar(url, opcoes = {}) {
+  try {
+    return await fetch(url, { credentials: 'same-origin', ...opcoes, headers: { ...(opcoes.headers || {}), 'X-Farol-Idioma': IDIOMA } });
+  } catch (e) { throw new ErroApi(0, t(SEM_CONEXAO)); }
 }
 
 // a resposta de erro vira uma mensagem clara: a do servidor (JSON) ou, se o corpo não for JSON (proxy fora do ar), a padrão
 async function erroDaResposta(r, padrao = 'Não foi possível concluir. Confira os dados e tente de novo.') {
   const j = (r.headers.get('Content-Type') || '').includes('json') ? await r.json().catch(() => ({})) : {};
-  if (r.status === 401 && estado.tela === 'app') { sessaoAcabou(); return new ErroApi(401, 'A sessão acabou. Entre de novo.'); }
-  const texto = typeof j.detail === 'string' ? j.detail : r.status >= 500 ? ERRO_SERVIDOR : padrao;
+  if (r.status === 401 && estado.tela === 'app') { sessaoAcabou(); return new ErroApi(401, t('A sessão acabou. Entre de novo.')); }
+  const texto = typeof j.detail === 'string' ? j.detail : r.status >= 500 ? t(ERRO_SERVIDOR) : t(padrao);
   return new ErroApi(r.status, texto, j, r.headers.get('X-Farol-Campo') || j.campo || null);
 }
 
@@ -1427,6 +1480,7 @@ async function ocupado(botao, texto, fazer) {
   if (!botao) return fazer();
   if (botao.dataset.ocupado) return;
   const antes = botao.textContent;
+  texto = t(texto);
   Object.assign(botao.dataset, { ocupado: '1' });
   botao.disabled = true;
   botao.setAttribute('aria-busy', 'true');
@@ -1506,12 +1560,12 @@ async function acaoEnvio(evento) {
 
 async function pedirRadio(m, sec) {
   const cod = m.codigo_ibge, p = estado.escolha[cod].pedido, lugar = $(`pedido-${cod}`);
-  const erros = [p.nome.trim().length < 2 && [`pedido-nome-${cod}`, 'Informe o nome da rádio (de 2 a 80 caracteres).'],
-    p.cidade.trim().length < 2 && [`pedido-cidade-${cod}`, 'Informe a cidade da rádio.']].filter(Boolean);
+  const erros = [p.nome.trim().length < 2 && [`pedido-nome-${cod}`, t('Informe o nome da rádio (de 2 a 80 caracteres).')],
+    p.cidade.trim().length < 2 && [`pedido-cidade-${cod}`, t('Informe a cidade da rádio.')]].filter(Boolean);
   if (erros.length) { mostrarErros(lugar, erros); return avisar(erros[0][1], true); }
   limparErros(lugar);
   const j = await api('/api/radios/pedidos', { method: 'POST', json: { nome: p.nome, cidade: p.cidade, contato: p.contato, observacao: p.observacao } });
-  avisar(`Pedido de cadastro da ${j.pedido.nome} enviado ao Admin da empresa (registrado na auditoria).`);
+  avisar(t('Pedido de cadastro da {nome} enviado ao Admin da empresa (registrado na auditoria).', { nome: j.pedido.nome }));
   Object.assign(p, { nome: '', contato: '', observacao: '' });
   estado.meusPedidos = (await api('/api/radios/pedidos')).pedidos;
   desenharEnvio(m);
@@ -1520,29 +1574,30 @@ async function pedirRadio(m, sec) {
 
 async function enviarParaRadio(m, canal, sec) {
   const cod = m.codigo_ibge, e = estado.escolha[cod], radio = estado.radios.find(x => String(x.id) === String(e.radioId));
-  if (!radio) return avisar('Escolha a rádio.', true);
+  if (!radio) return avisar(t('Escolha a rádio.'), true);
   const valor = reaisNumero(e.valor), antigo = reaisNumero(e.antigo), texto = estado.avisos[cod];
-  const erros = [(valor === null || Number.isNaN(valor)) && [`valor-${cod}`, 'Informe o valor deste envio em R$ (ex.: 150,00).'],
-    Number.isNaN(antigo) && [`antigo-${cod}`, 'O custo antigo tem de ser um valor em R$ (ou vazio).']].filter(Boolean);
+  const erros = [(valor === null || Number.isNaN(valor)) && [`valor-${cod}`, t('Informe o valor deste envio em R$ (ex.: 150,00).')],
+    Number.isNaN(antigo) && [`antigo-${cod}`, t('O custo antigo tem de ser um valor em R$ (ou vazio).')]].filter(Boolean);
   if (erros.length) { mostrarErros(sec, erros); return avisar(erros[0][1], true); }
   limparErros(sec);
   if (canal === 'email') {
-    if (!radio.email) return avisar(`${radio.nome} não tem e-mail cadastrado.`, true);
-    if (!confirm(`Enviar para ${radio.nome} (${radio.email})?`)) return;
-    avisar(`Gerando o PDF${temAudio() ? ' e o MP3' : ''} e enviando para ${radio.nome}…`);
+    if (!radio.email) return avisar(t('{nome} não tem e-mail cadastrado.', { nome: radio.nome }), true);
+    if (!confirm(t('Enviar para {nome} ({email})?', { nome: radio.nome, email: radio.email }))) return;
+    avisar(t(temAudio() ? 'Gerando o PDF e o MP3 e enviando para {nome}…' : 'Gerando o PDF e enviando para {nome}…', { nome: radio.nome }));
   } else if (canal === 'whatsapp') {
-    if (!radio.whatsapp) return avisar(`${radio.nome} não tem WhatsApp cadastrado.`, true);
-    if (!confirm(`Abrir o WhatsApp para ${radio.nome} (${radio.whatsapp}) com a mensagem?`)) return;
+    if (!radio.whatsapp) return avisar(t('{nome} não tem WhatsApp cadastrado.', { nome: radio.nome }), true);
+    if (!confirm(t('Abrir o WhatsApp para {nome} ({numero}) com a mensagem?', { nome: radio.nome, numero: radio.whatsapp }))) return;
     const numero = radio.whatsapp.length > 11 ? radio.whatsapp : `55${radio.whatsapp}`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
   } else {
-    if (!confirm(`Copiar a mensagem para mandar para ${radio.nome}?`)) return;
-    try { await navigator.clipboard.writeText(texto); } catch (x) { return avisar('Não foi possível copiar; selecione o texto e use Ctrl+C.', true); }
+    if (!confirm(t('Copiar a mensagem para mandar para {nome}?', { nome: radio.nome }))) return;
+    try { await navigator.clipboard.writeText(texto); } catch (x) { return avisar(t('Não foi possível copiar; selecione o texto e use Ctrl+C.'), true); }
   }
   const j = await api(`/api/historico/${estado.resultado.id}/envios`, { method: 'POST', json: { municipio: cod, radio_id: radio.id, canal, texto,
     valor: e.valor, cobranca: e.cobranca, custo_antigo: e.antigo || null } });
-  avisar(j.erro || { email: `E-mail entregue ao servidor para ${radio.nome} (${radio.email}). A rádio confirma pelo link do e-mail.`,
-    whatsapp: `WhatsApp aberto para ${radio.nome}; o envio ficou registrado.`, copia: `Mensagem copiada para ${radio.nome}; o envio ficou registrado.` }[canal], !!j.erro);
+  avisar(j.erro || t({ email: 'E-mail entregue ao servidor para {nome} ({email}). A rádio confirma pelo link do e-mail.',
+    whatsapp: 'WhatsApp aberto para {nome}; o envio ficou registrado.', copia: 'Mensagem copiada para {nome}; o envio ficou registrado.' }[canal],
+    { nome: radio.nome, email: radio.email }), !!j.erro);
   estado.finais[cod] = texto;
   desenharFinal(cod);
   await carregarEnvios();
@@ -1561,7 +1616,7 @@ function sessaoAcabou() {
   limparTela();
   estado.tela = 'entrar';
   desenharTela(); desenharEstado();
-  mensagemEm('estadoEntrar', 'A sessão acabou. Entre de novo.', true);
+  mensagemEm('estadoEntrar', t('A sessão acabou. Entre de novo.'), true);
 }
 
 function avisar(mensagem, erro = false) {
@@ -1577,20 +1632,28 @@ async function abrirApp() {
   iniciarMapa();
   mapa.invalidateSize();
   [estado.config, estado.concessao] = await Promise.all([api('/api/config'), api('/api/concessao')]);
-  $('faixa').textContent = estado.config.aviso_ficticio;
-  $('idioma').replaceChildren(...Object.entries(estado.config.idiomas).map(([k, nome]) => no('option', { value: k, texto: nome })));
+  $('faixa').textContent = t(estado.config.aviso_ficticio);
+  // o idioma do aviso: cada um no próprio nome (lang); o padrão é o da empresa
+  $('idioma').replaceChildren(...Object.entries(estado.config.idiomas).map(([k, nome]) => no('option', { value: k, lang: k, texto: nome })));
   $('idioma').value = estado.config.idioma_padrao;
-  $('tipo').replaceChildren(...Object.entries(estado.config.tipos).map(([k, nome]) => no('option', { value: k, texto: nome })));
+  desenharTipos();
   $('tipo').value = estado.config.tipo_padrao;
+  desenharIdiomaAviso();
   $('tipoOutro').maxLength = estado.config.max_outro;
   desenharConcessao();
   desenharIrPara();
+  $('botaoCalor').textContent = estado.calor ? t('Esconder mapa de calor') : t('Mapa de calor (12 meses)');
+  atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
   mapa.fitBounds(camadaConcessao.getBounds(), { padding: [20, 20] });
   await irPara(estado.vista);
 }
 
 async function aposEntrar(usuario) {
   estado.usuario = usuario;
+  // o idioma guardado no perfil vale; sem ele, o escolhido na tela de entrar passa a ser o do perfil
+  const preferido = usuario.preferencias?.idioma;
+  if (preferido && preferido !== IDIOMA) await trocarIdioma(preferido, false);
+  else if (!preferido && IDIOMA !== 'pt-BR') api('/api/eu/preferencias', { method: 'PUT', json: { idioma: IDIOMA } }).catch(() => {});
   if (usuario.trocar_senha) {
     estado.tela = 'senha';
     desenharTela();
@@ -1603,8 +1666,8 @@ async function aposEntrar(usuario) {
 async function entrar(evento) {
   evento.preventDefault();
   const email = $('email').value.trim(), senha = $('senha').value;
-  const erros = [!email && ['email', 'Informe o e-mail.'], !senha && ['senha', 'Informe a senha.']].filter(Boolean);
-  if (erros.length) { mostrarErros($('formEntrar'), erros); return mensagemEm('estadoEntrar', 'Informe o e-mail e a senha.', true); }
+  const erros = [!email && ['email', t('Informe o e-mail.')], !senha && ['senha', t('Informe a senha.')]].filter(Boolean);
+  if (erros.length) { mostrarErros($('formEntrar'), erros); return mensagemEm('estadoEntrar', t('Informe o e-mail e a senha.'), true); }
   limparErros($('formEntrar'));
   await ocupado($('botaoEntrar'), 'Entrando…', async () => {
     try {
@@ -1621,7 +1684,7 @@ async function entrar(evento) {
 async function trocarSenha(evento) {
   evento.preventDefault();
   const atual = $('senhaAtual').value, nova = $('senhaNova').value;
-  const erros = [!atual && ['senhaAtual', 'Informe a senha atual (a temporária).'], validarSenhaNova(nova, $('senhaNova2').value)].filter(Boolean);
+  const erros = [!atual && ['senhaAtual', t('Informe a senha atual (a temporária).')], validarSenhaNova(nova, $('senhaNova2').value)].filter(Boolean);
   if (erros.length) { mostrarErros($('formSenha'), erros); return mensagemEm('estadoSenha', erros[0][1], true); }
   limparErros($('formSenha'));
   await ocupado($('botaoSenha'), 'Salvando…', async () => {
@@ -1632,8 +1695,7 @@ async function trocarSenha(evento) {
       await aposEntrar(j.usuario);
     } catch (e) {
       mensagemEm('estadoSenha', e.message, true);
-      if (/atual/.test(e.message)) mostrarErros($('formSenha'), [['senhaAtual', e.message]]);
-      else if (e.status === 422) mostrarErros($('formSenha'), [['senhaNova', e.message]]);
+      erroDoServidor($('formSenha'), e, { atual: 'senhaAtual', nova: 'senhaNova' });
     }
   });
 }
@@ -1660,7 +1722,7 @@ function limparTela() {
   $('relDestinos').value = $('audDestinos').value = '';
   $('linhaTempo').hidden = true; estado.linhaTempo = null;
   mapa?.closePopup();
-  $('legendaCalor').hidden = true; $('botaoCalor').setAttribute('aria-pressed', 'false'); $('botaoCalor').textContent = 'Mapa de calor (12 meses)';
+  $('legendaCalor').hidden = true; $('botaoCalor').setAttribute('aria-pressed', 'false'); $('botaoCalor').textContent = t('Mapa de calor (12 meses)');
   $('dica').hidden = true;
   $('arquivo').value = '';
   $('buscaHistorico').value = ''; $('periodoHistorico').value = '';
@@ -1778,7 +1840,7 @@ async function enviar(evento) {
   limparErros($('form'));
   if (temResultadoNovo() && !gerado()) descartarNovo();
   estado.enviando = true;
-  avisar('Lendo a planilha, conferindo as linhas e localizando as comunidades…');
+  avisar(t('Lendo a planilha, conferindo as linhas e localizando as comunidades…'));
   const horario = `${horaTexto(form.inicio)} às ${horaTexto(form.fim)}`;
   const dados = new FormData();
   dados.append('arquivo', form.arquivo);
@@ -1791,8 +1853,9 @@ async function enviar(evento) {
   try {
     const j = await api('/api/planilha', { method: 'POST', body: dados });
     const c = j.conferencia;
-    avisar(c.vital_bloqueio.length ? 'Conferência pronta, com bloqueio: há equipamento vital com problema (veja em vermelho).'
-      : `Conferência pronta: ${fmt(c.numeros.clientes)} cliente(s), ${fmt(c.numeros.comunidades)} comunidade(s). Confira os números e o mapa para gerar o aviso.`,
+    avisar(c.vital_bloqueio.length ? t('Conferência pronta, com bloqueio: há equipamento vital com problema (veja em vermelho).')
+      : t('Conferência pronta: {clientes} cliente(s), {comunidades} comunidade(s). Confira os números e o mapa para gerar o aviso.',
+        { clientes: fmt(c.numeros.clientes), comunidades: fmt(c.numeros.comunidades) }),
       !!c.vital_bloqueio.length || !j.municipios.length);
     estado.passo = 3;
     await mostrarResultado(j, 'novo', { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma,
@@ -1803,7 +1866,7 @@ async function enviar(evento) {
       estado.abas = e.dados.abas;
       estado.aba = estado.abas[0];
       $('aba').replaceChildren(...estado.abas.map(a => no('option', { value: a, texto: a })));
-      avisar(`${e.message} Escolha a aba e clique em "Conferir a planilha" de novo.`, true);
+      avisar(t('{erro} Escolha a aba e clique em "Conferir a planilha" de novo.', { erro: e.message }), true);
     } else if (e.status !== 401) {
       avisar(e.message, true);
       erroDoServidor($('form'), e, { data: 'data', horario: 'inicio', tipo: 'tipo', tipo_outro: 'tipoOutro', idioma: 'idioma' });
@@ -1821,13 +1884,14 @@ async function gerarAviso() {
   const f = estado.formulario;
   estado.enviando = true;
   desenharFunil();
-  avisar('Gerando o aviso…');
+  avisar(t('Gerando o aviso…'));
   try {
     const j = await api('/api/avisos', { method: 'POST', json: { pacote: estado.resultado.pacote, data: f.data, horario: f.horario, idioma: f.idioma,
       conferi: estado.conferi, justificativa: estado.justificativa.trim() || null, tipo: f.tipo, tipo_outro: f.tipoOutro } });
     const n = j.municipios.length;
-    avisar(n ? `Pronto: ${n} município(s), ${fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0))} comunidade(s). Guardado no histórico (aviso nº ${j.id}).`
-      : `Nenhuma UC na área de concessão. Guardado no histórico (aviso nº ${j.id}).`, !n);
+    avisar(n ? t('Pronto: {n} município(s), {comunidades} comunidade(s). Guardado no histórico (aviso nº {id}).',
+      { n, comunidades: fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0)), id: j.id })
+      : t('Nenhuma UC na área de concessão. Guardado no histórico (aviso nº {id}).', { id: j.id }), !n);
     estado.passo = 4;
     await mostrarResultado(j, 'novo', f);
     document.documentElement.dataset.farol = 'resultado';
@@ -1845,7 +1909,7 @@ function editarConferencia(evento) {
   if (alvo.id === 'conferi') estado.conferi = alvo.checked;
   else if (alvo.id === 'justificativa') {
     estado.justificativa = alvo.value;
-    $('contaJustificativa').textContent = `${alvo.value.length} de ${MAX_JUSTIFICATIVA} caracteres`;
+    $('contaJustificativa').textContent = t('{n} de {max} caracteres', { n: alvo.value.length, max: MAX_JUSTIFICATIVA });
   } else return;
   desenharFunil();
 }
@@ -1858,15 +1922,15 @@ async function acaoConferencia(evento) {
     if (b.dataset.conf === 'relatorio') {
       await baixarDaApi('/api/planilha/relatorio', { headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pacote: estado.resultado.pacote }) }, 'farol-relatorio-planilha.csv');
-      avisar('Relatório da planilha baixado (só linha, situação e motivo; sem UC).');
+      avisar(t('Relatório da planilha baixado (só linha, situação e motivo; sem UC).'));
     } else {
-      if (!estado.arquivo) return avisar('Escolha a planilha de novo para baixar o JSON.', true);
-      if (!confirm('O JSON tem os números de UC (dado pessoal). O download fica registrado na auditoria com o seu nome. Baixar?')) return;
+      if (!estado.arquivo) return avisar(t('Escolha a planilha de novo para baixar o JSON.'), true);
+      if (!confirm(t('O JSON tem os números de UC (dado pessoal). O download fica registrado na auditoria com o seu nome. Baixar?'))) return;
       const dados = new FormData();
       dados.append('arquivo', estado.arquivo);
       if (estado.aba) dados.append('aba', estado.aba);
       await baixarDaApi('/api/planilha/json', { body: dados }, 'farol-planilha.json');
-      avisar('JSON da planilha baixado (registrado na auditoria).');
+      avisar(t('JSON da planilha baixado (registrado na auditoria).'));
     }
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
@@ -1883,20 +1947,20 @@ async function guardarFinal(codigo) {
     estado.finais[codigo] = estado.avisos[codigo];
     desenharFinal(codigo);
   } catch (e) {
-    avisar(`Não foi possível guardar o texto final: ${e.message}`, true);
+    avisar(t('Não foi possível guardar o texto final: {erro}', { erro: e.message }), true);
   }
 }
 
 async function gerarAudio(codigo, m) {
   if (audioAtual(codigo)) return audioAtual(codigo);
-  avisar(`Gerando o áudio de ${m.nome}…`);
+  avisar(t('Gerando o áudio de {nome}…', { nome: m.nome }));
   const texto = estado.avisos[codigo];
   const r = await buscar('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texto, idioma: estado.formulario.idioma, municipio: m.nome }) });
   if (!r.ok) throw await erroDaResposta(r, 'Não foi possível gerar o áudio.');
   if (estado.audios[codigo]) URL.revokeObjectURL(estado.audios[codigo].url);
   estado.audios[codigo] = { texto, url: URL.createObjectURL(await r.blob()), segundos: Number(r.headers.get('X-Duracao-Segundos')) || 0 };
-  avisar(`Áudio de ${m.nome} pronto.`);
+  avisar(t('Áudio de {nome} pronto.', { nome: m.nome }));
   desenharTocador(codigo);
   return estado.audios[codigo];
 }
@@ -1904,12 +1968,12 @@ async function gerarAudio(codigo, m) {
 // áudio do comparativo: o do Farol é o mesmo de "Avisos"; o de hoje pede o limite maior (é bem mais longo)
 async function audioHoje(codigo, m) {
   if (estado.audiosHoje[codigo]) return estado.audiosHoje[codigo];
-  avisar(`Gerando o áudio do aviso de hoje de ${m.nome} (é longo: pode levar um tempo)…`);
+  avisar(t('Gerando o áudio do aviso de hoje de {nome} (é longo: pode levar um tempo)…', { nome: m.nome }));
   const r = await buscar('/api/audio', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texto: m.hoje.texto, idioma: 'pt-BR', municipio: m.nome, comparativo: true }) });
   if (!r.ok) throw await erroDaResposta(r, 'Não foi possível gerar o áudio.');
   estado.audiosHoje[codigo] = { url: URL.createObjectURL(await r.blob()), segundos: Number(r.headers.get('X-Duracao-Segundos')) || 0 };
-  avisar(`Áudio do aviso de hoje de ${m.nome} pronto.`);
+  avisar(t('Áudio do aviso de hoje de {nome} pronto.', { nome: m.nome }));
   return estado.audiosHoje[codigo];
 }
 
@@ -1921,8 +1985,8 @@ async function acaoComparativo(evento) {
   try {
     const a = b.dataset.comp === 'hoje' ? await audioHoje(codigo, m) : await gerarAudio(codigo, m);
     const lugar = $(`tocador-${b.dataset.comp}-${codigo}`);
-    lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': `Áudio do aviso ${b.dataset.comp === 'hoje' ? 'de hoje' : 'do Farol'}` }),
-      no('span', { classe: 'ajuda', texto: `${tempoNoAr(Math.round(a.segundos))} de áudio (voz sintetizada)` }));
+    lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': t(b.dataset.comp === 'hoje' ? 'Áudio do aviso de hoje' : 'Áudio do aviso do Farol') }),
+      no('span', { classe: 'ajuda', texto: t('{tempo} de áudio (voz sintetizada)', { tempo: tempoNoAr(Math.round(a.segundos)) }) }));
     lugar.querySelector('audio').play().catch(() => {});
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
@@ -1936,8 +2000,8 @@ async function acao(evento) {
   if (!b) return;
   const codigo = b.dataset.codigo, m = estado.resultado.municipios.find(x => x.codigo_ibge === codigo);
   if (b.dataset.acao === 'copiar') {
-    try { await navigator.clipboard.writeText(estado.avisos[codigo]); avisar(`Aviso de ${m.nome} copiado.`); }
-    catch (e) { avisar('Não foi possível copiar; selecione o texto e use Ctrl+C.', true); }
+    try { await navigator.clipboard.writeText(estado.avisos[codigo]); avisar(t('Aviso de {nome} copiado.', { nome: m.nome })); }
+    catch (e) { avisar(t('Não foi possível copiar; selecione o texto e use Ctrl+C.'), true); }
     await guardarFinal(codigo);
   } else if (b.dataset.acao === 'restaurar') {
     estado.avisos[codigo] = textoGerado(m);
@@ -1965,7 +2029,7 @@ async function acao(evento) {
       await baixarDaApi(`/api/historico/${estado.resultado.id}/municipios/${codigo}/pdf`, { headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto: estado.avisos[codigo] }) }, `farol-aviso-${codigo}.pdf`);
       await guardarFinal(codigo);
-      avisar(`PDF de ${m.nome} baixado (registrado na auditoria).`);
+      avisar(t('PDF de {nome} baixado (registrado na auditoria).', { nome: m.nome }));
     } catch (e) {
       if (e.status !== 401) avisar(e.message, true);
     } finally {
@@ -2002,22 +2066,22 @@ async function acaoAviso(evento) {
   let erros = [];
   if (data) {
     const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
-    erros = [!d && ['novaData', 'Informe a nova data.'], !i && ['novoInicio', 'Informe o início.'], !f && ['novoFim', 'Informe o fim.'],
-      i && f && f <= i && ['novoFim', 'O fim tem de ser depois do início.']].filter(Boolean);
-  } else if ($('motivoCancelar').value.trim().length < 3) erros = [['motivoCancelar', 'Escreva o motivo do cancelamento (de 3 a 200 caracteres).']];
+    erros = [!d && ['novaData', t('Informe a nova data.')], !i && ['novoInicio', t('Informe o início.')], !f && ['novoFim', t('Informe o fim.')],
+      i && f && f <= i && ['novoFim', t('O fim tem de ser depois do início.')]].filter(Boolean);
+  } else if ($('motivoCancelar').value.trim().length < 3) erros = [['motivoCancelar', t('Escreva o motivo do cancelamento (de 3 a 200 caracteres).')]];
   if (erros.length) { mostrarErros(lugar, erros); return avisar(erros[0][1], true); }
   limparErros(lugar);
-  if (!data && !confirm(`Cancelar o desligamento do aviso nº ${r.id}? O aviso fica no histórico, marcado como cancelado.`)) return;
+  if (!data && !confirm(t('Cancelar o desligamento do aviso nº {id}? O aviso fica no histórico, marcado como cancelado.', { id: r.id }))) return;
   await ocupado(b, 'Salvando…', async () => {
     try {
       let a, feito;
       if (data) {
         const d = $('novaData').value, i = $('novoInicio').value, f = $('novoFim').value;
         a = await api(`/api/historico/${r.id}/data`, { method: 'POST', json: { data: dataTexto(d), horario: `${horaTexto(i)} às ${horaTexto(f)}` } });
-        feito = `Data do aviso nº ${r.id} mudada para ${a.data}, ${a.horario} (registrado na auditoria).`;
+        feito = t('Data do aviso nº {id} mudada para {data}, {horario} (registrado na auditoria).', { id: r.id, data: a.data, horario: a.horario });
       } else {
         a = await api(`/api/historico/${r.id}/cancelar`, { method: 'POST', json: { motivo: $('motivoCancelar').value.trim() } });
-        feito = `Desligamento do aviso nº ${r.id} cancelado (registrado na auditoria).`;
+        feito = t('Desligamento do aviso nº {id} cancelado (registrado na auditoria).', { id: r.id });
       }
       // a lista e o aviso aberto primeiro; a mensagem de pronto só depois de tudo redesenhado
       estado.historico = estado.historico.map(x => x.id === a.id ? a : x);
@@ -2060,19 +2124,19 @@ async function exportarRelatorio(evento) {
   if (!b) return;
   const tipo = $('relQual').value, enviar = b.dataset.rel === 'enviar', destinos = destinatarios($('relDestinos').value);
   if (enviar) {
-    if (!destinos.length) { mostrarErros($('relEnviar'), [['relDestinos', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).']]);
-      return avisar('Escreva o e-mail de quem vai receber.', true); }
+    if (!destinos.length) { mostrarErros($('relEnviar'), [['relDestinos', t('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).')]]);
+      return avisar(t('Escreva o e-mail de quem vai receber.'), true); }
     limparErros($('relEnviar'));
-    if (!confirm(`Enviar o relatório por e-mail (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
+    if (!confirm(t('Enviar o relatório por e-mail (PDF) para {destinos}? O envio fica na auditoria com o seu nome.', { destinos: destinos.join(', ') }))) return;
   }
   await ocupado(b, enviar ? 'Enviando…' : 'Gerando…', async () => {
     try {
       if (enviar) {
         const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: filtrosRelatorio(), destinatarios: destinos } });
-        avisar(`Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}; registrado na auditoria).`);
+        avisar(t('Relatório enviado para {destinos} (código {codigo}; registrado na auditoria).', { destinos: r.destinatarios.join(', '), codigo: r.codigo }));
       } else {
         await baixarDaApi(`/api/relatorios/${tipo}.${b.dataset.rel}?${consulta(filtrosRelatorio())}`, { method: 'GET' }, `farol-${tipo}.${b.dataset.rel}`);
-        avisar(`Relatório baixado em ${b.dataset.rel.toUpperCase()}, com o seu nome e o código de verificação (registrado na auditoria).`);
+        avisar(t('Relatório baixado em {formato}, com o seu nome e o código de verificação (registrado na auditoria).', { formato: b.dataset.rel.toUpperCase() }));
       }
       estado.vias = (await api('/api/relatorios/vias')).vias;
       desenharVias();
@@ -2090,7 +2154,7 @@ async function baixarVia(evento) {
   b.disabled = true;
   try {
     await baixarDaApi(`/api/relatorios/vias/${b.dataset.via}.pdf`, { method: 'GET' }, 'farol-via.pdf');
-    avisar('Segunda via baixada: o mesmo PDF (SHA-256 conferido no servidor; registrado na auditoria).');
+    avisar(t('Segunda via baixada: o mesmo PDF (SHA-256 conferido no servidor; registrado na auditoria).'));
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   } finally {
@@ -2102,11 +2166,11 @@ async function baixarVia(evento) {
 function prepararAuditoria() {
   const geral = pode('auditoria_geral');
   $('formAuditoria').hidden = !geral && !pode('relatorio_auditoria');
-  $('tituloRelAuditoria').textContent = geral ? 'Auditoria geral de acessos (todas as empresas)' : 'Relatório de auditoria da empresa';
+  $('tituloRelAuditoria').textContent = geral ? t('Auditoria geral de acessos (todas as empresas)') : t('Relatório de auditoria da empresa');
   $('audEmpresaRotulo').hidden = !geral;
   $('audAcessos').checked = geral;
   $('audEnviar').hidden = geral || !pode('relatorio_auditoria');
-  if (!$('audMes').options.length) $('audMes').replaceChildren(...ultimosMeses().map(([v, t]) => no('option', { value: v, texto: t })));
+  if (!$('audMes').options.length) $('audMes').replaceChildren(...ultimosMeses().map(([v, rot]) => no('option', { value: v, texto: rot })));
 }
 
 async function exportarAuditoria(evento) {
@@ -2119,27 +2183,27 @@ async function exportarAuditoria(evento) {
   if (pode('auditoria_geral') && $('audEmpresa').value.trim()) f.empresa = $('audEmpresa').value.trim().toUpperCase();
   const tipo = pode('auditoria_geral') ? 'acessos' : 'auditoria', acao = b.dataset.aud, destinos = destinatarios($('audDestinos').value);
   if (acao === 'enviar') {
-    if (!destinos.length) { mostrarErros($('audEnviar'), [['audDestinos', 'Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).']]);
-      return mensagemEm('estadoAuditoria', 'Escreva o e-mail de quem vai receber.', true); }
+    if (!destinos.length) { mostrarErros($('audEnviar'), [['audDestinos', t('Escreva o e-mail de quem vai receber (até 5, do domínio da empresa).')]]);
+      return mensagemEm('estadoAuditoria', t('Escreva o e-mail de quem vai receber.'), true); }
     limparErros($('audEnviar'));
-    if (!confirm(`Enviar o relatório de auditoria (PDF) para ${destinos.join(', ')}? O envio fica na auditoria com o seu nome.`)) return;
+    if (!confirm(t('Enviar o relatório de auditoria (PDF) para {destinos}? O envio fica na auditoria com o seu nome.', { destinos: destinos.join(', ') }))) return;
   }
   await ocupado(b, acao === 'enviar' ? 'Enviando…' : acao === 'tela' ? 'Carregando…' : 'Gerando…', async () => {
     try {
       if (acao === 'tela') {
         const r = await api(`/api/relatorios/${tipo}?${consulta(f)}`);
         $('docAuditoria').replaceChildren(...documentoNaTela(r.documento, r.subtitulo));
-        mensagemEm('estadoAuditoria', `${fmt(r.total)} linha(s) no período (a consulta fica na auditoria com o seu nome).`);
+        mensagemEm('estadoAuditoria', t('{n} linha(s) no período (a consulta fica na auditoria com o seu nome).', { n: fmt(r.total) }));
       } else if (acao === 'enviar') {
         const r = await api(`/api/relatorios/${tipo}/enviar`, { method: 'POST', json: { filtros: f, destinatarios: destinos } });
-        mensagemEm('estadoAuditoria', `Relatório enviado para ${r.destinatarios.join(', ')} (código ${r.codigo}).`);
+        mensagemEm('estadoAuditoria', t('Relatório enviado para {destinos} (código {codigo}).', { destinos: r.destinatarios.join(', '), codigo: r.codigo }));
       } else if (acao === 'json') {
         // as linhas filtradas, como a tela as recebe (a consulta fica na auditoria)
         await baixarDaApi(`/api/relatorios/${tipo}?${consulta(f)}`, { method: 'GET' }, `farol-${tipo}-${f.mes}.json`);
-        mensagemEm('estadoAuditoria', 'Relatório baixado em JSON (registrado na auditoria com o seu nome).');
+        mensagemEm('estadoAuditoria', t('Relatório baixado em JSON (registrado na auditoria com o seu nome).'));
       } else {
         await baixarDaApi(`/api/relatorios/${tipo}.${acao}?${consulta(f)}`, { method: 'GET' }, `farol-auditoria.${acao}`);
-        mensagemEm('estadoAuditoria', `Relatório baixado em ${acao.toUpperCase()}, com o seu nome e o código de verificação.`);
+        mensagemEm('estadoAuditoria', t('Relatório baixado em {formato}, com o seu nome e o código de verificação.', { formato: acao.toUpperCase() }));
       }
     } catch (e) {
       if (e.status === 401) return;
@@ -2154,10 +2218,10 @@ async function verLinhaTempo() {
   try {
     estado.linhaTempo = await api(`/api/historico/${estado.resultado.id}/linha-do-tempo`);
     const lt = estado.linhaTempo.linhas;
-    $('linhaTempo').replaceChildren(no('h3', { texto: `Linha do tempo do aviso nº ${estado.linhaTempo.aviso}` }),
+    $('linhaTempo').replaceChildren(no('h3', { texto: t('Linha do tempo do aviso nº {id}', { id: estado.linhaTempo.aviso }) }),
       lt.length ? no('ol', { classe: 'linha-tempo' }, lt.map(x => no('li', {}, no('strong', { texto: dataHora(x.quando) }), ` · ${x.acao}`,
-        no('span', { classe: 'quem', texto: ` · ${x.usuario || 'sem login (rádio)'}${x.perfil ? ` (${x.perfil})` : ''} · ${x.codigo}` }))))
-        : no('p', { classe: 'ajuda', texto: 'Nada registrado para este aviso.' }));
+        no('span', { classe: 'quem', texto: ` · ${x.usuario || t('sem login (rádio)')}${x.perfil ? ` (${t(x.perfil)})` : ''} · ${x.codigo}` }))))
+        : no('p', { classe: 'ajuda', texto: t('Nada registrado para este aviso.') }));
     $('linhaTempo').hidden = false;
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
@@ -2169,7 +2233,7 @@ async function baixarComprovante(evento) {
   if (evento.target.id !== 'baixarComprovante') return;
   try {
     await baixarDaApi(`/api/historico/${estado.resultado.id}/comprovante.pdf`, { method: 'GET' }, 'farol-comprovante.pdf');
-    avisar(`Comprovante do aviso nº ${estado.resultado.id} baixado (registrado na auditoria).`);
+    avisar(t('Comprovante do aviso nº {id} baixado (registrado na auditoria).', { id: estado.resultado.id }));
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
   }
@@ -2178,8 +2242,8 @@ async function baixarComprovante(evento) {
 async function verificarAuditoria() {
   try {
     const v = await api('/api/auditoria/verificar');
-    mensagemEm('estadoAuditoria', v.ok ? `Auditoria íntegra${v.linhas ? `: ${fmt(v.linhas)} linhas conferidas` : ''}. Nenhuma linha foi alterada nem apagada.`
-      : `A auditoria NÃO confere${v.quebra_id ? ` a partir da linha ${v.quebra_id} (${v.motivo})` : `: ${v.motivo}`}.`, !v.ok);
+    mensagemEm('estadoAuditoria', v.ok ? t('Auditoria íntegra{linhas}. Nenhuma linha foi alterada nem apagada.', { linhas: v.linhas ? t(': {n} linhas conferidas', { n: fmt(v.linhas) }) : '' })
+      : t('A auditoria NÃO confere{onde}.', { onde: v.quebra_id ? t(' a partir da linha {id} ({motivo})', { id: v.quebra_id, motivo: v.motivo }) : `: ${v.motivo}` }), !v.ok);
     estado.registro = (await api('/api/registro')).registro;
     desenharRegistro();
   } catch (e) {
@@ -2194,8 +2258,8 @@ const nomeValido = n => n.trim().replace(/\s+/g, ' ').length >= 2;
 async function cadastrarUsuario(evento) {
   evento.preventDefault();
   const form = $('formUsuario'), nome = $('novoNome').value, email = $('novoEmail').value.trim();
-  const erros = [!nomeValido(nome) && ['novoNome', 'Informe o nome (de 2 a 120 caracteres).'],
-    !EMAIL.test(email) && ['novoEmail', email ? 'E-mail inválido.' : 'Informe o e-mail da empresa.']].filter(Boolean);
+  const erros = [!nomeValido(nome) && ['novoNome', t('Informe o nome (de 2 a 120 caracteres).')],
+    !EMAIL.test(email) && ['novoEmail', email ? t('E-mail inválido.') : t('Informe o e-mail da empresa.')]].filter(Boolean);
   if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoUsuario', erros[0][1], true); }
   limparErros(form);
   await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
@@ -2204,8 +2268,8 @@ async function cadastrarUsuario(evento) {
         municipios: selecionados($('novoMunicipios')) } });
       for (const o of $('novoMunicipios').options) o.selected = false;
       $('novoNome').value = ''; $('novoEmail').value = '';
-      mensagemEm('estadoUsuario', `${j.usuario.nome} cadastrado (registrado na auditoria).`);
-      mostrarSenhaTemporaria(`Senha temporária de ${j.usuario.nome} (${j.usuario.email}):`, j.senha_temporaria);
+      mensagemEm('estadoUsuario', t('{nome} cadastrado (registrado na auditoria).', { nome: j.usuario.nome }));
+      mostrarSenhaTemporaria(t('Senha temporária de {nome} ({email}):', { nome: j.usuario.nome, email: j.usuario.email }), j.senha_temporaria);
       await irPara('usuarios');
     } catch (e) {
       if (e.status === 401) return;
@@ -2221,8 +2285,8 @@ async function acaoUsuario(evento) {
   const linha = b.closest('[data-usuario]'), id = linha.dataset.usuario, x = estado.usuarios.find(u => String(u.id) === id);
   const salvar = b.dataset.acaoUsuario === 'salvar';
   if (salvar && !nomeValido($(`usu-${id}-nome`).value)) {
-    mostrarErros(linha, [[`usu-${id}-nome`, 'Informe o nome (de 2 a 120 caracteres).']]);
-    return mensagemEm('estadoUsuario', `${x.nome}: informe o nome.`, true);
+    mostrarErros(linha, [[`usu-${id}-nome`, t('Informe o nome (de 2 a 120 caracteres).')]]);
+    return mensagemEm('estadoUsuario', t('{nome}: informe o nome.', { nome: x.nome }), true);
   }
   limparErros(linha);
   await ocupado(b, salvar ? 'Salvando…' : 'Gerando…', async () => {
@@ -2231,10 +2295,10 @@ async function acaoUsuario(evento) {
         const campo = n => $(`usu-${id}-${n}`).value;
         await api(`/api/usuarios/${id}`, { method: 'PATCH', json: { nome: campo('nome'), perfil: campo('perfil'), status: campo('status'),
           municipios: selecionados($(`usu-${id}-municipios`)) } });
-        mensagemEm('estadoUsuario', `${campo('nome').trim()}: alterações salvas (registrado na auditoria).`);
+        mensagemEm('estadoUsuario', t('{nome}: alterações salvas (registrado na auditoria).', { nome: campo('nome').trim() }));
       } else {
         const j = await api(`/api/usuarios/${id}/senha-temporaria`, { method: 'POST' });
-        mostrarSenhaTemporaria(`Nova senha temporária de ${x.nome} (${x.email}). As sessões abertas dele foram encerradas.`, j.senha_temporaria);
+        mostrarSenhaTemporaria(t('Nova senha temporária de {nome} ({email}). As sessões abertas dele foram encerradas.', { nome: x.nome, email: x.email }), j.senha_temporaria);
       }
       await irPara('usuarios');
     } catch (e) {
@@ -2250,11 +2314,11 @@ const CAMPOS_EMPRESA = { nome: 'empNome', sigla: 'empSigla', dominio: 'empDomini
 async function cadastrarEmpresa(evento) {
   evento.preventDefault();
   const form = $('formEmpresa'), v = id => $(id).value.trim(), editando = estado.empresaEditando;
-  const erros = [!nomeValido(v('empNome')) && ['empNome', 'Informe o nome da empresa (de 2 a 120 caracteres).'],
-    !editando && !/^[A-Za-z0-9]{2,10}$/.test(v('empSigla')) && ['empSigla', 'Sigla: de 2 a 10 letras ou números.'],
-    !EMAIL.test(`x@${v('empDominio')}`) && ['empDominio', 'Informe o domínio dos e-mails (ex.: empresa.com.br).'],
-    !editando && !nomeValido(v('empAdminNome')) && ['empAdminNome', 'Informe o nome do primeiro admin.'],
-    !editando && !EMAIL.test(v('empAdminEmail')) && ['empAdminEmail', 'Informe o e-mail do primeiro admin (do domínio da empresa).']].filter(Boolean);
+  const erros = [!nomeValido(v('empNome')) && ['empNome', t('Informe o nome da empresa (de 2 a 120 caracteres).')],
+    !editando && !/^[A-Za-z0-9]{2,10}$/.test(v('empSigla')) && ['empSigla', t('Sigla: de 2 a 10 letras ou números.')],
+    !EMAIL.test(`x@${v('empDominio')}`) && ['empDominio', t('Informe o domínio dos e-mails (ex.: empresa.com.br).')],
+    !editando && !nomeValido(v('empAdminNome')) && ['empAdminNome', t('Informe o nome do primeiro admin.')],
+    !editando && !EMAIL.test(v('empAdminEmail')) && ['empAdminEmail', t('Informe o e-mail do primeiro admin (do domínio da empresa).')]].filter(Boolean);
   if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoEmpresa', erros[0][1], true); }
   limparErros(form);
   await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
@@ -2263,13 +2327,13 @@ async function cadastrarEmpresa(evento) {
         await api(`/api/empresas/${editando.id}`, { method: 'PATCH', json: { nome: v('empNome'), dominio: v('empDominio'), cnpj: v('empCnpj') } });
         limparFormEmpresa();
         await irPara('empresas');
-        return mensagemEm('estadoEmpresa', `${v('empNome') || editando.nome} alterada (registrado na auditoria).`);
+        return mensagemEm('estadoEmpresa', t('{nome} alterada (registrado na auditoria).', { nome: v('empNome') || editando.nome }));
       }
       const j = await api('/api/empresas', { method: 'POST', json: { nome: v('empNome'), sigla: v('empSigla'), dominio: v('empDominio'),
         admin_nome: v('empAdminNome'), admin_email: v('empAdminEmail'), cnpj: v('empCnpj') || null } });
       limparFormEmpresa();
-      mensagemEm('estadoEmpresa', `${j.empresa.nome} cadastrada (registrado na auditoria).`);
-      mostrarSenhaTemporaria(`Senha temporária do primeiro admin de ${j.empresa.nome}:`, j.senha_temporaria);
+      mensagemEm('estadoEmpresa', t('{nome} cadastrada (registrado na auditoria).', { nome: j.empresa.nome }));
+      mostrarSenhaTemporaria(t('Senha temporária do primeiro admin de {nome}:', { nome: j.empresa.nome }), j.senha_temporaria);
       await irPara('empresas');
     } catch (e) {
       if (e.status === 401) return;
@@ -2289,8 +2353,8 @@ function limparFormEmpresa() {
 // o mesmo formulário cadastra ou edita (nome, CNPJ e domínio; a sigla e o primeiro admin não mudam)
 function desenharFormEmpresa() {
   const e = estado.empresaEditando;
-  $('formEmpresaTitulo').textContent = e ? `Editar ${e.nome}` : 'Cadastrar empresa';
-  $('empSalvar').textContent = e ? 'Salvar alterações' : 'Cadastrar empresa';
+  $('formEmpresaTitulo').textContent = e ? t('Editar {nome}', { nome: e.nome }) : t('Cadastrar empresa');
+  $('empSalvar').textContent = e ? t('Salvar alterações') : t('Cadastrar empresa');
   $('empCancelar').hidden = !e;
   for (const id of ['empSiglaRotulo', 'empAdminNomeRotulo', 'empAdminEmailRotulo']) $(id).hidden = !!e;
 }
@@ -2307,12 +2371,12 @@ async function acaoEmpresa(evento) {
     $('formEmpresa').scrollIntoView({ block: 'start' });
     return $('empNome').focus();
   }
-  if (acao === 'suspensa' && !confirm(`Suspender ${e.nome}? Ninguém da empresa entra até ela ser reativada.`)) return;
+  if (acao === 'suspensa' && !confirm(t('Suspender {nome}? Ninguém da empresa entra até ela ser reativada.', { nome: e.nome }))) return;
   await ocupado(b, 'Salvando…', async () => {
     try {
       await api(`/api/empresas/${id}`, { method: 'PATCH', json: { status: acao } });
       await irPara('empresas');
-      mensagemEm('estadoEmpresa', `${e.nome} ${acao === 'suspensa' ? 'suspensa' : 'reativada'} (registrado na auditoria).`);
+      mensagemEm('estadoEmpresa', t(acao === 'suspensa' ? '{nome} suspensa (registrado na auditoria).' : '{nome} reativada (registrado na auditoria).', { nome: e.nome }));
     } catch (x) {
       if (x.status !== 401) mensagemEm('estadoEmpresa', x.message, true);
     }
@@ -2337,11 +2401,11 @@ const CAMPOS_RADIO = { nome: 'radNome', email: 'radEmail', whatsapp: 'radWhats',
 // o que o servidor também confere (api/radio._validar_radio), antecipado na tela com o erro no campo
 function errosRadio() {
   const nome = $('radNome').value.trim(), email = $('radEmail').value.trim(), whats = $('radWhats').value.replace(/\D/g, ''), valor = reaisNumero($('radValor').value);
-  return [!(nome.length >= 2 && nome.length <= 80) && ['radNome', 'Informe o nome da rádio (de 2 a 80 caracteres).'],
-    !email && !whats && ['radEmail', 'Informe o e-mail ou o WhatsApp da rádio.'],
-    email && !EMAIL.test(email) && ['radEmail', 'E-mail da rádio inválido.'],
-    whats && (whats.length < 10 || whats.length > 13) && ['radWhats', 'WhatsApp: de 10 a 13 algarismos, com o DDD.'],
-    Number.isNaN(valor) && ['radValor', 'Valor padrão: um valor em R$ (ex.: 150,00).']].filter(Boolean);
+  return [!(nome.length >= 2 && nome.length <= 80) && ['radNome', t('Informe o nome da rádio (de 2 a 80 caracteres).')],
+    !email && !whats && ['radEmail', t('Informe o e-mail ou o WhatsApp da rádio.')],
+    email && !EMAIL.test(email) && ['radEmail', t('E-mail da rádio inválido.')],
+    whats && (whats.length < 10 || whats.length > 13) && ['radWhats', t('WhatsApp: de 10 a 13 algarismos, com o DDD.')],
+    Number.isNaN(valor) && ['radValor', t('Valor padrão: um valor em R$ (ex.: 150,00).')]].filter(Boolean);
 }
 
 async function salvarRadio(evento) {
@@ -2359,8 +2423,9 @@ async function salvarRadio(evento) {
       const j = await api(r ? `/api/radios/${r.id}` : '/api/radios', { method: r ? 'PATCH' : 'POST', json: dados });
       limparFormRadio();
       await irPara('radios');
-      mensagemEm('estadoRadio', j.nada_mudou ? `${j.radio.nome}: nada mudou.` : `${j.radio.nome} ${r ? 'alterada' : 'cadastrada'}`
-        + `${pedido && !r ? ` (pedido de ${pedido.por} atendido)` : ''} (registrado na auditoria).`);
+      mensagemEm('estadoRadio', j.nada_mudou ? t('{nome}: nada mudou.', { nome: j.radio.nome })
+        : t(r ? '{nome} alterada (registrado na auditoria).' : pedido ? '{nome} cadastrada (pedido de {por} atendido) (registrado na auditoria).'
+          : '{nome} cadastrada (registrado na auditoria).', { nome: j.radio.nome, por: pedido?.por }));
     } catch (e) {
       if (e.status === 401) return;
       mensagemEm('estadoRadio', e.message, true);
@@ -2379,12 +2444,12 @@ async function editarRadio(evento) {
   const r = estado.radiosAdmin.find(x => String(x.id) === b.closest('[data-radio]').dataset.radio);
   if (b.dataset.radioAcao !== 'editar') {
     const ativa = b.dataset.radioAcao === 'reativar';
-    if (!ativa && !confirm(`Desativar ${r.nome}? Ela some da lista do envio até ser reativada.`)) return;
+    if (!ativa && !confirm(t('Desativar {nome}? Ela some da lista do envio até ser reativada.', { nome: r.nome }))) return;
     return ocupado(b, 'Salvando…', async () => {
       try {
         await api(`/api/radios/${r.id}`, { method: 'PATCH', json: dadosDaRadio(r, ativa) });
         await irPara('radios');
-        mensagemEm('estadoRadio', `${r.nome} ${ativa ? 'reativada' : 'desativada'} (registrado na auditoria).`);
+        mensagemEm('estadoRadio', t(ativa ? '{nome} reativada (registrado na auditoria).' : '{nome} desativada (registrado na auditoria).', { nome: r.nome }));
       } catch (e) {
         if (e.status !== 401) mensagemEm('estadoRadio', e.message, true);
       }
@@ -2413,21 +2478,21 @@ async function acaoPedido(evento) {
     $('radNome').value = p.nome;
     if (p.contato.includes('@')) $('radEmail').value = p.contato; else $('radWhats').value = p.contato;
     desenharRadios();
-    mensagemEm('estadoRadio', `Confira o cadastro da ${p.nome}, escolha o que ela alcança e clique em "Cadastrar rádio".`);
+    mensagemEm('estadoRadio', t('Confira o cadastro da {nome}, escolha o que ela alcança e clique em "Cadastrar rádio".', { nome: p.nome }));
     $('formRadio').scrollIntoView({ block: 'start' });
     return $('radNome').focus();
   }
   const motivo = $(`pedido-motivo-${p.id}`);
   if (motivo.value.trim().length < 3) {
-    mostrarErros(item, [[motivo.id, 'Escreva o motivo da recusa (de 3 a 300 caracteres).']]);
-    return mensagemEm('estadoRadio', 'Escreva o motivo da recusa.', true);
+    mostrarErros(item, [[motivo.id, t('Escreva o motivo da recusa (de 3 a 300 caracteres).')]]);
+    return mensagemEm('estadoRadio', t('Escreva o motivo da recusa.'), true);
   }
   limparErros(item);
   await ocupado(b, 'Salvando…', async () => {
     try {
       await api(`/api/radios/pedidos/${p.id}/recusar`, { method: 'POST', json: { motivo: motivo.value } });
       await irPara('radios');
-      mensagemEm('estadoRadio', `Pedido da ${p.nome} recusado (o Operador vê o motivo; registrado na auditoria).`);
+      mensagemEm('estadoRadio', t('Pedido da {nome} recusado (o Operador vê o motivo; registrado na auditoria).', { nome: p.nome }));
     } catch (e) {
       if (e.status === 401) return;
       mensagemEm('estadoRadio', e.message, true);
@@ -2456,7 +2521,7 @@ function marcarComunidade(evento) {
 // ---- Configurações da empresa ----
 const CAMPOS_CONFIG = { modelo_mensagem: 'cfgModelo', nome_mensagem: 'cfgNome', telefone: 'cfgTelefone', limite_rejeicao: 'cfgLimite',
   epsg_utm: 'cfgFuso', antecedencia_dias: 'cfgAntecedencia', orcamento_radio: 'cfgOrcamento', alerta_preco: 'cfgAlertaPreco',
-  repeticao_n: 'cfgRepN', repeticao_dias: 'cfgRepDias' };
+  repeticao_n: 'cfgRepN', repeticao_dias: 'cfgRepDias', modelo_mensagem_en: 'cfgModeloEn', modelo_mensagem_es: 'cfgModeloEs', idioma_padrao: 'cfgIdioma' };
 // [id, mínimo, máximo, inteiro, texto]: as faixas que o servidor aceita (api/radio.Configuracao)
 const FAIXAS_CONFIG = [['cfgLimite', 0, 50, false, 'Limite de rejeição: de 0 a 50%.'], ['cfgAntecedencia', 1, 90, true, 'Antecedência: de 1 a 90 dias.'],
   ['cfgAlertaPreco', 0, 500, false, 'Alerta de preço: de 0 a 500%.'], ['cfgRepN', 2, 50, true, 'Repetição: de 2 a 50 desligamentos.'],
@@ -2465,11 +2530,11 @@ const FAIXAS_CONFIG = [['cfgLimite', 0, 50, false, 'Limite de rejeição: de 0 a
 function errosConfig() {
   const num = id => $(id).value.trim() === '' ? NaN : Number($(id).value);
   const erros = FAIXAS_CONFIG.filter(([id, min, max, inteiro]) => { const n = num(id); return !(n >= min && n <= max) || (inteiro && !Number.isInteger(n)); })
-    .map(([id, , , , texto]) => [id, texto]);
+    .map(([id, , , , texto]) => [id, t(texto)]);
   const orc = $('cfgOrcamento').value.trim();
-  if (orc && !(Number(orc) >= 0)) erros.push(['cfgOrcamento', 'Orçamento: um valor em R$ (ou vazio, sem orçamento).']);
-  if (!$('cfgModelo').value.trim()) erros.unshift(['cfgModelo', 'Escreva o modelo da mensagem.']);
-  if (!nomeValido($('cfgNome').value)) erros.unshift(['cfgNome', 'Nome da empresa na mensagem: de 2 a 120 caracteres.']);
+  if (orc && !(Number(orc) >= 0)) erros.push(['cfgOrcamento', t('Orçamento: um valor em R$ (ou vazio, sem orçamento).')]);
+  for (const id of ['cfgModeloEs', 'cfgModeloEn', 'cfgModelo']) if (!$(id).value.trim()) erros.unshift([id, t('Escreva o modelo da mensagem.')]);
+  if (!nomeValido($('cfgNome').value)) erros.unshift(['cfgNome', t('Nome da empresa na mensagem: de 2 a 120 caracteres.')]);
   return erros;
 }
 
@@ -2484,15 +2549,63 @@ async function salvarConfig(evento) {
         telefone: $('cfgTelefone').value, limite_rejeicao: Number($('cfgLimite').value) / 100, epsg_utm: Number($('cfgFuso').value),
         antecedencia_dias: Number($('cfgAntecedencia').value),
         orcamento_radio: $('cfgOrcamento').value.trim() === '' ? null : Number($('cfgOrcamento').value),
-        alerta_preco: Number($('cfgAlertaPreco').value) / 100, repeticao_n: Number($('cfgRepN').value), repeticao_dias: Number($('cfgRepDias').value) } });
+        alerta_preco: Number($('cfgAlertaPreco').value) / 100, repeticao_n: Number($('cfgRepN').value), repeticao_dias: Number($('cfgRepDias').value),
+        modelo_mensagem_en: $('cfgModeloEn').value, modelo_mensagem_es: $('cfgModeloEs').value, idioma_padrao: $('cfgIdioma').value } });
       desenharConfig();
-      mensagemEm('estadoConfig', 'Configurações salvas (registrado na auditoria). Valem para os próximos avisos.');
+      if (estado.config) estado.config.idioma_padrao = estado.configuracao.idioma_padrao;   // o idioma do próximo aviso
+      mensagemEm('estadoConfig', t('Configurações salvas (registrado na auditoria). Valem para os próximos avisos.'));
     } catch (e) {
       if (e.status === 401) return;
       mensagemEm('estadoConfig', e.message, true);
       erroDoServidor(form, e, CAMPOS_CONFIG);
     }
   });
+}
+
+// ---- Idioma da tela (Fase K) ----
+// os textos fixos do index.html: data-t (o texto do elemento) e data-t-placeholder / data-t-aria-label (o atributo)
+function aplicarTextos() {
+  for (const e of document.querySelectorAll('[data-t]')) {
+    if (!e.dataset.t) e.dataset.t = e.textContent.trim();
+    e.textContent = t(e.dataset.t);
+  }
+  for (const [atributo, dado] of [['placeholder', 'tPlaceholder'], ['aria-label', 'tAriaLabel']])
+    for (const e of document.querySelectorAll(`[data-t-${atributo}]`)) e.setAttribute(atributo, t(e.dataset[dado]));
+  document.documentElement.lang = IDIOMA;
+  document.title = t('Farol · Aviso de desligamento');
+}
+
+// os tipos de desligamento vêm do servidor no idioma da tela
+function desenharTipos() {
+  const atual = $('tipo').value;
+  $('tipo').replaceChildren(...Object.entries(estado.config?.tipos || {}).map(([k, nome]) => no('option', { value: k, texto: nome })));
+  if (atual) $('tipo').value = atual;
+}
+
+// idioma do aviso sem voz (espanhol): a tela avisa já no passo 2
+function desenharIdiomaAviso() {
+  const sem = audioLigado() && pode('gerar_aviso') && !vozDoIdioma($('idioma').value);
+  $('idiomaAudio').hidden = !sem;
+  $('idiomaAudio').textContent = sem ? t('Áudio indisponível em espanhol: nenhuma voz em espanhol com licença clara (veja ORIGEM.md). Use o texto e o PDF.') : '';
+}
+
+async function trocarIdioma(novo, salvar = true) {
+  if (!IDIOMAS_TELA.includes(novo)) return;
+  IDIOMA = novo;
+  $('idiomaTela').value = novo;
+  try { sessionStorage.setItem('farol.idioma', novo); } catch (e) { /* sem armazenamento */ }
+  aplicarTextos();
+  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado();
+  if (salvar && estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { idioma: novo } }).catch(() => {});
+  if (estado.tela !== 'app' || !estado.config) return;
+  try { estado.config = await api('/api/config'); } catch (e) { return; }   // os tipos no idioma novo
+  $('faixa').textContent = t(estado.config.aviso_ficticio);
+  desenharTipos(); desenharIdiomaAviso(); desenharRede(); desenharUcs(); desenharIrPara();
+  $('botaoCalor').textContent = estado.calor ? t('Esconder mapa de calor') : t('Mapa de calor (12 meses)');
+  atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
+  for (const id of ['relMes', 'audMes']) $(id).replaceChildren();   // os meses no formato do idioma
+  if (estado.resultado) desenharResultado();
+  await irPara(estado.vista);
 }
 
 // ---- Tema, ajuda e dicas ----
@@ -2514,7 +2627,7 @@ function mostrarDica(evento) {
   const b = evento.target.closest('button[data-dica]'), caixa = $('dica');
   if (!b) return;
   if (!caixa.hidden && caixa.dataset.de === b.dataset.dica) { caixa.hidden = true; return; }
-  caixa.textContent = DICAS[b.dataset.dica];
+  caixa.textContent = t(DICAS[b.dataset.dica]);
   caixa.dataset.de = b.dataset.dica;
   caixa.hidden = false;
   const r = b.getBoundingClientRect(), largura = Math.min(320, innerWidth - 24);
@@ -2530,7 +2643,11 @@ function arrastar() {
 }
 
 async function abrir() {
-  try { const t = localStorage.getItem('farol.tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch (e) { /* sem armazenamento */ }
+  try { const tema = localStorage.getItem('farol.tema'); if (tema === 'claro' || tema === 'escuro') document.documentElement.dataset.tema = tema; } catch (e) { /* sem armazenamento */ }
+  // antes de entrar, o idioma escolhido fica só nesta sessão do navegador; depois, no perfil do usuário
+  let idioma = 'pt-BR';
+  try { idioma = sessionStorage.getItem('farol.idioma') || 'pt-BR'; } catch (e) { /* sem armazenamento */ }
+  await trocarIdioma(IDIOMAS_TELA.includes(idioma) ? idioma : 'pt-BR', false);
   desenharTema();
   // data padrão: daqui a 4 dias (acima das 72 h legais)
   const d = new Date(Date.now() + 4 * 864e5);
@@ -2595,7 +2712,13 @@ async function abrir() {
   $('radComunidades').addEventListener('change', marcarComunidade);
   $('formConfig').addEventListener('submit', salvarConfig);
   $('formConfig').addEventListener('input', desenharPreviaConfig);
-  $('cfgPadrao').addEventListener('click', () => { $('cfgModelo').value = estado.configuracao.modelo_padrao; desenharPreviaConfig(); });
+  $('cfgPadrao').addEventListener('click', () => {
+    const p = estado.configuracao.modelos_padrao || {};
+    $('cfgModelo').value = p['pt-BR'] || estado.configuracao.modelo_padrao; $('cfgModeloEn').value = p.en || ''; $('cfgModeloEs').value = p.es || '';
+    desenharPreviaConfig();
+  });
+  $('idiomaTela').addEventListener('change', e => trocarIdioma(e.target.value));
+  $('idioma').addEventListener('change', desenharIdiomaAviso);
   $('subabas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
   $('botaoTema').addEventListener('click', alternarTema);
   $('irPara').addEventListener('change', irParaNoMapa);

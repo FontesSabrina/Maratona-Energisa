@@ -83,6 +83,14 @@ uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-h
 - **Todos os testes, com tabela no fim:** `powershell -ExecutionPolicy Bypass -File testes\rodar_testes.ps1` (`-Rapido` pula o navegador e o algoritmo).
 - **Produção (Render + Neon):** [DEPLOY.md](DEPLOY.md).
 
+## Idiomas
+
+- **Aviso** em português, inglês e espanhol: o idioma se escolhe no passo 2 do Novo aviso (padrão: o da empresa, nas Configurações). A mensagem da rádio tem um modelo por idioma, editável pelo Admin da empresa com a prévia; data e horário no formato de cada idioma ("November 20, from 8 a.m. to 2 p.m."; "el 20 de noviembre, entre las 8:00 y las 14:00"). O português ficou idêntico ao de antes.
+- **PDF da rádio, e-mail para a rádio, página de confirmação e comprovante** no idioma do aviso; o idioma fica gravado no aviso e aparece no histórico.
+- **Áudio**: português (pt_BR-faber) e inglês (en_US-ljspeech, domínio público). **Espanhol sem áudio**: nenhuma voz em espanhol com licença clara (ver ORIGEM.md); a tela avisa.
+- **Telas** em 3 idiomas (seletor no topo, também na tela de entrar; guardado no perfil do usuário): textos em `apresentacao/app/textos.js`, números, datas e moeda pelo `Intl`, `<html lang>` acompanha. Relatórios (tela, PDF, CSV) e mensagens de erro da API no idioma de quem pede.
+- Testes: `testes/api/teste_idiomas.py` (34), `testes/navegador/teste_textos.mjs` (nenhum texto sem tradução) e `teste_idiomas_tela.mjs` (cada tela sem português sobrando).
+
 ## Arquitetura
 
 Camadas, parentes do MVC, que também separam os dados reais dos fictícios:
