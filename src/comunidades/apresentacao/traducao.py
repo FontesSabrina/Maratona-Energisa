@@ -266,6 +266,8 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Nenhum município do IBGE tem pelo menos metade da área dentro dos polígonos do arquivo.":
         ("No IBGE municipality has at least half of its area inside the file's polygons.", "Ningún municipio del IBGE tiene al menos la mitad del área dentro de los polígonos del archivo."),
     "fora da área de atuação da empresa": ("outside the company's service area", "fuera del área de actuación de la empresa"),
+    "Descreva o problema (pelo menos 10 caracteres).": ("Describe the problem (at least 10 characters).", "Describa el problema (al menos 10 caracteres)."),
+    "Sem dado pessoal: tire e-mail, telefone, número longo e endereço de site.": ("No personal data: remove e-mail, phone, long numbers and website addresses.", "Sin datos personales: quite correo, teléfono, números largos y direcciones de sitios."),
 }
 
 # padrões: (expressão em português, inglês, espanhol); {1}, {2}... são os grupos; {mes1} é o grupo 1 como mês por extenso

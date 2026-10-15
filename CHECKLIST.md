@@ -35,9 +35,9 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   - [ ] I3 teclado e leitor de tela
   - [ ] I4 tempo e trabalho perdido
   - [ ] I5 testes automáticos (axe, teclado, reflow, contraste)
-  - [ ] I6 botão Acessibilidade (prioridade 2)
+  - [x] I6 botão Acessibilidade (Bloco D)
   - [ ] I7 Libras e voz (prioridade 2)
-  - [ ] I8 declaração e retorno (prioridade 2)
+  - [x] I8 declaração e retorno (Bloco D; PDF marcado fica como limitação)
 
 ## Resumos por fase
 
@@ -176,6 +176,36 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Bloco B: "só acessos: True" vinha de `_filtros_texto` (o valor booleano ia cru): agora sim/não no idioma. teste_sem_booleanos 4/4 (8 relatórios x 3 idiomas x tela, CSV e PDF; nenhum True/False/None/null/undefined/NaN). Auditoria: com o relatório filtrado na tela, a lista sem filtro fica escondida (botão "Ver as últimas ações (sem filtro)", que é o título dela); 0 acessos com outras ações explica: "Nenhum acesso no período. Há N ação(ões) de outro tipo; desmarque "Só acessos" para vê-las."
 
 ### Bloco E: dados de demonstração (15/10/2026)
-- Domínio real encontrado: a empresa de teste "Energisa" (ENRG, energisa.com.br, CNPJ 16.685.528/0001-81) com o admin carlos.silva@energisa.com.br, no banco local. Virou a fictícia "Distribuidora Exemplo (demonstração)" (DEX, exemplo.example, sem CNPJ), e o e-mail do admin passou para @exemplo.example; as trocas estão na auditoria com o antes e o depois (nada apagado). Área: 7 municípios do MS (Aquidauana, Campo Grande, Corumbá, Dourados, Naviraí, Ponta Porã, Três Lagoas). Está na semente de demonstração (`semente_demo.empresa_exemplo`, roda no `python -m comunidades.semente_demo`).
+- Domínio real encontrado: a empresa de teste "Energisa" (ENRG, energisa.com.br, CNPJ real) com o admin carlos.silva@energisa.com.br, no banco local. Virou a fictícia "Distribuidora Exemplo (demonstração)" (DEX, exemplo.example, sem CNPJ), e o e-mail do admin passou para @exemplo.example; as trocas estão na auditoria com o antes e o depois (nada apagado). Área: 7 municípios do MS (Aquidauana, Campo Grande, Corumbá, Dourados, Naviraí, Ponta Porã, Três Lagoas). Está na semente de demonstração (`semente_demo.empresa_exemplo`, roda no `python -m comunidades.semente_demo`).
 - Nenhum outro domínio real no código, nas configurações (.env, render.yaml) nem nas rádios do banco. O SMTP local é o Mailpit (127.0.0.1:1025).
 - Trava nova: sem `FAROL_EMAIL_REAL=1`, só domínios reservados para teste recebem e-mail (recusa antes de conectar). teste_correio_demo 6/6.
+
+### Blocos C e D: tema claro e acessibilidade visível (15/10/2026)
+- C:
+  - "Idioma da tela" no topo em branco nos dois temas (o topo é sempre a faixa da Noite).
+  - O cartão de destaque do painel fica claro no tema claro, com a faixa âmbar, e continua Noite no escuro.
+  - O retângulo ao clicar num município era o contorno de foco do navegador no SVG: tirado, e o destaque continua o contorno do Leaflet.
+  - Aplicado o que estava pronto da I2: font-size em rem; borda dos campos com 3:1 (`--borda-campo`); `--acento-borda` #B07800 no claro; prefers-reduced-motion, prefers-contrast e forced-colors.
+  - Achado do axe: no celular, a legenda do mapa cobria o "−" do zoom (target-size); agora ela rola dentro de si e não passa dos botões.
+- axe-core 4.10.2: todas as telas × 4 perfis × 2 temas × 3 idiomas, os 7 tamanhos, o funil (passos 3 e 4), o painel aberto, o alto contraste e a Declaração. Nenhuma violação serious ou critical. O axe também confere o contraste de 4,5:1.
+  - O executor deixa o Operador com senha temporária; o teste do axe cria a senha antes, porque antes testava a tela de troca no lugar das telas dele.
+- D, painel Acessibilidade (botão no topo, também em Entrar):
+  - A−/A/A+/A++ (90, 100, 150 e 200%);
+  - alto contraste;
+  - Atkinson Hyperlegible (OFL, 5.2.8, hospedada, SHA-256 no ORIGEM);
+  - espaçamento 1.4.12;
+  - reduzir movimento (também o mapa);
+  - destacar links e foco;
+  - guia de leitura;
+  - modo simples (sem mapa e dicas);
+  - ler em voz alta (speechSynthesis, só voz local; nada vai ao servidor);
+  - Voltar ao padrão.
+- Onde as escolhas ficam:
+  - em `usuario.preferencias`, com chaves numa lista fechada;
+  - a auditoria registra só os nomes das opções;
+  - antes do login, só na sessão, e passam para o perfil ao entrar;
+  - ao sair, voltam ao padrão.
+- Correção: cliques seguidos sobrescreviam as preferências (cada PUT partia das antigas). Agora a junção é atômica no banco (`mesclar_preferencias`).
+- "Pular para o conteúdo" (primeiro Tab, leva ao h1 da tela).
+- Declaração de acessibilidade com o relato. A rota `POST /api/acessibilidade/relato` vale para todos os perfis, está na MATRIZ e vai para a auditoria com código FRL. Ela recusa texto com e-mail, telefone, número longo ou site.
+- Testes: teste_acessibilidade 24/24; axe 0 serious/critical; dicionário 4/4; matriz 5/5; registro total 5/5; acesso 46/46.

@@ -36,3 +36,4 @@ saida/muriae/*
 # Cobertura dos testes (coverage)
 .coverage
 htmlcov/
+node_modules/

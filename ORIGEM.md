@@ -32,6 +32,8 @@ Os hashes foram calculados em 14/10/2026 (SHA-256, salvo onde está escrito outr
 |---|---|---|---|
 | Leaflet | 1.9.4, `registry.npmjs.org/leaflet/-/leaflet-1.9.4.tgz` | BSD 2-Clause | Pacote `sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==`; arquivos em `apresentacao/vendor/leaflet/ORIGEM.md` |
 | IBM Plex Sans e Mono | 5.3.0 (Fontsource, npm) | SIL OFL 1.1 | Pacotes e arquivos em `apresentacao/vendor/ibm-plex/ORIGEM.md` |
+| Atkinson Hyperlegible | 5.2.8 (Fontsource, npm) | SIL OFL 1.1 | Fonte de leitura facilitada do painel Acessibilidade; pacote e SHA-256 em `apresentacao/vendor/atkinson/ORIGEM.md` |
+| axe-core (só nos testes) | 4.10.2 (npm, `testes/navegador/package.json`) | MPL-2.0 | Não vai para a tela nem para o servidor; `axe.min.js` SHA-256 b511cd9d…75e3 |
 | Logo do Farol | Desenhado pelo projeto | Do projeto | `farol.svg` 7fed2103…6c03, `farol-pequeno.svg` 2b3b087a…f0f0 |
 
 ## Voz do aviso (MP3)

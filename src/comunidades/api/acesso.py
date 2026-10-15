@@ -12,6 +12,7 @@
 """
 
 import os
+import re
 import secrets
 import time
 from collections import defaultdict, deque
@@ -168,8 +169,9 @@ def trocar_senha(dados: TrocaSenha, request: Request, u: dict = Depends(sessao_a
 
 
 # ---------- Preferências da tela (Fase K e I6): idioma e acessibilidade, do próprio usuário ----------
-ACESSIBILIDADE = {"texto": (100, 125, 150, 200), "contraste": (False, True), "movimento": (False, True), "dislexia": (False, True),
-                  "espacamento": (False, True), "foco": (False, True), "vibrar": (False, True), "painel": (False, True)}
+ACESSIBILIDADE = {"texto": (90, 100, 125, 150, 200), "contraste": (False, True), "movimento": (False, True), "dislexia": (False, True),
+                  "espacamento": (False, True), "foco": (False, True), "vibrar": (False, True), "painel": (False, True),
+                  "links": (False, True), "guia": (False, True), "simples": (False, True)}
 
 
 class Preferencias(BaseModel):
@@ -190,10 +192,31 @@ def salvar_preferencias(dados: Preferencias, u: dict = Depends(sessao_atual)) ->
         ruins = [k for k, v in dados.acessibilidade.items() if k not in ACESSIBILIDADE or v not in ACESSIBILIDADE[k]]
         if ruins:
             raise erro(422, "Opção de acessibilidade inválida.", "acessibilidade")
-        prefs["acessibilidade"] = {**(prefs.get("acessibilidade") or {}), **dados.acessibilidade}
-    banco.salvar_preferencias(u["id"], prefs)
-    banco.registrar("alterou as preferências da tela", "", u["id"], u["empresa_id"])
+    prefs = banco.mesclar_preferencias(u["id"], dados.idioma, dados.acessibilidade)
+    # só os nomes das opções (nunca motivo nem deficiência)
+    mudou = (["idioma"] if dados.idioma is not None else []) + sorted(dados.acessibilidade or {})
+    banco.registrar("alterou as preferências da tela", ", ".join(mudou), u["id"], u["empresa_id"])
     return {"preferencias": prefs}
+
+
+# ---------- Relato de problema de acessibilidade (Declaração de acessibilidade) ----------
+class Relato(BaseModel):
+    texto: str = Field(max_length=1000)
+    tela: str = Field("", max_length=40)
+
+
+@rotas.post("/acessibilidade/relato")
+def relatar_acessibilidade(dados: Relato, u: dict = Depends(usuario_atual)) -> dict:
+    """Qualquer perfil relata um problema de acessibilidade; vai para a auditoria (o Admin do Farol vê na auditoria geral).
+    Sem dado pessoal: texto com e-mail, telefone ou número longo é recusado."""
+    texto = " ".join("".join(c if c.isprintable() else " " for c in dados.texto).split())
+    if len(texto) < 10:
+        raise erro(422, "Descreva o problema (pelo menos 10 caracteres).", "texto")
+    if re.search(r"@|\d[\d .-]{7,}\d|https?://|www\.", texto):
+        raise erro(422, "Sem dado pessoal: tire e-mail, telefone, número longo e endereço de site.", "texto")
+    tela = re.sub(r"[^a-z0-9_-]", "", dados.tela.lower())[:40]
+    linha = banco.registrar("relatou problema de acessibilidade", f"[{tela or 'tela'}] {texto}", u["id"], u["empresa_id"])
+    return {"ok": True, "codigo": auditoria.codigo_verificacao(linha["hash"])}
 
 
 # ---------- Usuários da empresa (Admin da empresa) ----------

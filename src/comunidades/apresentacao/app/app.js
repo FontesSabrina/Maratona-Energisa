@@ -41,6 +41,8 @@ const estado = {
   empresasOcultas: new Set(), legendaEmpresasAberta: true, fichaEmpresa: null,
   area: null,              // editor da área de atuação: { empresaId, sigla, codigos: Set, uf, busca, resumo }
   municipiosIbge: null, ufGeo: null,
+  a11y: { texto: 100, contraste: false, dislexia: false, espacamento: false, movimento: false, links: false, guia: false, simples: false },
+  painelA11y: false, lendo: false,
   painelAmplo: false,      // "Ampliar painel": o painel com ~60% da tela (preferência do usuário)
   menuAberto: false,       // celular e tablet: o menu das seções aberto pelo botão "Menu"
   verUcs: true,            // camada dos pontos das UCs (só logo depois do envio; o histórico não tem pontos)
@@ -1470,7 +1472,8 @@ function trocarFundoDoMapa() {
 
 function iniciarMapa() {
   if (mapa) return;
-  mapa = L.map('mapa', { zoomControl: true, attributionControl: false, minZoom: 5, maxZoom: 16 });
+  mapa = L.map('mapa', { zoomControl: true, attributionControl: false, minZoom: 5, maxZoom: 16,
+    zoomAnimation: !menosMovimento(), fadeAnimation: !menosMovimento(), markerZoomAnimation: !menosMovimento() });
   atribuicao = L.control.attribution({ prefix: t('Concessão e comunidades: IBGE · Leaflet') }).addTo(mapa);
   trocarFundoDoMapa();
   mapa.setView([-21.0, -42.6], 8);
@@ -2016,6 +2019,7 @@ async function abrirApp() {
 async function aposEntrar(usuario) {
   estado.usuario = usuario;
   estado.painelAmplo = !!usuario.preferencias?.acessibilidade?.painel;
+  carregarA11y(usuario.preferencias?.acessibilidade || {});
   desenharPainelAmplo();
   // o idioma guardado no perfil vale; sem ele, o escolhido na tela de entrar passa a ser o do perfil
   const preferido = usuario.preferencias?.idioma;
@@ -2087,6 +2091,10 @@ function limparTela() {
   for (const id of ['listaLegendaEmpresas', 'fichaEmpresa', 'sobreposicaoEmpresas', 'areaLista', 'areaResumo']) $(id).replaceChildren();
   $('fichaEmpresa').hidden = $('editorArea').hidden = $('legendaEmpresas').hidden = true; $('legenda').hidden = false;
   mensagemEm('estadoArea', '');
+  try { sessionStorage.removeItem('farol.a11y'); } catch (e) { /* sem armazenamento */ }
+  if (estado.lendo) speechSynthesis.cancel();
+  Object.assign(estado, { a11y: { ...A11Y_PADRAO }, painelA11y: false, lendo: false, painelAmplo: false });
+  desenharA11y(); desenharPainelAmplo();
   for (const f of ['formEntrar', 'formSenha', 'formUsuario', 'formRadio', 'formConfig', 'formEmpresa', 'form']) limparErros($(f));
   // as mensagens de status também (ex.: "Fulana: alterações salvas"): quem entra depois não vê nada do anterior
   for (const id of ['estadoUsuario', 'estadoRadio', 'estadoConfig', 'estadoEmpresa', 'estadoAuditoria', 'estadoSenha']) mensagemEm(id, '');
@@ -3033,7 +3041,7 @@ async function trocarIdioma(novo, salvar = true) {
   $('idiomaTela').value = novo;
   try { sessionStorage.setItem('farol.idioma', novo); } catch (e) { /* sem armazenamento */ }
   aplicarTextos();
-  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado(); desenharBotaoRede(); desenharPainelAmplo();
+  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado(); desenharBotaoRede(); desenharPainelAmplo(); desenharA11y();
   if (salvar && estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { idioma: novo } }).catch(() => {});
   if (estado.tela !== 'app' || !estado.config) return;
   try { estado.config = await api('/api/config'); } catch (e) { return; }   // os tipos no idioma novo
@@ -3045,6 +3053,95 @@ async function trocarIdioma(novo, salvar = true) {
   if (estado.resultado) desenharResultado();
   if (ehFarol()) { desenharLegendaEmpresas(); desenharSobreposicao(); }
   await irPara(estado.vista);
+}
+
+// ---- Acessibilidade (tamanho do texto, contraste, fonte de leitura, espaçamento, movimento, voz) ----
+const A11Y_PADRAO = { texto: 100, contraste: false, dislexia: false, espacamento: false, movimento: false, links: false, guia: false, simples: false };
+const A11Y_CAIXAS = [['a11yContraste', 'contraste'], ['a11yDislexia', 'dislexia'], ['a11yEspacamento', 'espacamento'], ['a11yMovimento', 'movimento'],
+  ['a11yLinks', 'links'], ['a11yGuia', 'guia'], ['a11ySimples', 'simples']];
+const menosMovimento = () => estado.a11y.movimento || matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// View: aplica as escolhas na página inteira (atributos no <html>, lidos pelo CSS) e desenha o painel
+function desenharA11y() {
+  const a = estado.a11y, raiz = document.documentElement;
+  raiz.style.fontSize = a.texto === 100 ? '' : `${a.texto}%`;   // pelo CSSOM (a CSP não deixa atributo style)
+  for (const [, k] of A11Y_CAIXAS) raiz.toggleAttribute(`data-${k}`, !!a[k]);
+  $('guiaLeitura').hidden = !a.guia;
+  for (const b of $('a11yTexto').querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset.texto) === a.texto));
+  for (const [id, k] of A11Y_CAIXAS) $(id).checked = !!a[k];
+  $('painelAcessibilidade').hidden = !estado.painelA11y;
+  $('botaoAcessibilidade').setAttribute('aria-expanded', String(estado.painelA11y));
+  $('a11yLer').setAttribute('aria-pressed', String(estado.lendo));
+  $('a11yLer').textContent = estado.lendo ? t('Parar a leitura') : t('Ler esta tela em voz alta');
+  if (mapa) Object.assign(mapa.options, { zoomAnimation: !menosMovimento(), fadeAnimation: !menosMovimento(), markerZoomAnimation: !menosMovimento() });
+  $('caixaDeclaracao').querySelector('.cartao').classList.toggle('simples', !!a.simples);
+  mapa?.invalidateSize();
+}
+
+// Controller: muda uma escolha, guarda (perfil ou sessão) e redesenha
+function mudarA11y(mudanca, anuncio) {
+  Object.assign(estado.a11y, mudanca);
+  try { sessionStorage.setItem('farol.a11y', JSON.stringify(estado.a11y)); } catch (e) { /* sem armazenamento */ }
+  if (estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { acessibilidade: mudanca } }).catch(() => {});
+  desenharA11y();
+  if (anuncio) $('a11yEstado').textContent = anuncio;
+}
+function abrirA11y(aberto = !estado.painelA11y) {
+  estado.painelA11y = aberto;
+  desenharA11y();
+  if (aberto) $('a11yTitulo').focus(); else $('botaoAcessibilidade').focus();
+}
+// ler em voz alta o que está na tela (a vista aberta, ou a tela de entrar): só a voz do aparelho, nada vai ao servidor
+function lerEmVozAlta() {
+  if (!('speechSynthesis' in window)) return mensagemEm('a11yEstado', t('Este navegador não lê em voz alta.'));
+  if (estado.lendo) { speechSynthesis.cancel(); estado.lendo = false; return desenharA11y(); }
+  const alvo = estado.tela === 'app' ? document.querySelector('.vista:not([hidden])') : document.querySelector('.tela-acesso:not([hidden])');
+  const texto = (alvo?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
+  if (!texto) return;
+  const fala = new SpeechSynthesisUtterance(texto);
+  fala.lang = IDIOMA;
+  const local = speechSynthesis.getVoices().filter(v => v.localService && v.lang.toLowerCase().startsWith(IDIOMA.slice(0, 2).toLowerCase()));
+  if (local.length) fala.voice = local[0];
+  fala.onend = fala.onerror = () => { estado.lendo = false; desenharA11y(); };
+  estado.lendo = true;
+  speechSynthesis.speak(fala);
+  desenharA11y();
+}
+function abrirDeclaracao() {
+  estado.painelA11y = false; desenharA11y();
+  $('caixaDeclaracao').hidden = false;
+  $('relatoEnviar').disabled = !estado.usuario;
+  mensagemEm('estadoRelato', estado.usuario ? '' : t('Entre no Farol para enviar um relato.'));
+  $('declTitulo').focus();
+}
+async function enviarRelato(evento) {
+  evento.preventDefault();
+  const texto = $('relatoTexto').value.trim();
+  if (texto.length < 10) { mostrarErros($('formRelato'), [['relatoTexto', t('Descreva o problema (pelo menos 10 caracteres).')]]); return; }
+  limparErros($('formRelato'));
+  await ocupado($('relatoEnviar'), 'Enviando…', async () => {
+    try {
+      const r = await api('/api/acessibilidade/relato', { method: 'POST', json: { texto, tela: estado.tela === 'app' ? estado.vista : estado.tela } });
+      $('relatoTexto').value = '';
+      mensagemEm('estadoRelato', t('Relato enviado e registrado na auditoria (código {codigo}). Obrigado!', { codigo: r.codigo }));
+    } catch (e) {
+      mensagemEm('estadoRelato', e.message, true);
+      erroDoServidor($('formRelato'), e, { texto: 'relatoTexto' });
+    }
+  });
+}
+
+function carregarA11y(doPerfil) {
+  let sessao = {};
+  try { sessao = JSON.parse(sessionStorage.getItem('farol.a11y') || '{}'); } catch (e) { /* sem armazenamento */ }
+  const valido = (k, v) => k in A11Y_PADRAO && (k === 'texto' ? [90, 100, 125, 150, 200].includes(v) : typeof v === 'boolean');
+  if (doPerfil !== undefined) estado.painelA11y = false;
+  const limpar = o => Object.fromEntries(Object.entries(o || {}).filter(([k, v]) => valido(k, v)));
+  estado.a11y = { ...A11Y_PADRAO, ...limpar(sessao), ...limpar(doPerfil) };
+  // no primeiro login, o que foi escolhido na tela de entrar passa para o perfil
+  if (doPerfil !== undefined && !Object.keys(limpar(doPerfil)).length && Object.keys(limpar(sessao)).length)
+    api('/api/eu/preferencias', { method: 'PUT', json: { acessibilidade: limpar(sessao) } }).catch(() => {});
+  desenharA11y();
 }
 
 // ---- Tema, ajuda e dicas ----
@@ -3087,6 +3184,7 @@ async function abrir() {
   let idioma = 'pt-BR';
   try { idioma = sessionStorage.getItem('farol.idioma') || 'pt-BR'; } catch (e) { /* sem armazenamento */ }
   await trocarIdioma(IDIOMAS_TELA.includes(idioma) ? idioma : 'pt-BR', false);
+  carregarA11y();
   desenharTema();
   // data padrão: daqui a 4 dias (acima das 72 h legais)
   const d = new Date(Date.now() + 4 * 864e5);
@@ -3097,6 +3195,26 @@ async function abrir() {
   $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) { estado.menuAberto = false; irPara(b.dataset.vista); } });
   $('botaoMenu').addEventListener('click', () => alternarMenu());
   $('botaoAmpliar').addEventListener('click', () => ampliarPainel());
+  $('botaoAcessibilidade').addEventListener('click', () => abrirA11y());
+  $('a11yFechar').addEventListener('click', () => abrirA11y(false));
+  $('a11yTexto').addEventListener('click', e => { const b = e.target.closest('[data-texto]');
+    if (b) mudarA11y({ texto: Number(b.dataset.texto) }, t('Texto em {n}%', { n: b.dataset.texto })); });
+  for (const [id, k] of A11Y_CAIXAS) $(id).addEventListener('change', e => mudarA11y({ [k]: e.target.checked }));
+  // guia de leitura: a faixa acompanha o mouse (e o foco, para quem usa o teclado)
+  const moverGuia = y => { if (estado.a11y.guia) $('guiaLeitura').style.top = `${Math.max(0, y - 14)}px`; };
+  document.addEventListener('pointermove', e => moverGuia(e.clientY));
+  document.addEventListener('focusin', e => moverGuia(e.target.getBoundingClientRect?.().top + 10 || 0));
+  // "Pular para o conteúdo": o título da tela que está aberta
+  $('pular').addEventListener('click', e => {
+    e.preventDefault();
+    const alvo = estado.tela === 'app' ? document.querySelector('.vista:not([hidden]) h1') : document.querySelector('.tela-acesso:not([hidden]) h1');
+    if (alvo) { alvo.setAttribute('tabindex', '-1'); alvo.focus(); }
+  });
+  $('a11yDeclaracao').addEventListener('click', abrirDeclaracao);
+  $('declFechar').addEventListener('click', () => { $('caixaDeclaracao').hidden = true; $('botaoAcessibilidade').focus(); });
+  $('formRelato').addEventListener('submit', enviarRelato);
+  $('a11yLer').addEventListener('click', lerEmVozAlta);
+  $('a11yPadrao').addEventListener('click', () => mudarA11y({ ...A11Y_PADRAO }, t('Opções de acessibilidade no padrão')));
   new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) rotularTabelas(n.matches('table') ? n.parentElement : n); })
     .observe(document.body, { childList: true, subtree: true });
   $('arquivo').addEventListener('change', e => escolherPlanilha(e.target.files[0]));
@@ -3189,7 +3307,9 @@ async function abrir() {
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     $('dica').hidden = true;
-    if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); }
+    if (!$('caixaDeclaracao').hidden) { $('caixaDeclaracao').hidden = true; $('botaoAcessibilidade').focus(); }
+    else if (estado.painelA11y) abrirA11y(false);
+    else if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); }
     else if (estado.menuAberto) { alternarMenu(false); $('botaoMenu').focus(); }
     else if (estado.painelAmplo && estado.tela === 'app' && !e.target.closest?.('input, select, textarea')) { ampliarPainel(false); $('botaoAmpliar').focus(); }
   });

@@ -16,6 +16,8 @@
 <script src="/assets/app/app.js" defer></script>
 </head>
 <body>
+<a href="#conteudo" class="pular" id="pular" data-t>Pular para o conteúdo</a>
+<div id="guiaLeitura" class="guia-leitura" aria-hidden="true" hidden></div>
 <header class="topo">
   <div class="marca">
     <img src="/assets/marca/farol.svg" alt="" width="40" height="40">
@@ -23,6 +25,10 @@
   </div>
   <p class="faixa" id="faixa" data-t>Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
   <div class="topo-acoes">
+    <button type="button" id="botaoAcessibilidade" class="botao-a11y" aria-haspopup="dialog" aria-expanded="false" aria-controls="painelAcessibilidade">
+      <svg aria-hidden="true" focusable="false" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2.2" fill="currentColor"/>
+        <path d="M4 8.2l8 1.6 8-1.6M12 9.8v5.2M12 15l-3.5 6M12 15l3.5 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span data-t>Acessibilidade</span></button>
     <label class="seletor-idioma"><span data-t>Idioma da tela</span>
       <select id="idiomaTela">
         <option value="pt-BR" lang="pt-BR">Português (Brasil)</option><option value="en" lang="en">English</option><option value="es" lang="es">Español</option>
@@ -410,6 +416,63 @@
     <h2 id="ajudaTitulo" data-t>Ajuda</h2>
     <div id="ajudaCorpo"></div>
     <div class="acoes"><button type="button" class="prim" id="ajudaFechar" data-t>Fechar</button></div>
+  </div>
+</div>
+<!-- Acessibilidade: tamanho do texto, contraste, fonte de leitura, espaçamento, movimento e leitura em voz alta.
+     Fica no perfil (antes de entrar, só nesta sessão do navegador); nada sobre deficiência nem motivo é perguntado. -->
+<div id="painelAcessibilidade" class="painel-a11y cartao" role="dialog" aria-modal="false" aria-labelledby="a11yTitulo" hidden>
+  <h2 id="a11yTitulo" tabindex="-1" data-t>Acessibilidade</h2>
+  <fieldset><legend data-t>Tamanho do texto</legend>
+    <div class="tamanhos" id="a11yTexto">
+      <button type="button" data-texto="90" aria-label="Texto menor (90%)" data-t-aria-label="Texto menor (90%)">A−</button>
+      <button type="button" data-texto="100" aria-label="Texto normal (100%)" data-t-aria-label="Texto normal (100%)">A</button>
+      <button type="button" data-texto="150" aria-label="Texto maior (150%)" data-t-aria-label="Texto maior (150%)">A+</button>
+      <button type="button" data-texto="200" aria-label="Texto muito maior (200%)" data-t-aria-label="Texto muito maior (200%)">A++</button>
+    </div></fieldset>
+  <label class="check"><input type="checkbox" id="a11yContraste"> <span data-t>Alto contraste</span></label>
+  <label class="check"><input type="checkbox" id="a11yDislexia"> <span data-t>Fonte de leitura facilitada (Atkinson Hyperlegible)</span></label>
+  <label class="check"><input type="checkbox" id="a11yEspacamento"> <span data-t>Mais espaço entre letras, palavras e linhas</span></label>
+  <label class="check"><input type="checkbox" id="a11yMovimento"> <span data-t>Reduzir movimento</span></label>
+  <label class="check"><input type="checkbox" id="a11yLinks"> <span data-t>Destacar links e foco</span></label>
+  <label class="check"><input type="checkbox" id="a11yGuia"> <span data-t>Guia de leitura (faixa que acompanha o mouse)</span></label>
+  <label class="check"><input type="checkbox" id="a11ySimples"> <span data-t>Modo simples (sem o mapa e as dicas)</span></label>
+  <div class="acoes"><button type="button" id="a11yLer" aria-pressed="false" data-t>Ler esta tela em voz alta</button></div>
+  <p class="ajuda" id="a11yVoz" data-t>A leitura usa a voz do próprio aparelho: nada é enviado ao Farol.</p>
+  <p class="ajuda" data-t>As escolhas ficam no seu perfil. Antes de entrar, valem só nesta sessão do navegador.</p>
+  <p><button type="button" class="link" id="a11yDeclaracao" aria-haspopup="dialog" data-t>Declaração de acessibilidade e relatar um problema</button></p>
+  <div class="acoes"><button type="button" id="a11yPadrao" data-t>Voltar ao padrão</button>
+    <button type="button" class="prim" id="a11yFechar" data-t>Fechar</button></div>
+  <p id="a11yEstado" class="visualmente-oculto" role="status" aria-live="polite"></p>
+</div>
+<!-- Declaração de acessibilidade, com o formulário de relato (vai para a auditoria) -->
+<div id="caixaDeclaracao" class="caixa-senha" role="dialog" aria-modal="true" aria-labelledby="declTitulo" hidden>
+  <div class="cartao ajuda-cartao declaracao">
+    <h2 id="declTitulo" tabindex="-1" data-t>Declaração de acessibilidade</h2>
+    <p data-t>O Farol busca atender às WCAG 2.2 nível AA, à ABNT NBR 17225:2025 e ao art. 63 da Lei Brasileira de Inclusão (Lei 13.146/2015), que obriga sites e sistemas a serem acessíveis a pessoas com deficiência.</p>
+    <h3 data-t>O que já existe</h3>
+    <ul>
+      <li data-t>Botão Acessibilidade em todas as telas: tamanho do texto até 200%, alto contraste, fonte de leitura facilitada, mais espaço no texto, reduzir movimento, destacar links e foco, guia de leitura, modo simples e leitura em voz alta pela voz do aparelho.</li>
+      <li data-t>Tudo pelo teclado, com o link "Pular para o conteúdo" e o foco visível; nomes acessíveis nos botões e campos; erros ligados a cada campo.</li>
+      <li data-t>Telas em português, inglês e espanhol; tema claro e escuro; funciona do celular à tela grande, com zoom de 400%.</li>
+      <li data-t>O mapa tem alternativa em lista e tabela; as tabelas viram cartões em telas estreitas.</li>
+      <li data-t>Testes automáticos com o axe-core em todas as telas, nos 4 perfis, nos 2 temas e nos 3 idiomas.</li>
+    </ul>
+    <h3 data-t>Limitações conhecidas</h3>
+    <ul>
+      <li data-t>O fundo do mapa (imagem) não tem texto alternativo; os nomes e números do mapa estão nas listas e tabelas.</li>
+      <li data-t>Os PDFs ainda não são marcados (tagged PDF); a tela e o CSV trazem o mesmo conteúdo de forma acessível.</li>
+      <li data-t>Ainda sem tradução em Libras dentro do app: use o VLibras (extensão do navegador ou app do celular, vlibras.gov.br).</li>
+      <li data-t>A voz do aviso em áudio existe em português e inglês; em espanhol, ainda não.</li>
+    </ul>
+    <p class="ajuda" data-t>Última revisão: 15/10/2026. O roteiro de teste manual (leitor de tela NVDA, TalkBack e VoiceOver, só teclado, zoom e alto contraste do Windows) está em docs/ACESSIBILIDADE.md.</p>
+    <form id="formRelato" class="formulario" novalidate>
+      <h3 data-t>Relatar um problema de acessibilidade</h3>
+      <label><span data-t>O que aconteceu e em qual tela (até 1.000 caracteres; sem dado pessoal)</span>
+        <textarea id="relatoTexto" maxlength="1000" required></textarea></label>
+      <div class="acoes"><button type="submit" class="prim" id="relatoEnviar" data-t>Enviar relato</button></div>
+      <p id="estadoRelato" class="estado" role="status" aria-live="polite"></p>
+    </form>
+    <div class="acoes"><button type="button" id="declFechar" data-t>Fechar</button></div>
   </div>
 </div>
 <!-- Explicação dos termos (botões "?") -->

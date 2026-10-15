@@ -91,6 +91,25 @@ uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-h
 - **Telas** em 3 idiomas (seletor no topo, também na tela de entrar; guardado no perfil do usuário): textos em `apresentacao/app/textos.js`, números, datas e moeda pelo `Intl`, `<html lang>` acompanha. Relatórios (tela, PDF, CSV) e mensagens de erro da API no idioma de quem pede.
 - Testes: `testes/api/teste_idiomas.py` (34), `testes/navegador/teste_textos.mjs` (nenhum texto sem tradução) e `teste_idiomas_tela.mjs` (cada tela sem português sobrando).
 
+## Acessibilidade
+
+O botão **Acessibilidade** fica no topo de todas as telas, também na de entrar. Ele oferece:
+
+- tamanho do texto até 200%;
+- alto contraste;
+- fonte Atkinson Hyperlegible;
+- mais espaçamento;
+- reduzir movimento;
+- destacar links e foco;
+- guia de leitura;
+- modo simples;
+- leitura em voz alta pela voz do aparelho.
+
+As escolhas ficam no perfil. Há ainda o link "Pular para o conteúdo" e a Declaração de acessibilidade (WCAG 2.2 AA,
+ABNT NBR 17225, LBI art. 63), com o formulário de relato que vai para a auditoria. O axe-core roda em todas as telas, nos
+4 perfis, nos 2 temas e nos 3 idiomas. Detalhes e o roteiro de teste manual (NVDA, TalkBack, VoiceOver, teclado e zoom)
+estão em [docs/ACESSIBILIDADE.md](docs/ACESSIBILIDADE.md).
+
 ## Arquitetura
 
 Camadas, parentes do MVC, que também separam os dados reais dos fictícios:

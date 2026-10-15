@@ -33,6 +33,7 @@ TODOS, EMPRESA, GERA = {FAROL, ADM, OP, CON}, {ADM, OP, CON}, {ADM, OP}
 MATRIZ = {
     ("GET", "/"): PUBLICA, ("GET", "/api/saude"): PUBLICA, ("POST", "/api/entrar"): PUBLICA, ("POST", "/api/sair"): PUBLICA,
     ("GET", "/api/eu"): TODOS, ("POST", "/api/senha"): TODOS, ("PUT", "/api/eu/preferencias"): TODOS,
+    ("POST", "/api/acessibilidade/relato"): TODOS,   # relatar problema de acessibilidade (vai para a auditoria)
     # dados públicos do território (IBGE) e configuração da tela: qualquer pessoa com login
     ("GET", "/api/config"): TODOS, ("GET", "/api/concessao"): TODOS, ("GET", "/api/modelo-planilha"): TODOS,
     # o mapa operacional (comunidades e rede fictícia): só os perfis da empresa, e só na área de atuação dela;

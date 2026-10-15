@@ -331,6 +331,14 @@ def salvar_preferencias(id_: int, preferencias: dict) -> None:
     _executar("UPDATE usuario SET preferencias = %s WHERE id = %s", (json.dumps(preferencias), id_))
 
 
+def mesclar_preferencias(id_: int, idioma: str | None, acessibilidade: dict | None) -> dict:
+    """Junta a mudança às preferências no próprio banco (atômico): vários cliques seguidos não se sobrescrevem."""
+    r = _executar("UPDATE usuario SET preferencias = jsonb_set(preferencias || COALESCE(%s::jsonb, '{}'), '{acessibilidade}',"
+                  " COALESCE(preferencias->'acessibilidade', '{}') || COALESCE(%s::jsonb, '{}')) WHERE id = %s RETURNING preferencias",
+                  (json.dumps({"idioma": idioma}) if idioma else None, json.dumps(acessibilidade) if acessibilidade else None, id_))
+    return r["preferencias"] if r else {}
+
+
 def definir_senha(id_: int, senha_hash: str, trocar_senha: bool) -> None:
     _executar("UPDATE usuario SET senha_hash = %s, trocar_senha = %s, tentativas = 0, bloqueado_ate = NULL WHERE id = %s",
               (senha_hash, trocar_senha, id_))
