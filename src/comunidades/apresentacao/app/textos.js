@@ -5,6 +5,10 @@
 // O teste testes/navegador/teste_idiomas.mjs confere que todo texto usado na tela tem as duas traduções.
 const TEXTOS = {
   en: {
+    'Economia: {valor} em relação ao jeito antigo': 'Savings: {valor} compared with the old way',
+    'Economia: {valor} pelo tempo a menos no ar': 'Savings: {valor} from less time on air',
+    'Economia: preencha "Quanto custaria do jeito antigo" para calcular': 'Savings: fill in "What it would cost the old way" to calculate',
+    'Economia: sem o custo do jeito antigo': 'Savings: no old-way cost given',
     'Nenhuma voz instalada neste aparelho. Windows: Configurações > Hora e idioma > Fala > Adicionar vozes. Android: Configurações > Acessibilidade > Saída de texto em voz (baixe os dados de voz). iPhone e iPad: Ajustes > Acessibilidade > Conteúdo Falado > Vozes.': 'No voice installed on this device. Windows: Settings > Time & language > Speech > Add voices. Android: Settings > Accessibility > Text-to-speech output (download the voice data). iPhone and iPad: Settings > Accessibility > Spoken Content > Voices.',
     '"Ler esta tela em voz alta" usa só vozes instaladas no aparelho (nunca vozes on-line, que mandariam o texto a servidores de fora); sem voz instalada, o botão fica desligado e o painel diz como instalar.': '"Read this screen aloud" uses only voices installed on the device (never online voices, which would send the text to outside servers); with no voice installed, the button is disabled and the panel explains how to install one.',
     'Pular para o conteúdo': 'Skip to content',
@@ -436,6 +440,10 @@ const TEXTOS = {
     'Rede fictícia sobre as vias do © OpenStreetMap': 'Fictitious grid over © OpenStreetMap roads', 'Concessão e comunidades: IBGE · Leaflet': 'Concession and communities: IBGE · Leaflet',
   },
   es: {
+    'Economia: {valor} em relação ao jeito antigo': 'Ahorro: {valor} respecto a la manera antigua',
+    'Economia: {valor} pelo tempo a menos no ar': 'Ahorro: {valor} por el menor tiempo al aire',
+    'Economia: preencha "Quanto custaria do jeito antigo" para calcular': 'Ahorro: complete "Cuánto costaría a la manera antigua" para calcular',
+    'Economia: sem o custo do jeito antigo': 'Ahorro: sin el costo de la manera antigua',
     'Nenhuma voz instalada neste aparelho. Windows: Configurações > Hora e idioma > Fala > Adicionar vozes. Android: Configurações > Acessibilidade > Saída de texto em voz (baixe os dados de voz). iPhone e iPad: Ajustes > Acessibilidade > Conteúdo Falado > Vozes.': 'Ninguna voz instalada en este dispositivo. Windows: Configuración > Hora e idioma > Voz > Agregar voces. Android: Ajustes > Accesibilidad > Salida de texto a voz (descargue los datos de voz). iPhone y iPad: Ajustes > Accesibilidad > Contenido leído > Voces.',
     '"Ler esta tela em voz alta" usa só vozes instaladas no aparelho (nunca vozes on-line, que mandariam o texto a servidores de fora); sem voz instalada, o botão fica desligado e o painel diz como instalar.': '"Leer esta pantalla en voz alta" usa solo voces instaladas en el dispositivo (nunca voces en línea, que enviarían el texto a servidores externos); sin voz instalada, el botón queda desactivado y el panel explica cómo instalar una.',
     'Pular para o conteúdo': 'Saltar al contenido',

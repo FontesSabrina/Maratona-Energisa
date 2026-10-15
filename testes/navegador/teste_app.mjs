@@ -321,17 +321,17 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const previa = await p.avaliar(`$('previa-${cod}').textContent`);
   conferir('rádio cadastrada pelo Admin: sugerida com o valor padrão; prévia com a economia calculada pelo tempo no ar',
     await p.avaliar(`document.querySelector('#envio-${cod} [data-envio=valor]').value === '150,00' && !document.querySelector('#envio-${cod} .alerta-amarelo')`)
-    && /^custo R\$\s?[\d.,]+ · economia calculada R\$\s?[\d.,]+ · .+ a menos no ar$/.test(previa), previa);
+    && /^custo R\$\s?[\d.,]+ · Economia: R\$\s?[\d.,]+ pelo tempo a menos no ar · .+ a menos no ar$/.test(previa), previa);
   await p.avaliar(`(() => { const i = document.querySelector('#envio-${cod} [data-envio=cobranca]'); i.value = 'fechado'; i.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
   const previaFechado = await p.avaliar(`$('previa-${cod}').textContent`);
-  conferir('valor fechado sem o custo antigo: a prévia não inventa economia', /economia: só com o aviso de hoje ou o custo antigo informado/.test(previaFechado), previaFechado);
+  conferir('valor fechado sem o custo antigo: a prévia não inventa economia', /Economia: preencha "Quanto custaria do jeito antigo" para calcular/.test(previaFechado), previaFechado);
   await p.avaliar(`(() => { const i = document.querySelector('#envio-${cod} [data-envio=cobranca]'); i.value = 'minuto'; i.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
   await p.avaliar(`(window.__aberto = [], window.open = u => { window.__aberto.push(u); return null; }, window.confirm = () => true,
     navigator.clipboard.writeText = async () => {}, document.querySelector('#envio-${cod} [data-envio-acao=whatsapp]').click(), 0)`);
   await ate(p, `/WhatsApp aberto/.test($('estado').textContent) && document.querySelectorAll('#envio-${cod} .envios li').length === 1`);
   const wa = await p.avaliar(`window.__aberto[0] || ''`);
   conferir('WhatsApp: abre wa.me com o número da rádio e a mensagem; o envio fica na lista com valor e economia',
-    wa.startsWith('https://wa.me/5532999990001?text=Aten%C3%A7%C3%A3o%2C%20ouvintes.') && /economia calculada/.test(await p.avaliar(`$('envio-${cod}').textContent`)), wa.slice(0, 80));
+    wa.startsWith('https://wa.me/5532999990001?text=Aten%C3%A7%C3%A3o%2C%20ouvintes.') && /Economia: R\$\s?[\d.,]+ pelo tempo a menos no ar/.test(await p.avaliar(`$('envio-${cod}').textContent`)), wa.slice(0, 80));
   await p.avaliar(`(document.querySelector('#envio-${cod} [data-envio-acao=copia]').click(), 0)`);
   await ate(p, `document.querySelectorAll('#envio-${cod} .envios li').length === 2`);
   conferir('copiar a mensagem: o envio fica registrado', /cópia da mensagem/.test(await p.avaliar(`$('envio-${cod}').textContent`)));

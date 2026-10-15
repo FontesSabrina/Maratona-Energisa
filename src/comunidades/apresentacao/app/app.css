@@ -727,3 +727,8 @@ button.link { background: none; border: 0; padding: 0; min-height: 44px; color: 
 
 /* a legenda do mapa nunca cobre os botões de zoom (canto de cima): rola dentro de si (achado do axe, 360 px) */
 .legenda { max-height: calc(100% - 140px); overflow-y: auto; }
+
+/* envio para a rádio: os campos se ajeitam à largura (o select da cobrança mostra o texto inteiro; no celular, um por linha) */
+.envio-radio .campos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.envio-radio .campos label:first-child { grid-column: auto; }
+.envio-radio select { min-width: 0; text-overflow: clip; }

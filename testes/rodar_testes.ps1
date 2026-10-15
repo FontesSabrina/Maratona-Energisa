@@ -48,6 +48,7 @@ if (-not $Rapido) {
     $testes += @{ Nome = "Mapa das empresas (navegador)";   Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_mapa_empresas.mjs" }
     $testes += @{ Nome = "Tabelas do painel (navegador)";   Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_tabelas.mjs" }
     $testes += @{ Nome = "Acessibilidade (painel)";         Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_acessibilidade.mjs" }
+    $testes += @{ Nome = "Sem null na tela (navegador)";    Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_sem_null.mjs" }
     # o axe-core (só dos testes, versão fixada) é instalado do package-lock na primeira vez
     if (-not (Test-Path "testes/navegador/node_modules/axe-core")) { npm ci --ignore-scripts --prefix testes/navegador | Out-Null }
     $testes += @{ Nome = "axe-core (todas as telas)";       Cmd = "uv run python testes/navegador/rodar_teste_app.py teste_axe.mjs" }

@@ -417,7 +417,7 @@ await secao('Operador', async ctx => {
   await p.avaliar(`(() => { const s = (n, v) => { const i = document.querySelector('#envio-${cod} [data-envio=' + n + ']'); i.value = v; i.dispatchEvent(new Event(i.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
     s('valor', '130,00'); s('cobranca', 'fechado'); s('antigo', '400'); return 0; })()`);
   const previaE = await p.avaliar(`$('previa-${cod}').textContent`);
-  conferir('Envio: valor, cobrança e custo antigo mudam a prévia (economia informada)', /custo R\$\s?130,00 · economia informada R\$\s?270,00/.test(previaE), previaE);
+  conferir('Envio: valor, cobrança e custo antigo mudam a prévia (economia informada)', /custo R\$\s?130,00 · Economia: R\$\s?270,00 em relação ao jeito antigo/.test(previaE), previaE);
   // e-mail (Mailpit): PDF e MP3 anexos, entregue; clique duplo não manda dois
   const salvandoE = await p.avaliar(`(() => { const b = document.querySelector('#envio-${cod} [data-envio-acao=email]'); b.click(); const r = [b.disabled, b.textContent]; b.click(); return r; })()`);
   await ate(p, `document.querySelectorAll('#envio-${cod} .envios li').length >= 1 && /entregue/.test($('envio-${cod}').textContent)`, 120000);

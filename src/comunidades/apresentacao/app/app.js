@@ -264,10 +264,12 @@ const CANAL = { email: 'e-mail', whatsapp: 'WhatsApp', copia: 'cópia da mensage
 const SITUACAO_ENVIO = { preparando: 'preparando', enviado: 'enviado', entregue: 'entregue ao servidor de e-mail', falhou: 'falhou',
   confirmado: 'a rádio confirmou' };
 const tempoArTexto = s => s == null ? '' : s >= 0 ? t('{tempo} a menos no ar', { tempo: tempoNoAr(s) }) : t('{tempo} a mais no ar', { tempo: tempoNoAr(-s) });
-function economiaTexto(e) {
+function economiaTexto(e, previa = false) {
   const partes = [t('custo {valor}', { valor: dinheiro(e.custo) })];
-  if (e.economia != null) partes.push(t('economia {tipo} {valor}', { tipo: t(e.economia_tipo || e.tipo), valor: dinheiro(e.economia) }));
-  else partes.push(t('economia: só com o aviso de hoje ou o custo antigo informado'));
+  const tipo = e.economia_tipo || e.tipo;
+  if (e.economia != null) partes.push(tipo === 'informada' ? t('Economia: {valor} em relação ao jeito antigo', { valor: dinheiro(e.economia) })
+    : t('Economia: {valor} pelo tempo a menos no ar', { valor: dinheiro(e.economia) }));
+  else partes.push(previa ? t('Economia: preencha "Quanto custaria do jeito antigo" para calcular') : t('Economia: sem o custo do jeito antigo'));
   if ((e.tempo_economizado ?? e.tempo) != null) partes.push(tempoArTexto(e.tempo_economizado ?? e.tempo));
   return partes.join(' · ');
 }
@@ -572,7 +574,8 @@ function desenharEnvio(m) {
     : t('Nenhuma rádio ativa cadastrada ainda: peça o cadastro ao Admin da empresa.') }),
     pode('gerenciar_radios') ? no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-envio-acao': 'ir-radios', texto: t('Ir para Rádios') })) : null);
   if (pode('pedir_radio')) blocos.push(formPedidoRadio(m, e));
-  lugar.replaceChildren(...blocos, ...lista);
+  // replaceChildren escreveria null como o texto "null": os blocos vazios saem antes
+  lugar.replaceChildren(...blocos.filter(Boolean), ...lista);
   desenharPrevia(cod);
 }
 
@@ -609,7 +612,7 @@ function desenharPrevia(cod) {
   if (valor === null || Number.isNaN(valor)) return lugar.textContent = t('Informe o valor do envio em R$.');
   if (Number.isNaN(antigo)) return lugar.textContent = t('O custo antigo tem de ser um valor em R$.');
   lugar.textContent = economiaTexto(previaEconomia({ cobranca: e.cobranca, valor, segundosFarol: segundos(estado.avisos[cod]),
-    segundosHoje: m.hoje?.segundos ?? null, custoAntigo: antigo }));
+    segundosHoje: m.hoje?.segundos ?? null, custoAntigo: antigo }), true);
 }
 
 function desenharFinal(codigo) {

@@ -214,3 +214,14 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
 - Ler em voz alta: só vozes com `localService === true` (voz on-line mandaria o texto a servidores de fora); sem voz local no idioma, botão desligado e o como instalar (Windows, Android, iPhone/iPad); na Declaração.
 - Auditoria: só "alterou as preferências de acessibilidade" (e "alterou o idioma da tela"), sem quais opções: a combinação pode indicar deficiência (dado sensível, LGPD art. 11). As opções ficam só no perfil da pessoa; nenhum relatório nem Admin as vê.
 - Testes: teste_acessibilidade 29/29 (voz local x on-line simulada; auditoria sem as opções); registro total 5/5; dicionário 4/4.
+
+### Envio para a rádio: null, cobrança e economia (15/10/2026)
+- "null" embaixo dos botões: com o e-mail ligado, o bloco "e-mail desligado" era `null` e o `replaceChildren` do navegador escreve null como texto. Os blocos vazios saem antes.
+- Select "Cobrança" cortado: os campos do envio agora se ajeitam à largura (no celular, um por linha); o texto inteiro aparece nos 3 idiomas.
+- Economia em frase clara:
+  - sem o custo antigo, na prévia: "Economia: preencha "Quanto custaria do jeito antigo" para calcular";
+  - com ele: "Economia: R$ X em relação ao jeito antigo";
+  - pelo tempo no ar: "Economia: R$ X pelo tempo a menos no ar";
+  - o "N s a menos no ar" continua.
+- Teste novo teste_sem_null.mjs, 18/18: todas as vistas dos 4 perfis × 3 idiomas, com um aviso aberto e 570 cliques em botões que só mostram ou alternam. Nenhum null, undefined, NaN, True, False nem None. O select da cobrança cabe em 1280 e 360 px.
+- teste_app 110/110 e verificação 110/110, com as frases novas.
