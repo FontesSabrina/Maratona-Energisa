@@ -362,7 +362,8 @@ try:
     conferir("Consulta não envia (403) mas vê os envios", con.post(f"/api/historico/{a['id']}/envios", json={**base_envio, "texto": texto}).status_code == 403
              and len(con.get(f"/api/historico/{a['id']}/envios").json()["envios"]) == 4)
     # adulteração no cofre
-    sql("UPDATE arquivo_envio SET cifrado = overlay(cifrado placing '\\x00'::bytea from 40 for 1) WHERE envio_id = %s AND tipo = 'pdf'", (env["id"],))
+    # inverte os bits de um byte (trocar por 0x00 falhava 1 vez em 256: quando o byte já era zero, nada mudava)
+    sql("UPDATE arquivo_envio SET cifrado = set_byte(cifrado, 39, 255 - get_byte(cifrado, 39)) WHERE envio_id = %s AND tipo = 'pdf'", (env["id"],))
     adult = con.get(f"/api/envios/{env['id']}/arquivos/pdf")
     conferir("arquivo alterado no banco: 409 'não confere', nada entregue, na auditoria", adult.status_code == 409
              and sql("SELECT 1 FROM registro WHERE acao = 'arquivo enviado não confere (cofre)'"), adult.text[:120])

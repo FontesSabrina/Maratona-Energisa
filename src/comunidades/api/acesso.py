@@ -392,7 +392,7 @@ def criar_empresa(dados: NovaEmpresa, u: dict = Depends(exigir("gerenciar_empres
     cnpj = _cnpj(dados.cnpj)
     temporaria = senha_temporaria()
     try:   # a empresa e o primeiro admin juntos: nunca uma empresa sem admin
-        e = banco.criar_empresa_com_admin(nome, sigla, dominio, cnpj, email, admin_nome, hash_senha(temporaria))
+        e = banco.criar_empresa_com_admin(nome, sigla, dominio, cnpj, email, admin_nome, hash_senha(temporaria), u["nome"])
     except banco.errors.UniqueViolation:   # clique duplo: a outra requisição gravou primeiro
         raise erro(409, "Já existe uma empresa com esta sigla.", "sigla") from None
     banco.registrar("cadastrou empresa", f"{nome} ({sigla}) e o primeiro admin", u["id"], e["id"])

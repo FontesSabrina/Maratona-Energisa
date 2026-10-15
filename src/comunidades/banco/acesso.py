@@ -97,6 +97,14 @@ CREATE INDEX IF NOT EXISTS aviso_codigo ON aviso (codigo);
 CREATE INDEX IF NOT EXISTS sessao_usuario ON sessao (usuario_id);
 CREATE INDEX IF NOT EXISTS registro_empresa ON registro (empresa_id, quando DESC);
 CREATE INDEX IF NOT EXISTS aviso_empresa ON aviso (empresa_id, criado_em DESC);
+-- Área de atuação (mapa das empresas, 15/10/2026): os municípios (IBGE) onde a empresa pode criar avisos
+CREATE TABLE IF NOT EXISTS empresa_municipio (
+    empresa_id   bigint NOT NULL REFERENCES empresa ON DELETE CASCADE,
+    codigo_ibge  text NOT NULL CHECK (codigo_ibge ~ '^[0-9]{7}$'),
+    PRIMARY KEY (empresa_id, codigo_ibge)
+);
+CREATE INDEX IF NOT EXISTS empresa_municipio_codigo ON empresa_municipio (codigo_ibge);
+ALTER TABLE empresa ADD COLUMN IF NOT EXISTS criada_por text;
 """
 
 
@@ -199,10 +207,11 @@ def criar_empresa(nome: str, sigla: str, dominio: str, cnpj: str | None = None) 
 
 
 def criar_empresa_com_admin(nome: str, sigla: str, dominio: str, cnpj: str | None, admin_email: str, admin_nome: str,
-                            senha_hash: str) -> dict:
+                            senha_hash: str, criada_por: str | None = None) -> dict:
     """A empresa e o primeiro admin na mesma transação: nunca fica empresa sem admin (nada pela metade)."""
     with conectar() as c, c.cursor(row_factory=dict_row) as cur:
-        cur.execute("INSERT INTO empresa (nome, sigla, dominio, cnpj) VALUES (%s, %s, %s, %s) RETURNING *", (nome, sigla, dominio, cnpj))
+        cur.execute("INSERT INTO empresa (nome, sigla, dominio, cnpj, criada_por) VALUES (%s, %s, %s, %s, %s) RETURNING *",
+                    (nome, sigla, dominio, cnpj, criada_por))
         e = cur.fetchone()
         cur.execute("INSERT INTO usuario (empresa_id, email, nome, perfil, senha_hash, trocar_senha) VALUES (%s, %s, %s, 'admin_empresa', %s, true)",
                     (e["id"], admin_email, admin_nome, senha_hash))
@@ -222,6 +231,58 @@ def mudar_status_empresa(id_: int, status: str) -> None:
     _executar("UPDATE empresa SET status = %s WHERE id = %s", (status, id_))
     if status == "suspensa":
         _executar("DELETE FROM sessao WHERE usuario_id IN (SELECT id FROM usuario WHERE empresa_id = %s)", (id_,))
+
+
+# ---------- Área de atuação ----------
+AREA_INICIAL = "área de atuação: carga inicial"   # a ação da auditoria da carga da EMG (uma vez só)
+
+
+def area(empresa_id: int) -> set[str]:
+    with conectar() as c:
+        return {r[0] for r in c.execute("SELECT codigo_ibge FROM empresa_municipio WHERE empresa_id = %s", (empresa_id,)).fetchall()}
+
+
+def areas() -> dict[int, set[str]]:
+    """empresa_id -> municípios de todas as empresas (inclusive as sem área: conjunto vazio)."""
+    with conectar() as c:
+        r = {i: set() for (i,) in c.execute("SELECT id FROM empresa").fetchall()}
+        for e, cod in c.execute("SELECT empresa_id, codigo_ibge FROM empresa_municipio").fetchall():
+            r[e].add(cod)
+    return r
+
+
+def salvar_area(empresa_id: int, codigos: list[str], acao: str, detalhe: str, usuario_id: int | None) -> dict:
+    """Troca a área da empresa e grava a linha da auditoria na mesma transação (nada pela metade)."""
+    with conectar() as c:
+        c.execute("DELETE FROM empresa_municipio WHERE empresa_id = %s", (empresa_id,))
+        with c.cursor() as cur:
+            cur.executemany("INSERT INTO empresa_municipio (empresa_id, codigo_ibge) VALUES (%s, %s)", [(empresa_id, x) for x in codigos])
+        return _registrar(c, acao, detalhe, usuario_id, empresa_id)
+
+
+def semear_area_inicial(sigla: str, codigos: list[str]) -> bool:
+    """Uma vez só: a empresa de demonstração recebe a área que já existia (os municípios da base territorial).
+    Não repete se a carga já foi feita, mesmo que depois a área tenha sido mudada ou esvaziada."""
+    e = empresa_por_sigla(sigla)
+    if not e or not codigos:
+        return False
+    with conectar() as c:
+        if c.execute("SELECT 1 FROM registro WHERE acao = %s AND empresa_id = %s LIMIT 1", (AREA_INICIAL, e["id"])).fetchone():
+            return False
+    salvar_area(e["id"], sorted(codigos), AREA_INICIAL, f"{len(codigos)} municípios (a concessão já carregada na base territorial)", None)
+    return True
+
+
+def contagens_empresas() -> dict[int, dict]:
+    """Só contagens por empresa (nunca o conteúdo): usuários, avisos no mês e no total."""
+    with conectar() as c:
+        r = {i: {"usuarios": 0, "avisos_mes": 0, "avisos_total": 0} for (i,) in c.execute("SELECT id FROM empresa").fetchall()}
+        for e, n in c.execute("SELECT empresa_id, count(*) FROM usuario WHERE empresa_id IS NOT NULL GROUP BY 1").fetchall():
+            r[e]["usuarios"] = n
+        for e, mes, tot in c.execute("SELECT empresa_id, count(*) FILTER (WHERE criado_em >= date_trunc('month', now())), count(*)"
+                                     " FROM aviso GROUP BY 1").fetchall():
+            r[e]["avisos_mes"], r[e]["avisos_total"] = mes, tot
+    return r
 
 
 def empresa(id_: int) -> dict | None:

@@ -557,3 +557,39 @@ img, video, canvas { max-width: 100%; }
   .rolagem .tabela tr > :first-child { position: static; }
   .texto-longo { max-height: none; overflow: visible; }
 }
+
+/* ---------- Mapa das empresas (Admin do Farol): área de cada empresa com cor e hachura, sigla no meio, legenda que liga e desliga ---------- */
+.legenda-empresas { max-height: calc(100% - 48px); overflow-y: auto; max-width: min(360px, calc(100% - 24px)); display: block; }
+.legenda-empresas ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
+.legenda-empresas .legenda-topo button { width: 100%; justify-content: flex-start; display: flex; align-items: center; gap: 6px; background: transparent;
+  border-color: transparent; color: var(--texto); font-weight: 600; font-size: 0.8125rem; padding: 0 8px; }
+.legenda-empresas.minimizada { padding: 4px; }
+.legenda-empresa { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--linha); }
+.legenda-empresa .meta { font-size: 0.75rem; color: var(--texto2); }
+button.alternar-empresa { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: transparent; border-color: transparent; padding: 0 6px; font-size: 0.8125rem; }
+button.alternar-empresa[aria-pressed="false"] { opacity: .55; text-decoration: line-through; }
+button.alternar-empresa:hover { background: var(--sup2); }
+.legenda-sigla { font-weight: 700; }
+.legenda-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto2); }
+.sem-area { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--erro); font-weight: 600; }
+.legenda-sobreposicao { display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--texto); }
+.amostra-empresa { flex: none; }
+.rotulo-empresa { width: 0; height: 0; }
+.rotulo-empresa span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-size: 0.9375rem; font-weight: 700; letter-spacing: .04em;
+  color: var(--texto); padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--sup) 85%, transparent); border: 1px solid var(--linha); pointer-events: none; }
+.rotulo-empresa.suspensa span { color: var(--texto2); border-style: dashed; }
+button.link { background: none; border: 0; padding: 0; min-height: 44px; color: var(--acento-forte); text-decoration: underline; font-weight: 600; text-align: left; }
+.ficha-empresa { display: grid; gap: 10px; }
+.ficha-empresa h2 { margin: 0; font-size: 1.125rem; }
+.ficha-dados { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 0.875rem; }
+.ficha-dados dt { color: var(--texto2); }
+.ficha-dados dd { margin: 0; font-weight: 600; }
+.lista-municipios { margin: 8px 0 0; padding-left: 18px; columns: 2 12rem; font-size: 0.875rem; }
+#editorArea .checks { max-height: 320px; }
+@media (max-width: 599px) {
+  .legenda-empresas { max-width: calc(100% - 24px); max-height: 50%; }
+  .ficha-dados { grid-template-columns: minmax(0, 1fr); }
+  .ficha-dados dd { margin-bottom: 6px; }
+}
+@media print { .legenda-empresas, #editorArea { display: none !important; } }

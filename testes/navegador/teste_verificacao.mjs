@@ -76,6 +76,10 @@ async function entrar(p, email, senha) {
   return p.avaliar(`estado.tela`);
 }
 async function sair(p) {
+  // espera a tela terminar o que estava fazendo (ex.: recarregar a lista depois de salvar): uma requisição ainda no ar
+  // na hora de sair volta 401 (a sessão já acabou), o que aparecia como erro intermitente do teste
+  await ate(p, `!document.querySelector('[aria-busy="true"]')`);
+  await espera(600);
   await p.avaliar(`($('sair').click(), 0)`);
   await ate(p, `estado.tela === 'entrar'`);
 }

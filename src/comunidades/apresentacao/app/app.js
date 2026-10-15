@@ -37,6 +37,10 @@ const estado = {
   territorios: {},         // codigo_ibge -> GeoJSON das comunidades
   audios: {},              // codigo_ibge -> { texto, url (blob local), segundos }: o MP3 do texto atual
   audiosHoje: {},          // codigo_ibge -> { url, segundos }: o MP3 do aviso de hoje (comparativo)
+  mapaEmpresas: null,      // Admin do Farol: empresas, áreas (códigos), contornos e sobreposição (só cadastro e contagens)
+  empresasOcultas: new Set(), legendaEmpresasAberta: true, fichaEmpresa: null,
+  area: null,              // editor da área de atuação: { empresaId, sigla, codigos: Set, uf, busca, resumo }
+  municipiosIbge: null, ufGeo: null,
   menuAberto: false,       // celular e tablet: o menu das seções aberto pelo botão "Menu"
   verUcs: true,            // camada dos pontos das UCs (só logo depois do envio; o histórico não tem pontos)
   verRede: true,           // rede elétrica FICTÍCIA (demonstração), de perto; o botão esconde
@@ -969,18 +973,360 @@ function desenharUsuarios() {
 }
 
 function desenharEmpresas() {
-  const linhas = estado.empresas.map(e => no('tr', { 'data-empresa': e.id }, no('th', { scope: 'row', texto: e.nome }), no('td', { texto: e.sigla }),
+  const area = id => estado.mapaEmpresas?.empresas.find(x => x.id === id)?.municipios.length || 0;
+  const linhas = estado.empresas.map(e => no('tr', { 'data-empresa': e.id },
+    no('th', { scope: 'row' }, no('button', { type: 'button', classe: 'link', 'data-empresa-acao': 'ficha', 'aria-label': t('Ficha de {nome} (e a área no mapa)', { nome: e.nome }), texto: e.nome })),
+    no('td', { texto: e.sigla }),
     no('td', { classe: 'codigo', texto: e.cnpj || '—' }), no('td', { texto: e.dominio }),
     no('td', {}, no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}` }, no('span', { 'aria-hidden': 'true', texto: e.status === 'suspensa' ? '✕ ' : '✓ ' }),
       e.status === 'suspensa' ? t('Suspensa') : t('Ativa'))),
     no('td', { texto: fmt(e.usuarios) }), no('td', { texto: fmt(e.avisos) }),
-    no('td', {}, no('span', { classe: 'acoes' }, no('button', { type: 'button', 'data-empresa-acao': 'editar', 'aria-label': t('Editar {nome}', { nome: e.nome }), texto: t('Editar') }),
+    no('td', { texto: area(e.id) ? fmt(area(e.id)) : '⚠ ' + t('Área de atuação não cadastrada') }),
+    no('td', {}, no('span', { classe: 'acoes' }, no('button', { type: 'button', 'data-empresa-acao': 'area', 'aria-label': t('Área de atuação de {nome}', { nome: e.nome }), texto: t('Área') }),
+      no('button', { type: 'button', 'data-empresa-acao': 'editar', 'aria-label': t('Editar {nome}', { nome: e.nome }), texto: t('Editar') }),
       no('button', { type: 'button', classe: e.status === 'ativa' ? 'perigo' : '', 'data-empresa-acao': e.status === 'ativa' ? 'suspensa' : 'ativa',
         'aria-label': t(e.status === 'ativa' ? 'Suspender {nome}' : 'Reativar {nome}', { nome: e.nome }), texto: e.status === 'ativa' ? t('Suspender') : t('Reativar') })))));
   $('listaEmpresas').replaceChildren(no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Empresas') }, no('table', { classe: 'tabela' },
     no('caption', { classe: 'visualmente-oculto', texto: t('Empresas') }),
-    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Ações'].map(c => no('th', { scope: 'col', texto: t(c) })))),
+    no('thead', {}, no('tr', {}, ['Empresa', 'Sigla', 'CNPJ', 'Domínio', 'Situação', 'Usuários', 'Avisos', 'Municípios', 'Ações'].map(c => no('th', { scope: 'col', texto: t(c) })))),
     no('tbody', {}, linhas))));
+}
+
+// ---- Mapa das empresas e área de atuação (Admin do Farol; só cadastro, área e contagens) ----
+// cada empresa: uma cor e uma hachura diferentes (nunca só a cor); a suspensa, cinza tracejado
+const COR_EMPRESA = ['#1663C7', '#B07800', '#1B7D4B', '#7A4FD1', '#C2410C', '#0E7490', '#BE185D', '#4D7C0F'];
+const HACHURA = ['diagonal', 'contra', 'horizontal', 'vertical', 'xadrez', 'pontos', 'cruz', 'larga'];
+const COR_SUSPENSA = '#6B7A88', COR_SOBREPOSICAO = '#B42318';
+const ehFarol = () => estado.usuario?.perfil === 'admin_farol';
+const corDaEmpresa = (e, i) => e.status === 'suspensa' ? COR_SUSPENSA : COR_EMPRESA[i % COR_EMPRESA.length];
+const hachuraDaEmpresa = (e, i) => e.status === 'suspensa' ? 'suspensa' : HACHURA[i % HACHURA.length];
+let camadaEmpresas, camadaEditorArea;
+const SVG = 'http://www.w3.org/2000/svg';
+const svg = (tag, atributos = {}, ...filhos) => {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(atributos)) e.setAttribute(k, v);
+  e.append(...filhos);
+  return e;
+};
+// o desenho de cada hachura (12 x 12, repetido), na cor da empresa
+function padrao(id, tipo, cor) {
+  const linha = (x1, y1, x2, y2, w = 1.6) => svg('line', { x1, y1, x2, y2, stroke: cor, 'stroke-width': w, 'stroke-opacity': .75 });
+  const desenho = {
+    diagonal: [linha(0, 12, 12, 0), linha(-3, 3, 3, -3), linha(9, 15, 15, 9)],
+    contra: [linha(0, 0, 12, 12), linha(-3, 9, 3, 15), linha(9, -3, 15, 3)],
+    horizontal: [linha(0, 6, 12, 6)],
+    vertical: [linha(6, 0, 6, 12)],
+    xadrez: [linha(0, 6, 12, 6, 1.2), linha(6, 0, 6, 12, 1.2)],
+    pontos: [svg('circle', { cx: 6, cy: 6, r: 1.8, fill: cor, 'fill-opacity': .8 })],
+    cruz: [linha(0, 12, 12, 0, 1.2), linha(0, 0, 12, 12, 1.2)],
+    larga: [linha(0, 12, 12, 0, 3.2)],
+    suspensa: [linha(0, 12, 12, 0, 1), linha(6, 18, 18, 6, 1)],
+  }[tipo];
+  return svg('pattern', { id, width: 12, height: 12, patternUnits: 'userSpaceOnUse' },
+    svg('rect', { width: 12, height: 12, fill: cor, 'fill-opacity': .14 }), ...desenho);
+}
+// as hachuras ficam no SVG do mapa (o Leaflet desenha os polígonos nele); fill: url(#hachura-…)
+function garantirHachuras() {
+  const raiz = mapa?.getPanes().overlayPane.querySelector('svg');
+  if (!raiz || !estado.mapaEmpresas) return;
+  raiz.querySelector('defs.hachuras')?.remove();
+  raiz.prepend(svg('defs', { class: 'hachuras' }, ...estado.mapaEmpresas.empresas.map((e, i) => padrao(`hachura-${e.id}`, hachuraDaEmpresa(e, i), corDaEmpresa(e, i)))));
+}
+const amostraEmpresa = (e, i) => svg('svg', { width: 22, height: 16, viewBox: '0 0 22 16', 'aria-hidden': 'true', class: 'amostra-empresa' },
+  svg('defs', {}, padrao(`amostra-${e.id}`, hachuraDaEmpresa(e, i), corDaEmpresa(e, i))),
+  svg('rect', { x: 1, y: 1, width: 20, height: 14, rx: 3, fill: `url(#amostra-${e.id})`, stroke: corDaEmpresa(e, i), 'stroke-width': 1.5,
+    ...(e.status === 'suspensa' ? { 'stroke-dasharray': '3 2' } : {}) }));
+
+// Model: as feições de cada município de alguma área, pelo código
+const feicaoDe = c => estado.mapaEmpresas?.porCodigo?.[c];
+const nomeDoMunicipio = c => feicaoDe(c) ? `${feicaoDe(c).properties.nome}/${feicaoDe(c).properties.uf}` : c;
+// onde escrever a sigla: o ponto (sempre dentro de um município) mais perto do meio da área
+function pontoDaSigla(codigos) {
+  const pts = codigos.map(c => feicaoDe(c)?.properties.ponto).filter(Boolean);
+  if (!pts.length) return null;
+  const meio = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+  return pts.reduce((m, p) => (p[0] - meio[0]) ** 2 + (p[1] - meio[1]) ** 2 < (m[0] - meio[0]) ** 2 + (m[1] - meio[1]) ** 2 ? p : m);
+}
+
+async function carregarMapaEmpresas() {
+  const m = await api('/api/empresas/mapa');
+  m.porCodigo = Object.fromEntries(m.municipios.features.map(f => [f.properties.codigo_ibge, f]));
+  estado.mapaEmpresas = m;
+  desenharMapaEmpresas(); desenharLegendaEmpresas(); desenharSobreposicao();
+}
+
+// View: as áreas (cor + hachura + contorno), a sigla no meio, a sobreposição em vermelho tracejado
+function desenharMapaEmpresas() {
+  camadaEmpresas?.remove();
+  camadaEmpresas = null;
+  const m = estado.mapaEmpresas;
+  if (!mapa || !m || !ehFarol()) return;
+  const camadas = [];
+  m.empresas.forEach((e, i) => {
+    if (estado.empresasOcultas.has(e.id) || !e.municipios.length) return;
+    const cor = corDaEmpresa(e, i);
+    camadas.push(L.geoJSON({ type: 'FeatureCollection', features: e.municipios.map(feicaoDe).filter(Boolean) }, {
+      style: () => ({ color: cor, weight: 1.4, opacity: .9, dashArray: e.status === 'suspensa' ? '6 4' : null, fillColor: `url(#hachura-${e.id})`, fillOpacity: 1 }),
+      onEachFeature: (f, l) => {
+        l.bindTooltip(() => no('span', { texto: `${e.sigla} · ${f.properties.nome}/${f.properties.uf}`
+          + (e.status === 'suspensa' ? ` · ${t('Suspensa')}` : '') }), { sticky: true });
+        l.on('click', () => abrirFichaEmpresa(e.id, false));
+      },
+    }));
+    const p = pontoDaSigla(e.municipios);
+    if (p) camadas.push(L.marker(p, { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: `rotulo-empresa${e.status === 'suspensa' ? ' suspensa' : ''}`, html: no('span', { texto: e.sigla }), iconSize: null }) }));
+  });
+  const sobre = Object.keys(m.sobreposicao).map(feicaoDe).filter(Boolean);
+  if (sobre.length) camadas.push(L.geoJSON({ type: 'FeatureCollection', features: sobre }, {
+    style: () => ({ color: COR_SOBREPOSICAO, weight: 3, dashArray: '2 5', fill: false }),
+    onEachFeature: (f, l) => l.bindTooltip(() => no('span', { texto: t('Sobreposição: {nome} em {empresas}',
+      { nome: `${f.properties.nome}/${f.properties.uf}`, empresas: m.sobreposicao[f.properties.codigo_ibge].join(', ') }) }), { sticky: true }),
+  }));
+  camadaEmpresas = L.featureGroup(camadas).addTo(mapa);
+  garantirHachuras();
+  camadaEditorArea?.bringToFront();
+}
+
+// a legenda: sigla, nome, situação e municípios; cada empresa liga e desliga no mapa; a sem área, com o botão de cadastrar
+function desenharLegendaEmpresas() {
+  const m = estado.mapaEmpresas;
+  $('legendaEmpresas').hidden = !ehFarol() || !m;
+  $('legenda').hidden = ehFarol();
+  if (!m || !ehFarol()) return;
+  const itens = m.empresas.map((e, i) => {
+    const visivel = !estado.empresasOcultas.has(e.id);
+    return no('li', { classe: 'legenda-empresa' },
+      no('button', { type: 'button', classe: 'alternar-empresa', 'data-empresa-mapa': e.id, 'aria-pressed': String(visivel),
+        'aria-label': t(visivel ? 'Esconder {sigla} no mapa' : 'Mostrar {sigla} no mapa', { sigla: e.sigla }) },
+        amostraEmpresa(e, i), no('span', { classe: 'legenda-sigla', texto: e.sigla }),
+        no('span', { classe: 'legenda-nome', texto: e.nome })),
+      no('span', { classe: 'meta' },
+        no('span', { classe: `chip ${e.status === 'suspensa' ? 'cancelado' : ''}`, texto: (e.status === 'suspensa' ? '✕ ' : '✓ ') + t(e.status === 'suspensa' ? 'Suspensa' : 'Ativa') }),
+        ' ', e.municipios.length ? t('{n} município(s)', { n: fmt(e.municipios.length) }) : ''),
+      e.municipios.length ? null : no('span', { classe: 'sem-area' }, no('span', { texto: '⚠ ' + t('Área de atuação não cadastrada') }),
+        no('button', { type: 'button', 'data-empresa-area': e.id, texto: t('Cadastrar área') })));
+  });
+  const n = Object.keys(m.sobreposicao).length;
+  if (n) itens.push(no('li', { classe: 'legenda-sobreposicao' }, svg('svg', { width: 22, height: 16, 'aria-hidden': 'true' },
+    svg('rect', { x: 1.5, y: 1.5, width: 19, height: 13, fill: 'none', stroke: COR_SOBREPOSICAO, 'stroke-width': 2.5, 'stroke-dasharray': '2 3' })),
+    no('span', { texto: '⚠ ' + t('{n} município(s) em mais de uma empresa (sobreposição)', { n: fmt(n) }) })));
+  $('listaLegendaEmpresas').replaceChildren(...itens);
+  const aberta = estado.legendaEmpresasAberta;
+  $('listaLegendaEmpresas').hidden = !aberta;
+  $('botaoLegendaEmpresas').setAttribute('aria-expanded', String(aberta));
+  $('legendaEmpresas').classList.toggle('minimizada', !aberta);
+}
+
+// em lista também: os municípios em mais de uma empresa
+function desenharSobreposicao() {
+  const m = estado.mapaEmpresas, lista = Object.entries(m?.sobreposicao || {});
+  $('sobreposicaoEmpresas').replaceChildren(...(lista.length ? [no('h2', { classe: 'subtitulo', texto: t('Municípios em mais de uma empresa') }),
+    no('div', { classe: 'rolagem', tabindex: '0', role: 'region', 'aria-label': t('Municípios em mais de uma empresa') }, no('table', { classe: 'tabela' },
+      no('caption', { classe: 'visualmente-oculto', texto: t('Municípios em mais de uma empresa') }),
+      no('thead', {}, no('tr', {}, [t('Município'), t('Empresas')].map(c => no('th', { scope: 'col', texto: c })))),
+      no('tbody', {}, lista.map(([c, s]) => no('tr', {}, no('th', { scope: 'row', texto: nomeDoMunicipio(c) }), no('td', { texto: s.join(', ') })))))),
+  ] : []));
+}
+
+// a ficha da empresa (cadastro, contagens e municípios; nada de aviso); pela tabela, dá zoom na área
+async function abrirFichaEmpresa(id, zoom = true) {
+  try {
+    estado.fichaEmpresa = (await api(`/api/empresas/${id}/ficha`)).empresa;
+  } catch (e) { return avisar(e.message, true); }
+  if (estado.vista !== 'empresas') await irPara('empresas');
+  desenharFichaEmpresa();
+  const e = estado.mapaEmpresas?.empresas.find(x => x.id === id);
+  if (zoom && e?.municipios.length) {
+    const g = L.geoJSON({ type: 'FeatureCollection', features: e.municipios.map(feicaoDe).filter(Boolean) });
+    if (g.getLayers().length) mapa.fitBounds(g.getBounds(), { padding: [20, 20] });
+  }
+  $('fichaEmpresaTitulo')?.focus();
+}
+
+function desenharFichaEmpresa() {
+  const f = estado.fichaEmpresa;
+  $('fichaEmpresa').hidden = !f;
+  if (!f) return $('fichaEmpresa').replaceChildren();
+  const linha = (rotulo, valor) => [no('dt', { texto: t(rotulo) }), no('dd', { texto: valor })];
+  $('fichaEmpresa').replaceChildren(
+    no('h2', { id: 'fichaEmpresaTitulo', tabindex: '-1', texto: `${f.sigla} · ${f.nome}` }),
+    no('p', { classe: 'ajuda', texto: t('Só o cadastro e contagens: o conteúdo dos avisos, o histórico e as comunidades afetadas ficam só com a empresa.') }),
+    no('dl', { classe: 'ficha-dados' },
+      ...linha('Sigla', f.sigla), ...linha('CNPJ', f.cnpj || '—'), ...linha('Domínio dos e-mails', f.dominio),
+      ...linha('Situação', (f.status === 'suspensa' ? '✕ ' : '✓ ') + t(f.status === 'suspensa' ? 'Suspensa' : 'Ativa')),
+      ...linha('Cadastrada em', dataHora(f.criada_em)), ...linha('Cadastrada por', f.criada_por || '—'),
+      ...linha('Usuários', fmt(f.usuarios)), ...linha('Avisos no mês', fmt(f.avisos_mes)), ...linha('Avisos no total', fmt(f.avisos_total)),
+      ...linha('Municípios', fmt(f.municipios.length))),
+    f.municipios.length
+      ? no('details', { classe: 'corrigidas' }, no('summary', { texto: t('Municípios atendidos ({n})', { n: fmt(f.municipios.length) }) }),
+        no('ul', { classe: 'lista-municipios' }, f.municipios.map(x => no('li', { texto: `${x.nome}/${x.uf}` }))))
+      : no('p', { classe: 'alerta', texto: '⚠ ' + t('Área de atuação não cadastrada') }),
+    no('div', { classe: 'acoes' },
+      no('button', { type: 'button', classe: 'prim', 'data-empresa-area': f.id, texto: f.municipios.length ? t('Editar a área de atuação') : t('Cadastrar área') }),
+      no('button', { type: 'button', 'data-empresa-zoom': f.id, texto: t('Ver no mapa') }),
+      no('button', { type: 'button', 'data-fechar-ficha': '1', texto: t('Fechar') })));
+}
+
+// ---- Editor da área de atuação ----
+async function abrirEditorArea(id, focar = true) {
+  const e = estado.mapaEmpresas?.empresas.find(x => x.id === Number(id));
+  if (!e) return;
+  if (!estado.municipiosIbge) {
+    try { estado.municipiosIbge = (await api('/api/municipios-ibge')).municipios; } catch (x) { return avisar(x.message, true); }
+  }
+  const ufs = [...new Set(estado.municipiosIbge.map(m => m.uf))].sort();
+  const daArea = estado.municipiosIbge.filter(m => e.municipios.includes(m.codigo_ibge));
+  const uf = daArea.length ? Object.entries(daArea.reduce((n, m) => ({ ...n, [m.uf]: (n[m.uf] || 0) + 1 }), {})).sort((a, b) => b[1] - a[1])[0][0] : 'MG';
+  estado.area = { empresaId: e.id, sigla: e.sigla, codigos: new Set(e.municipios), uf, busca: '', resumo: null, ufs };
+  if (estado.vista !== 'empresas') await irPara('empresas');
+  $('areaUf').replaceChildren(...ufs.map(u => no('option', { value: u, texto: u })));
+  $('areaUf').value = uf; $('areaBusca').value = ''; $('areaArquivo').value = '';
+  mensagemEm('estadoArea', '');
+  desenharEditorArea();
+  await desenharMapaDaUf();
+  if (focar) { $('editorArea').scrollIntoView({ block: 'start' }); $('editorAreaTitulo').focus(); }
+}
+
+function fecharEditorArea() {
+  estado.area = null;
+  camadaEditorArea?.remove(); camadaEditorArea = null;
+  desenharEditorArea();
+}
+
+function desenharEditorArea() {
+  const a = estado.area;
+  $('editorArea').hidden = !a;
+  if (!a) return;
+  $('editorAreaTitulo').textContent = t('Área de atuação: {sigla}', { sigla: a.sigla });
+  const busca = normalizar(a.busca);
+  const lista = estado.municipiosIbge.filter(m => m.uf === a.uf && (!busca || normalizar(m.nome).includes(busca)));
+  $('areaListaTitulo').textContent = t('Municípios de {uf} ({n})', { uf: a.uf, n: fmt(lista.length) });
+  $('areaLista').replaceChildren(...lista.map(m => no('label', { classe: 'check' },
+    no('input', { type: 'checkbox', value: m.codigo_ibge, 'data-area-municipio': m.codigo_ibge, checked: a.codigos.has(m.codigo_ibge) }),
+    no('span', { texto: m.nome }))));
+  const porUf = {};
+  for (const m of estado.municipiosIbge) if (a.codigos.has(m.codigo_ibge)) porUf[m.uf] = (porUf[m.uf] || 0) + 1;
+  $('areaContagem').textContent = t('{n} município(s) marcado(s)', { n: fmt(a.codigos.size) })
+    + (Object.keys(porUf).length ? ` · ${Object.entries(porUf).map(([u, n]) => `${u}: ${fmt(n)}`).join(' · ')}` : '');
+  $('areaConfirmar').hidden = !a.resumo;
+  desenharResumoArea();
+  estiloEditorArea();
+}
+
+function desenharResumoArea() {
+  const r = estado.area?.resumo;
+  if (!r) return $('areaResumo').replaceChildren();
+  const nomes = xs => xs.map(x => `${x.nome}/${x.uf}`).join(', ');
+  $('areaResumo').replaceChildren(no('div', { classe: r.sobreposicao.length ? 'alerta-amarelo' : 'previa', role: 'status' },
+    no('p', {}, no('strong', { texto: t('{x} municípios, {y} novos, {z} removidos, {w} em sobreposição com outra empresa',
+      { x: fmt(r.municipios), y: fmt(r.novos.length), z: fmt(r.removidos.length), w: fmt(r.sobreposicao.length) }) })),
+    r.novos.length ? no('details', {}, no('summary', { texto: t('Novos ({n})', { n: fmt(r.novos.length) }) }), no('p', { texto: nomes(r.novos) })) : null,
+    r.removidos.length ? no('details', {}, no('summary', { texto: t('Removidos ({n})', { n: fmt(r.removidos.length) }) }), no('p', { texto: nomes(r.removidos) })) : null,
+    r.sobreposicao.length ? no('details', {}, no('summary', { texto: t('Em sobreposição ({n})', { n: fmt(r.sobreposicao.length) }) }),
+      no('p', { texto: r.sobreposicao.map(s => `${s.nome}/${s.uf} (${s.empresas.join(', ')})`).join('; ') })) : null,
+    r.mudou ? null : no('p', { texto: t('Nada mudou na área de atuação.') })));
+}
+
+// os municípios da UF no mapa, para marcar clicando (o teclado e o leitor de tela usam a lista)
+async function desenharMapaDaUf() {
+  const a = estado.area;
+  camadaEditorArea?.remove(); camadaEditorArea = null;
+  if (!a) return;
+  estado.ufGeo ||= {};
+  if (!estado.ufGeo[a.uf]) {
+    try { estado.ufGeo[a.uf] = await api(`/api/municipios-ibge/${a.uf}/mapa`); } catch (e) { return mensagemEm('estadoArea', e.message, true); }
+  }
+  if (estado.area !== a) return;
+  camadaEditorArea = L.geoJSON(estado.ufGeo[a.uf], {
+    style: f => estiloMunicipioArea(f.properties.codigo_ibge),
+    onEachFeature: (f, l) => {
+      l.bindTooltip(() => no('span', { texto: `${f.properties.nome}/${f.properties.uf} · ${estado.area?.codigos.has(f.properties.codigo_ibge) ? t('na área') : t('fora da área')}` }), { sticky: true });
+      l.on('click', () => alternarMunicipioArea(f.properties.codigo_ibge));
+    },
+  }).addTo(mapa);
+  if (camadaEditorArea.getLayers().length) mapa.fitBounds(camadaEditorArea.getBounds(), { padding: [20, 20] });
+}
+const estiloMunicipioArea = c => estado.area?.codigos.has(c)
+  ? { color: '#B07800', weight: 1.5, fillColor: '#F5B83D', fillOpacity: .5 }
+  : { color: '#6B7A88', weight: .8, fillColor: '#6B7A88', fillOpacity: .04 };
+function estiloEditorArea() {
+  camadaEditorArea?.eachLayer(l => l.setStyle(estiloMunicipioArea(l.feature.properties.codigo_ibge)));
+}
+
+// Controller do editor
+function alternarMunicipioArea(codigo, marcar) {
+  const a = estado.area;
+  if (!a) return;
+  const ligar = marcar ?? !a.codigos.has(codigo);
+  if (ligar) a.codigos.add(codigo); else a.codigos.delete(codigo);
+  a.resumo = null;
+  desenharEditorArea();
+}
+
+function marcarUf(marcar) {
+  const a = estado.area;
+  const busca = normalizar(a.busca);
+  for (const m of estado.municipiosIbge) if (m.uf === a.uf && (!busca || normalizar(m.nome).includes(busca))) {
+    if (marcar) a.codigos.add(m.codigo_ibge); else a.codigos.delete(m.codigo_ibge);
+  }
+  a.resumo = null;
+  desenharEditorArea();
+}
+
+async function importarArquivoArea(arquivo) {
+  const a = estado.area;
+  if (!a || !arquivo) return;
+  const fd = new FormData();
+  fd.append('arquivo', arquivo);
+  try {
+    const j = await api(`/api/empresas/${a.empresaId}/area/arquivo`, { method: 'POST', body: fd });
+    a.codigos = new Set(j.codigos); a.resumo = null;
+    mensagemEm('estadoArea', t('{n} município(s) do arquivo marcados. Confira e veja o resumo antes de salvar; o arquivo não foi guardado.', { n: fmt(j.codigos.length) }));
+    desenharEditorArea();
+  } catch (e) {
+    mensagemEm('estadoArea', e.message, true);
+  }
+  $('areaArquivo').value = '';
+}
+
+async function salvarArea(confirmar) {
+  const a = estado.area;
+  if (!a) return;
+  const botao = confirmar ? $('areaConfirmar') : $('areaVerResumo');
+  await ocupado(botao, confirmar ? 'Salvando…' : 'Calculando…', async () => {
+    try {
+      const j = await api(`/api/empresas/${a.empresaId}/area`, { method: 'PUT', json: { codigos: [...a.codigos], confirmar } });
+      if (!confirmar) {
+        a.resumo = j.resumo;
+        mensagemEm('estadoArea', '');
+        desenharEditorArea();
+        $('areaConfirmar').hidden = !j.resumo.mudou;
+        return;
+      }
+      const id = a.empresaId;
+      fecharEditorArea();
+      await carregarMapaEmpresas();
+      estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas();
+      mensagemEm('estadoEmpresa', t('Área de atuação salva ({n} municípios).', { n: fmt(j.resumo.municipios) }));
+      await abrirFichaEmpresa(id);
+    } catch (e) {
+      mensagemEm('estadoArea', e.message, true);
+    }
+  });
+}
+
+function acaoMapaEmpresas(evento) {
+  const b = evento.target.closest('button');
+  if (!b) return;
+  if (b.dataset.empresaMapa) {
+    const id = Number(b.dataset.empresaMapa);
+    if (estado.empresasOcultas.has(id)) estado.empresasOcultas.delete(id); else estado.empresasOcultas.add(id);
+    desenharMapaEmpresas(); desenharLegendaEmpresas();
+    document.querySelector(`[data-empresa-mapa="${id}"]`)?.focus();
+  } else if (b.dataset.empresaArea) abrirEditorArea(b.dataset.empresaArea);
+  else if (b.dataset.empresaZoom) abrirFichaEmpresa(Number(b.dataset.empresaZoom));
+  else if (b.dataset.fecharFicha) { estado.fichaEmpresa = null; desenharFichaEmpresa(); }
 }
 
 // ---- Rádios (Admin da empresa) ----
@@ -1327,7 +1673,7 @@ async function buscarNaTela() {
 }
 
 async function aoMoverMapa() {
-  if (mapa.getZoom() >= ZOOM_COMUNIDADES && estado.tela === 'app') await buscarNaTela();
+  if (mapa.getZoom() >= ZOOM_COMUNIDADES && estado.tela === 'app' && !ehFarol()) await buscarNaTela();
   desenharBase(); desenharNomes(); desenharRede();
   document.documentElement.dataset.mapa = `z${mapa.getZoom()}`;
 }
@@ -1642,7 +1988,9 @@ async function abrirApp() {
   desenharTela(); desenharAbas();
   iniciarMapa();
   mapa.invalidateSize();
-  [estado.config, estado.concessao] = await Promise.all([api('/api/config'), api('/api/concessao')]);
+  [estado.config, estado.concessao] = await Promise.all([api('/api/config'),
+    ehFarol() ? { type: 'FeatureCollection', features: [] } : api('/api/concessao')]);
+  $('mapa').setAttribute('aria-label', ehFarol() ? t('Mapa das empresas: a área de atuação de cada uma') : t('Mapa dos municípios da concessão e das comunidades afetadas'));
   $('faixa').textContent = t(estado.config.aviso_ficticio);
   // o idioma do aviso: cada um no próprio nome (lang); o padrão é o da empresa
   $('idioma').replaceChildren(...Object.entries(estado.config.idiomas).map(([k, nome]) => no('option', { value: k, lang: k, texto: nome })));
@@ -1655,7 +2003,11 @@ async function abrirApp() {
   desenharIrPara();
   $('botaoCalor').textContent = estado.calor ? t('Esconder mapa de calor') : t('Mapa de calor (12 meses)');
   atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
-  mapa.fitBounds(camadaConcessao.getBounds(), { padding: [20, 20] });
+  if (ehFarol()) {
+    await carregarMapaEmpresas();
+    if (camadaEmpresas?.getLayers().length) mapa.fitBounds(camadaEmpresas.getBounds(), { padding: [20, 20] });
+  } else if (camadaConcessao.getLayers().length) mapa.fitBounds(camadaConcessao.getBounds(), { padding: [20, 20] });
+  desenharLegendaEmpresas();
   await irPara(estado.vista);
 }
 
@@ -1726,6 +2078,11 @@ function limparTela() {
     $(id).replaceChildren();
   Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null, pedidos: [], meusPedidos: [],
     pedidoAtendendo: null, empresaEditando: null });
+  Object.assign(estado, { mapaEmpresas: null, empresasOcultas: new Set(), fichaEmpresa: null, area: null, municipiosIbge: null, ufGeo: null });
+  camadaEmpresas?.remove(); camadaEmpresas = null; camadaEditorArea?.remove(); camadaEditorArea = null;
+  for (const id of ['listaLegendaEmpresas', 'fichaEmpresa', 'sobreposicaoEmpresas', 'areaLista', 'areaResumo']) $(id).replaceChildren();
+  $('fichaEmpresa').hidden = $('editorArea').hidden = $('legendaEmpresas').hidden = true; $('legenda').hidden = false;
+  mensagemEm('estadoArea', '');
   for (const f of ['formEntrar', 'formSenha', 'formUsuario', 'formRadio', 'formConfig', 'formEmpresa', 'form']) limparErros($(f));
   // as mensagens de status também (ex.: "Fulana: alterações salvas"): quem entra depois não vê nada do anterior
   for (const id of ['estadoUsuario', 'estadoRadio', 'estadoConfig', 'estadoEmpresa', 'estadoAuditoria', 'estadoSenha']) mensagemEm(id, '');
@@ -1774,7 +2131,10 @@ async function irPara(vista) {
     if (vista === 'configuracoes') { estado.configuracao = await api('/api/empresa/configuracao'); desenharConfig(); }
     if (vista === 'comparativo') { desenharComparativo(); estado.painel = await api('/api/painel'); desenharComparativo(); }
     if (vista === 'usuarios') { const j = await api('/api/usuarios'); estado.usuarios = j.usuarios; estado.perfis = j.perfis; desenharUsuarios(); }
-    if (vista === 'empresas') { estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas(); }
+    if (vista === 'empresas') {
+      if (!estado.mapaEmpresas) await carregarMapaEmpresas();
+      estado.empresas = (await api('/api/empresas')).empresas; desenharEmpresas(); desenharFichaEmpresa(); desenharEditorArea();
+    }
     if (vista === 'registro') { estado.registro = (await api('/api/registro')).registro; desenharRegistro(); }
   } catch (e) {
     if (e.status !== 401) avisar(e.message, true);
@@ -2368,6 +2728,7 @@ async function cadastrarEmpresa(evento) {
       mensagemEm('estadoEmpresa', t('{nome} cadastrada (registrado na auditoria).', { nome: j.empresa.nome }));
       mostrarSenhaTemporaria(t('Senha temporária do primeiro admin de {nome}:', { nome: j.empresa.nome }), j.senha_temporaria);
       await irPara('empresas');
+      await abrirEditorArea(j.empresa.id, false);   // em seguida, a área de atuação (sem ela, a empresa não cria avisos)
     } catch (e) {
       if (e.status === 401) return;
       mensagemEm('estadoEmpresa', e.message, true);
@@ -2396,6 +2757,9 @@ async function acaoEmpresa(evento) {
   const b = evento.target.closest('button[data-empresa-acao]');
   if (!b) return;
   const id = b.closest('[data-empresa]').dataset.empresa, e = estado.empresas.find(x => String(x.id) === id), acao = b.dataset.empresaAcao;
+  if (acao === 'ficha') return abrirFichaEmpresa(Number(id));
+  if (acao === 'area') return abrirEditorArea(id);
+  if (acao === 'editar') abrirEditorArea(id, false);   // o Editar da empresa também mostra a área de atuação
   if (acao === 'editar') {
     estado.empresaEditando = e;
     limparErros($('formEmpresa'));
@@ -2638,6 +3002,7 @@ async function trocarIdioma(novo, salvar = true) {
   atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
   for (const id of ['relMes', 'audMes']) $(id).replaceChildren();   // os meses no formato do idioma
   if (estado.resultado) desenharResultado();
+  if (ehFarol()) { desenharLegendaEmpresas(); desenharSobreposicao(); }
   await irPara(estado.vista);
 }
 
@@ -2732,6 +3097,18 @@ async function abrir() {
   $('listaHistorico').addEventListener('click', abrirHistorico);
   $('formUsuario').addEventListener('submit', cadastrarUsuario);
   $('listaEmpresas').addEventListener('click', acaoEmpresa);
+  $('legendaEmpresas').addEventListener('click', acaoMapaEmpresas);
+  $('fichaEmpresa').addEventListener('click', acaoMapaEmpresas);
+  $('botaoLegendaEmpresas').addEventListener('click', () => { estado.legendaEmpresasAberta = !estado.legendaEmpresasAberta; desenharLegendaEmpresas(); });
+  $('areaUf').addEventListener('change', e => { estado.area.uf = e.target.value; estado.area.busca = $('areaBusca').value = ''; desenharEditorArea(); desenharMapaDaUf(); });
+  $('areaBusca').addEventListener('input', e => { estado.area.busca = e.target.value; desenharEditorArea(); });
+  $('areaLista').addEventListener('change', e => { const c = e.target.dataset.areaMunicipio; if (c) alternarMunicipioArea(c, e.target.checked); });
+  $('areaTodos').addEventListener('click', () => marcarUf(true));
+  $('areaNenhum').addEventListener('click', () => marcarUf(false));
+  $('areaArquivo').addEventListener('change', e => importarArquivoArea(e.target.files[0]));
+  $('areaVerResumo').addEventListener('click', () => salvarArea(false));
+  $('areaConfirmar').addEventListener('click', () => salvarArea(true));
+  $('areaCancelar').addEventListener('click', () => { fecharEditorArea(); mensagemEm('estadoArea', ''); });
   $('formRadio').addEventListener('submit', salvarRadio);
   $('radCancelar').addEventListener('click', () => { limparFormRadio(); desenharRadios(); });
   $('listaRadios').addEventListener('click', editarRadio);

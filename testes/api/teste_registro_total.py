@@ -29,9 +29,11 @@ VISTAS = {
     "/api/historico/{id_}/radios", "/api/historico/{id_}/envios", "/api/historico/{id_}/comprovante", "/api/historico/{id_}/linha-do-tempo",
     "/api/painel", "/api/verificar/{codigo}", "/api/municipios/{codigo}/comunidades", "/api/municipios/{codigo}/rede",
     "/api/relatorios/vias", "/api/comunidades/ficha", "/api/comunidades/calor", "/confirmar/{token}",
+    "/api/empresas/mapa", "/api/empresas/{id_}/ficha", "/api/municipios-ibge", "/api/municipios-ibge/{uf}/mapa",
 }
 ARQUIVO = re.compile(r"\.(pdf|csv|mp3|\{formato\})$|^/api/relatorios/|^/api/modelo-planilha$|/arquivos/")
-GRAVA = re.compile(r"\b(_?registrar|gerar_pdf)\(")
+# salvar_area grava a área e a linha da auditoria na mesma transação (banco/acesso.salvar_area)
+GRAVA = re.compile(r"\b(_?registrar|gerar_pdf|salvar_area)\(")
 resultados = []
 
 

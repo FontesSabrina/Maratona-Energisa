@@ -25,7 +25,8 @@ from .motivos import TEXTOS, Aviso, Motivo
 MAX_JUSTIFICATIVA = 300
 MAX_LINHAS_LISTADAS = 200
 MUNICIPIO_MINORIA = 0.05     # município com até 5% das UCs, se houver outro com a maioria: suspeito
-SITUACAO_VITAL = {"rejeitada": "rejeitada", "corrigida": "corrigida", "fora": "fora da área de concessão"}
+SITUACAO_VITAL = {"rejeitada": "rejeitada", "corrigida": "corrigida", "fora": "fora da área de concessão",
+                  "fora_area": "fora da área de atuação da empresa"}
 SUSPEITOS = {
     "ponto_isolado": TEXTOS[Aviso.PONTO_ISOLADO],
     "muitas_ucs": TEXTOS[Aviso.COORD_MUITAS_UCS],
@@ -33,14 +34,17 @@ SUSPEITOS = {
 }
 
 
-def vital_bloqueio(m: PlanilhaJSON, linhas_fora: set[int]) -> list[dict]:
-    """Linhas com equipamento vital rejeitadas, corrigidas ou fora da concessão (pela linha, sem a UC)."""
+def vital_bloqueio(m: PlanilhaJSON, linhas_fora: set[int], linhas_fora_area: set[int] = frozenset()) -> list[dict]:
+    """Linhas com equipamento vital rejeitadas, corrigidas, fora da concessão ou fora da área de atuação da empresa
+    (pela linha, sem a UC)."""
     saida = []
     for pt in m.pontos:
         if pt.equipamento_vital is not True:
             continue
         if pt.status == "rejeitada":
             situacao, motivo = "rejeitada", TEXTOS[pt.motivo]
+        elif pt.linha in linhas_fora_area:
+            situacao, motivo = "fora_area", TEXTOS[Motivo.FORA_DA_AREA]
         elif pt.linha in linhas_fora:
             situacao, motivo = "fora", TEXTOS[Motivo.FORA_DA_CONCESSAO]
         elif pt.status == "corrigida":
@@ -79,9 +83,10 @@ def suspeitos(m: PlanilhaJSON, linhas_por_municipio: dict[str, list[int]]) -> li
     return saida
 
 
-def rejeicao(m: PlanilhaJSON, limite: float) -> dict:
-    """Fração de linhas rejeitadas e se passa do limite da empresa (aí só segue com justificativa)."""
-    total, rej = m.resumo.total, m.resumo.rejeitadas
+def rejeicao(m: PlanilhaJSON, limite: float, fora_da_area: int = 0) -> dict:
+    """Fração de linhas rejeitadas e se passa do limite da empresa (aí só segue com justificativa).
+    fora_da_area: as linhas válidas que a API rejeitou por estarem fora da área de atuação da empresa."""
+    total, rej = m.resumo.total, m.resumo.rejeitadas + fora_da_area
     fracao = rej / total if total else 0.0
     return {"rejeitadas": rej, "total": total, "fracao": round(fracao, 4), "limite": limite, "acima": fracao > limite}
 

@@ -240,10 +240,39 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Arquivo não encontrado nesta empresa.": ("File not found in this company.", "Archivo no encontrado en esta empresa."),
     "O modelo da mensagem não pode ficar vazio.": ("The message template cannot be empty.", "La plantilla del mensaje no puede quedar vacía."),
     "Nome da empresa na mensagem: de 2 a 120 caracteres.": ("Company name in the message: 2 to 120 characters.", "Nombre de la empresa en el mensaje: de 2 a 120 caracteres."),
+    # área de atuação (mapa das empresas)
+    "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Farol.":
+        ("The company's service area is not registered: no notice can be created. Ask the Farol Admin.",
+         "El área de actuación de la empresa no está registrada: no se puede crear ningún aviso. Pida al Admin de Farol."),
+    "Município fora da área de atuação da empresa.": ("Municipality outside the company's service area.", "Municipio fuera del área de actuación de la empresa."),
+    "Nada mudou na área de atuação.": ("Nothing changed in the service area.", "Nada cambió en el área de actuación."),
+    "Envie a lista de municípios.": ("Send the list of municipalities.", "Envíe la lista de municipios."),
+    "Código de município inválido (use os 7 dígitos do IBGE).": ("Invalid municipality code (use the 7 IBGE digits).", "Código de municipio inválido (use los 7 dígitos del IBGE)."),
+    "UF inválida.": ("Invalid state.", "Estado inválido."),
+    "Arquivo vazio.": ("Empty file.", "Archivo vacío."),
+    "O arquivo tem script, DTD ou entidade: recusado por segurança.": ("The file has a script, DTD or entity: refused for security.", "El archivo tiene script, DTD o entidad: rechazado por seguridad."),
+    "Envie um arquivo .kml ou .geojson.": ("Send a .kml or .geojson file.", "Envíe un archivo .kml o .geojson."),
+    "O arquivo não é um KML válido.": ("The file is not a valid KML.", "El archivo no es un KML válido."),
+    "O arquivo não é um GeoJSON válido.": ("The file is not a valid GeoJSON.", "El archivo no es un GeoJSON válido."),
+    "O arquivo tem só pontos ou linhas: a área precisa de polígonos.": ("The file has only points or lines: the area needs polygons.", "El archivo solo tiene puntos o líneas: el área necesita polígonos."),
+    "Só polígonos: o arquivo tem pontos, linhas ou outro tipo de geometria.": ("Polygons only: the file has points, lines or another geometry type.", "Solo polígonos: el archivo tiene puntos, líneas u otro tipo de geometría."),
+    "Geometria ilegível no GeoJSON.": ("Unreadable geometry in the GeoJSON.", "Geometría ilegible en el GeoJSON."),
+    "Coordenadas do KML ilegíveis.": ("Unreadable KML coordinates.", "Coordenadas del KML ilegibles."),
+    "Nenhum polígono no arquivo.": ("No polygon in the file.", "Ningún polígono en el archivo."),
+    "Polígonos demais no arquivo.": ("Too many polygons in the file.", "Demasiados polígonos en el archivo."),
+    "Há polígono fora do Brasil (confira se as coordenadas estão em longitude, latitude).":
+        ("There is a polygon outside Brazil (check that coordinates are longitude, latitude).", "Hay un polígono fuera de Brasil (verifique que las coordenadas estén en longitud, latitud)."),
+    "Os polígonos do arquivo não têm área.": ("The polygons in the file have no area.", "Los polígonos del archivo no tienen área."),
+    "Nenhum município do IBGE tem pelo menos metade da área dentro dos polígonos do arquivo.":
+        ("No IBGE municipality has at least half of its area inside the file's polygons.", "Ningún municipio del IBGE tiene al menos la mitad del área dentro de los polígonos del archivo."),
+    "fora da área de atuação da empresa": ("outside the company's service area", "fuera del área de actuación de la empresa"),
 }
 
 # padrões: (expressão em português, inglês, espanhol); {1}, {2}... são os grupos; {mes1} é o grupo 1 como mês por extenso
 PADROES: list[tuple[str, str, str]] = [
+    (r"Arquivo grande demais \(máximo (\d+) MB\)\.", "File too large (maximum {1} MB).", "Archivo demasiado grande (máximo {1} MB)."),
+    (r"No máximo (\d+) municípios\.", "At most {1} municipalities.", "Como máximo {1} municipios."),
+    (r"(\d+) código\(s\) que não são municípios do IBGE\.", "{1} code(s) that are not IBGE municipalities.", "{1} código(s) que no son municipios del IBGE."),
     (r"Relatório mensal - (\w+) de (\d{4})", "Monthly report - {mes1} {2}", "Informe mensual - {mes1} de {2}"),
     (r"Gasto mês a mês em (\d{4}) \(projeção até dezembro\)", "Spending month by month in {1} (projection to December)", "Gasto mes a mes en {1} (proyección hasta diciembre)"),
     (r"Custos por rádio - (\d{4})", "Costs by radio station - {1}", "Costos por radio - {1}"),

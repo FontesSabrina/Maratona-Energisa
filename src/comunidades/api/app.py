@@ -39,7 +39,7 @@ from pydantic import BaseModel, Field
 import shapely
 from pyproj import Transformer
 
-from .. import senhas
+from .. import semente, senhas
 from ..config import sem_acento
 from ..apresentacao import audio, traducao
 from ..banco import acesso as banco_acesso
@@ -62,6 +62,7 @@ from . import conferencia, leitura
 from . import pacote as pacote_
 from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, DIST, MAX_TEXTO, config_empresa, erro, segundos
 from .comum import texto_do_aviso as _texto_do_aviso
+from .area_atuacao import rotas as area_rotas
 from .radio import rotas as radio_rotas
 from .relatorios import painel_do_mes
 from .relatorios import rotas as relatorio_rotas
@@ -79,6 +80,8 @@ async def _ao_subir(app):
     configurado (testes sem banco) ou sem permissão, a API sobe assim mesmo e o log diz o que fazer."""
     try:
         _log.warning("%s", banco_acesso.atualizar_esquema())
+        if semente.semear_area_demo():   # banco de antes da área de atuação: a EMG recebe a concessão já carregada
+            _log.warning("área de atuação da EMG (demonstração) carregada")
     except Exception as e:   # sem DATABASE_URL ou banco fora do ar: as rotas que usam o banco respondem com o erro delas
         _log.warning("esquema do banco não conferido ao subir (%s)", type(e).__name__)
     yield
@@ -88,6 +91,7 @@ async def _ao_subir(app):
 app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
               openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None, lifespan=_ao_subir)
 app.include_router(rotas)
+app.include_router(area_rotas)
 app.include_router(radio_rotas)
 app.include_router(relatorio_rotas)
 if PRODUCAO:  # IP e esquema de quem acessa, pelo proxy do Render (api/proxy.py)
@@ -194,10 +198,24 @@ def config(request: Request, u: dict = Depends(usuario_atual)) -> dict:
             "tipos": tipos.rotulos(tela), "tipo_padrao": tipos.PADRAO, "max_outro": tipos.MAX_OUTRO, "email": correio.ligado()}
 
 
+def _na_area(u: dict, codigo: str) -> None:
+    """O mapa operacional: só os perfis da empresa e só os municípios da área de atuação dela. O Admin do Farol não
+    vê o mapa operacional (o dele é o mapa das empresas)."""
+    if u["perfil"] == "admin_farol":
+        raise HTTPException(403, "Seu perfil não tem acesso a isto.")
+    if codigo not in banco_acesso.area(u["empresa_id"]):
+        raise HTTPException(404, "Município fora da área de atuação da empresa.")
+
+
 @app.get("/api/concessao")
 def concessao(u: dict = Depends(usuario_atual)) -> JSONResponse:
-    """Contorno dos municípios da concessão (dados públicos do IBGE), para o mapa da tela."""
-    return JSONResponse(banco.concessao_geojson(), headers={"Cache-Control": "private, max-age=3600"})
+    """Contorno dos municípios da base (dados públicos do IBGE), para o mapa da tela: para os perfis da empresa, só
+    os da área de atuação dela."""
+    g = banco.concessao_geojson()
+    if u["perfil"] != "admin_farol":
+        area = banco_acesso.area(u["empresa_id"])
+        g = {**g, "features": [f for f in g["features"] if f["properties"]["codigo_ibge"] in area]}
+    return JSONResponse(g, headers={"Cache-Control": "private, no-cache"})
 
 
 @app.get("/api/municipios/{codigo}/comunidades")
@@ -205,6 +223,7 @@ def comunidades(codigo: str, u: dict = Depends(usuario_atual)) -> JSONResponse:
     """Território de cada comunidade do município (dados públicos), para o mapa da tela."""
     if not (len(codigo) == 7 and codigo.isdigit()):
         raise HTTPException(422, "codigo: use o código IBGE do município (7 dígitos).")
+    _na_area(u, codigo)
     g = banco.comunidades_geojson(codigo)
     if g is None:
         raise HTTPException(404, "Município fora da base da concessão.")
@@ -216,6 +235,7 @@ def rede(codigo: str, u: dict = Depends(usuario_atual)) -> JSONResponse:
     """Rede elétrica FICTÍCIA do município (demonstração): média tensão, subestação, chaves e trafos."""
     if not (len(codigo) == 7 and codigo.isdigit()):
         raise HTTPException(422, "codigo: use o código IBGE do município (7 dígitos).")
+    _na_area(u, codigo)
     r = banco_rede.rede_mapa(codigo)
     if r is None and codigo not in {c for c, _, _, _ in banco.contornos(CRS_BASE)}:
         raise HTTPException(404, "Município fora da base da concessão.")
@@ -236,19 +256,24 @@ def modelo(u: dict = Depends(usuario_atual)) -> Response:
                     headers={"Content-Disposition": 'attachment; filename="modelo_planilha_farol.csv"'})
 
 
-def _bases(xy: np.ndarray) -> list[BaseMunicipio]:
-    """Só as bases dos municípios que as UCs tocam (os contornos de todos decidem quais são)."""
+def _bases(xy: np.ndarray, area: set[str] | None = None) -> tuple[list[BaseMunicipio], np.ndarray]:
+    """Só as bases dos municípios que as UCs tocam (os contornos de todos decidem quais são) e dentro da área de
+    atuação da empresa. Devolve também, por UC, se ela caiu num município fora dessa área."""
     todos = banco.contornos(CRS_BASE)
     vazio = np.empty((0, 2))
     leves = [BaseMunicipio(c, n, u, g, vazio, np.array([], dtype=object), np.array([], dtype=object))
              for c, n, u, g in todos]
-    usados = sorted(set(municipio_de(xy, leves)) - {-1})
+    qual = municipio_de(xy, leves)
+    fora_area = np.zeros(len(xy), dtype=bool)
+    if area is not None:
+        fora_area = np.array([q >= 0 and todos[q][0] not in area for q in qual], dtype=bool)
+    usados = sorted(set(qual[~fora_area]) - {-1})
     bases = []
     for i in usados:
         c, n, u, g = todos[i]
         exy, com, dis = banco.enderecos(c, CRS_BASE)
         bases.append(BaseMunicipio(c, n, u, g, exy, com, dis))
-    return bases
+    return bases, fora_area
 
 
 def _pontos(ucs, comunidades=None, ordem=()) -> list[list]:
@@ -399,7 +424,7 @@ async def _ler_e_traduzir(arquivo: UploadFile, aba: str | None, u: dict):
         del conteudo
 
 
-def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
+def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict, area: set[str] | None = None) -> dict:
     """Do JSON validado (nunca da planilha bruta): municípios, comunidades, avisos, pontos e as travas."""
     v = planilha.validas(modelo)
     rejeitadas = [pt for pt in modelo.pontos if pt.status == "rejeitada"]
@@ -416,11 +441,23 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
                 # as corrigidas, com cor própria no mapa (só latitude e longitude, sem a UC)
                 "pontos_corrigidos": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)]
                                       for pt in modelo.pontos if pt.status == "corrigida"]}
-    linhas_fora, por_municipio = set(), {}
+    resposta["fora_da_area"] = {"ucs": 0, "linhas": []}
+    linhas_fora, linhas_fora_area, por_municipio = set(), set(), {}
     if not v.empty:
         x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
         xy = np.c_[x, y]
-        bases = _bases(xy)
+        bases, fora_area = _bases(xy, area)
+        if fora_area.any():   # município fora da área de atuação da empresa: a linha é rejeitada (nunca entra no aviso)
+            linhas_fora_area = {int(l) for l in v["LINHA"][fora_area]}
+            resposta["fora_da_area"] = {"ucs": len(linhas_fora_area), "linhas": sorted(linhas_fora_area)[:MAX_PROBLEMAS]}
+            resposta["pontos_fora"] += _pontos(v[fora_area])
+            texto = TEXTOS[Motivo.FORA_DA_AREA]
+            p = resposta["planilha"]
+            p["total_problemas"] += len(linhas_fora_area)
+            p["problemas_por_motivo"][texto] = len(linhas_fora_area)
+            p["problemas"] = sorted(p["problemas"] + [{"linha": l, "codigo": Motivo.FORA_DA_AREA.value, "motivo": texto}
+                                                      for l in sorted(linhas_fora_area)], key=lambda x: x["linha"])[:MAX_PROBLEMAS]
+            v, xy = v[~fora_area].reset_index(drop=True), xy[~fora_area]
         # o aviso do algoritmo com a data e o horário no formato do idioma (em português, como vieram)
         r = afetados(xy, bases, DIST.regras, *idiomas.localizar(data, horario, idioma), idioma) if bases else None
         fora = r.fora if r else np.arange(len(v))
@@ -455,8 +492,8 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
                         if campo in modelo.colunas}
     ms = resposta["municipios"]
     resposta["conferencia"] = {
-        "vital_bloqueio": travas.vital_bloqueio(modelo, linhas_fora),
-        "rejeicao": travas.rejeicao(modelo, cfg["limite_rejeicao"]),
+        "vital_bloqueio": travas.vital_bloqueio(modelo, linhas_fora, linhas_fora_area),
+        "rejeicao": travas.rejeicao(modelo, cfg["limite_rejeicao"], len(linhas_fora_area)),
         "suspeitos": travas.suspeitos(modelo, por_municipio),
         "arquivo": modelo.arquivo.nome, "sha256": modelo.arquivo.sha256,
         "numeros": {"clientes": sum(m["ucs"] for m in ms), "municipios": len(ms),
@@ -464,8 +501,16 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict) -> dict:
                     "equipamento_vital": sum(m["equipamento_vital"]["sim"] for m in ms),
                     "vital_a_confirmar": sum(m["equipamento_vital"]["a_confirmar"] for m in ms),
                     "corrigidas": modelo.resumo.corrigidas, "rejeitadas": modelo.resumo.rejeitadas,
-                    "fora_da_concessao": resposta["fora_da_concessao"]["ucs"]}}
+                    "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "fora_da_area": resposta["fora_da_area"]["ucs"]}}
     return resposta
+
+
+def _area_da_empresa(u: dict) -> set[str]:
+    """A área de atuação da empresa de quem gera o aviso; sem área cadastrada, nenhum aviso (o servidor recusa)."""
+    area = banco_acesso.area(u["empresa_id"])
+    if not area:
+        raise HTTPException(422, "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Farol.")
+    return area
 
 
 @app.post("/api/planilha")
@@ -479,7 +524,7 @@ async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(..
     tipo, motivo = _motivo(tipo, tipo_outro, idioma)
     modelo = await _ler_e_traduzir(arquivo, aba, u)
     cfg = config_empresa(u["empresa_id"])
-    resposta = _resultado(modelo, data, horario, idioma, cfg)
+    resposta = _resultado(modelo, data, horario, idioma, cfg, _area_da_empresa(u))
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     _alerta_repeticao(resposta, u, cfg)
@@ -505,7 +550,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     except pacote_.PacoteRecusado as e:
         raise HTTPException(422, str(e)) from None
     cfg = config_empresa(u["empresa_id"])
-    resposta = _resultado(modelo, data, horario, idioma, cfg)
+    resposta = _resultado(modelo, data, horario, idioma, cfg, _area_da_empresa(u))
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     rep = _alerta_repeticao(resposta, u, cfg)
     c, arq = resposta["conferencia"], f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})"

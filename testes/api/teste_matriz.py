@@ -35,7 +35,9 @@ MATRIZ = {
     ("GET", "/api/eu"): TODOS, ("POST", "/api/senha"): TODOS, ("PUT", "/api/eu/preferencias"): TODOS,
     # dados públicos do território (IBGE) e configuração da tela: qualquer pessoa com login
     ("GET", "/api/config"): TODOS, ("GET", "/api/concessao"): TODOS, ("GET", "/api/modelo-planilha"): TODOS,
-    ("GET", "/api/municipios/{codigo}/comunidades"): TODOS, ("GET", "/api/municipios/{codigo}/rede"): TODOS,
+    # o mapa operacional (comunidades e rede fictícia): só os perfis da empresa, e só na área de atuação dela;
+    # o Admin do Farol tem o mapa das empresas (desde 15/10/2026)
+    ("GET", "/api/municipios/{codigo}/comunidades"): EMPRESA, ("GET", "/api/municipios/{codigo}/rede"): EMPRESA,
     ("GET", "/api/verificar/{codigo}"): TODOS,
     # importar, conferir, gerar, PDF, MP3, JSON com UCs: Admin da empresa e Operador
     ("POST", "/api/planilha"): GERA, ("POST", "/api/avisos"): GERA, ("POST", "/api/planilha/json"): GERA,
@@ -49,6 +51,10 @@ MATRIZ = {
     ("POST", "/api/usuarios/{id_}/senha-temporaria"): {ADM},
     # empresas: Admin do Farol; auditoria: Admin do Farol (todas) e Admin da empresa (a dela)
     ("GET", "/api/empresas"): {FAROL}, ("POST", "/api/empresas"): {FAROL}, ("PATCH", "/api/empresas/{id_}"): {FAROL},
+    # mapa das empresas e área de atuação: só o Admin do Farol (cadastro, área e contagens; nada operacional)
+    ("GET", "/api/empresas/mapa"): {FAROL}, ("GET", "/api/empresas/{id_}/ficha"): {FAROL}, ("PUT", "/api/empresas/{id_}/area"): {FAROL},
+    ("POST", "/api/empresas/{id_}/area/arquivo"): {FAROL}, ("GET", "/api/municipios-ibge"): {FAROL},
+    ("GET", "/api/municipios-ibge/{uf}/mapa"): {FAROL},
     ("GET", "/api/registro"): {FAROL, ADM}, ("GET", "/api/auditoria/verificar"): {FAROL, ADM},
     # configuração da empresa (modelo da mensagem etc.): Admin da empresa
     ("GET", "/api/empresa/configuracao"): {ADM}, ("PUT", "/api/empresa/configuracao"): {ADM},
@@ -127,7 +133,7 @@ def caminho(path: str) -> str:
     ids = {"/api/usuarios": alvo["usuario"]["id"], "/api/radios": radio["id"], "/api/envios": 1, "/api/empresas": 999999,
            "/api/relatorios/vias": 999999}
     p = path.replace("{id_}", str(next((v for k, v in ids.items() if path.startswith(k)), aviso["id"])))
-    p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43).replace("{formato}", "csv")
+    p = p.replace("{tipo}", "pdf").replace("{token}", "x" * 43).replace("{formato}", "csv").replace("{uf}", "MG")
     return p.replace("{codigo}", "FRL-0000-0000-0000" if "verificar" in p else "3138401")
 
 

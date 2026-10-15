@@ -310,6 +310,30 @@
         <p id="estadoEmpresa" class="estado" role="status" aria-live="polite"></p>
       </form>
       <div id="listaEmpresas" class="lista"></div>
+      <div id="sobreposicaoEmpresas"></div>
+      <!-- Ficha da empresa (clique na área do mapa ou no nome na tabela): cadastro, contagens e municípios; nada de aviso -->
+      <section id="fichaEmpresa" class="cartao ficha-empresa" hidden aria-labelledby="fichaEmpresaTitulo"></section>
+      <!-- Área de atuação: os municípios onde a empresa pode criar avisos -->
+      <section id="editorArea" class="cartao formulario" hidden aria-labelledby="editorAreaTitulo">
+        <h2 id="editorAreaTitulo" tabindex="-1">Área de atuação</h2>
+        <p class="ajuda" data-t>Marque os municípios onde a empresa atua: pela lista do estado, clicando no mapa ou importando o KML/GeoJSON da concessão. A empresa só cria avisos nesses municípios.</p>
+        <div class="campos campos-2">
+          <label><span data-t>Estado</span> <select id="areaUf"></select></label>
+          <label><span data-t>Buscar município</span> <input type="search" id="areaBusca" autocomplete="off"></label>
+        </div>
+        <div class="acoes"><button type="button" id="areaTodos" data-t>Marcar todos do estado</button>
+          <button type="button" id="areaNenhum" data-t>Desmarcar todos do estado</button></div>
+        <fieldset><legend id="areaListaTitulo">Municípios</legend><div id="areaLista" class="checks"></div></fieldset>
+        <p class="ajuda" data-t>No mapa ao lado, clique num município do estado escolhido para incluir ou tirar.</p>
+        <label><span data-t>Importar KML ou GeoJSON da concessão (até 5 MB; o arquivo não é guardado)</span>
+          <input type="file" id="areaArquivo" accept=".kml,.geojson,.json"></label>
+        <p id="areaContagem" class="previa" role="status" aria-live="polite"></p>
+        <div id="areaResumo"></div>
+        <div class="acoes"><button type="button" class="prim" id="areaVerResumo" data-t>Ver o resumo antes de salvar</button>
+          <button type="button" class="prim" id="areaConfirmar" hidden data-t>Confirmar e salvar</button>
+          <button type="button" id="areaCancelar" data-t>Cancelar</button></div>
+        <p id="estadoArea" class="estado" role="status" aria-live="polite"></p>
+      </section>
     </section>
 
     <!-- Registro de atividades -->
@@ -370,6 +394,12 @@
         <span><span class="amostra uc fora"></span><span data-t>UC fora da concessão</span></span>
         <button type="button" id="botaoUcs" aria-pressed="true">Esconder UCs</button></li>
     </ul>
+    <!-- Mapa das empresas (Admin do Farol): cada empresa liga e desliga no mapa -->
+    <div class="legenda legenda-empresas" id="legendaEmpresas" hidden>
+      <div class="legenda-topo"><button type="button" id="botaoLegendaEmpresas" aria-expanded="true" aria-controls="listaLegendaEmpresas">
+        <span aria-hidden="true" class="seta">▾</span> <span data-t>Empresas no mapa</span></button></div>
+      <ul id="listaLegendaEmpresas" aria-label="Legenda do mapa das empresas" data-t-aria-label="Legenda do mapa das empresas"></ul>
+    </div>
   </section>
 </main>
 

@@ -19,6 +19,7 @@ class Motivo(str, Enum):
     COORD_NAO_FINITA = "coordenada_nao_finita"
     COORD_LIMITES = "coordenada_fora_dos_limites"
     FORA_DA_CONCESSAO = "fora_da_concessao"
+    FORA_DA_AREA = "fora_da_area_da_empresa"   # município fora da área de atuação da empresa (decidido na API)
     CORRECAO_AMBIGUA = "correcao_ambigua"
     # linha (nucleo/planilha.py)
     UC_VAZIA = "uc_vazia"
@@ -59,6 +60,7 @@ TEXTOS = {
     Motivo.COORD_NAO_FINITA: "coordenada inválida (NaN ou infinito)",
     Motivo.COORD_LIMITES: "coordenada fora dos limites (latitude de -90 a 90, longitude de -180 a 180)",
     Motivo.FORA_DA_CONCESSAO: "fora da área de concessão",
+    Motivo.FORA_DA_AREA: "fora da área de atuação da empresa",
     Motivo.CORRECAO_AMBIGUA: "mais de uma correção possível: nada foi adivinhado",
     Motivo.UC_VAZIA: "sem número de UC",
     Motivo.UC_INVALIDA: "número de UC inválido (fórmula, data ou mais de 40 caracteres)",

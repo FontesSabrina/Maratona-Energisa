@@ -364,7 +364,8 @@ conferir("conferir (1º passo): 200, nada no histórico, importação na auditor
 conferir("conferir: números (clientes, municípios, comunidades, equipamento vital, corrigidas, rejeitadas)",
          ji["conferencia"]["numeros"] == {"clientes": 758, "municipios": 2, "comunidades": sum(len(mm["comunidades"]) for mm in ji["municipios"]),
                                           "equipamento_vital": sum(mm["equipamento_vital"]["sim"] for mm in ji["municipios"]),
-                                          "vital_a_confirmar": 0, "corrigidas": 0, "rejeitadas": 0, "fora_da_concessao": 0},
+                                          "vital_a_confirmar": 0, "corrigidas": 0, "rejeitadas": 0, "fora_da_concessao": 0,
+                                          "fora_da_area": 0},
          json.dumps(ji["conferencia"]["numeros"]))
 conferir("suspeito (amarelo): 4 UCs em São João Nepomuceno, município diferente da maioria",
          [(x["tipo"], x["municipio"], x["ucs"]) for x in ji["conferencia"]["suspeitos"] if x["tipo"] != "repeticao"]
@@ -466,7 +467,7 @@ _h = logging.Handler(); _h.emit = lambda rec: _logs.append(rec.getMessage())
 logging.getLogger("farol.api").addHandler(_h)
 app_mod._envios.clear()
 pacote_novo = importar(csv_bytes(t)).json()["pacote"]   # uma conferência nova (o pacote já usado gera 409, Fase J)
-app_mod._bases = lambda xy: (_ for _ in ()).throw(RuntimeError(f"vazou {t['uc'].iloc[0]}"))
+app_mod._bases = lambda xy, area=None: (_ for _ in ()).throw(RuntimeError(f"vazou {t['uc'].iloc[0]}"))
 antes = contar("aviso")
 re_ = sem_erro.post("/api/avisos", json={"pacote": pacote_novo, "data": "12/11", "horario": "8h às 14h", "conferi": True})
 app_mod._bases = bases_original
