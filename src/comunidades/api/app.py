@@ -18,11 +18,13 @@ Uso: uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-pr
 
 import functools
 import hashlib
+import mimetypes
 import logging
 import secrets
 import time
 import traceback
 from collections import Counter, defaultdict, deque
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -71,9 +73,20 @@ CASAS_PONTO = 5              # casas decimais dos pontos no mapa (cerca de 1 m)
 MAX_AVISOS_PAINEL = 5000      # avisos considerados no dashboard (os mais recentes)
 GEO_PARA_BASE = Transformer.from_crs("EPSG:4674", CRS_BASE, always_xy=True)
 
+@asynccontextmanager
+async def _ao_subir(app):
+    """Ao subir: o banco que já existe recebe as tabelas e colunas novas (só acréscimos; nada é apagado). Sem banco
+    configurado (testes sem banco) ou sem permissão, a API sobe assim mesmo e o log diz o que fazer."""
+    try:
+        _log.warning("%s", banco_acesso.atualizar_esquema())
+    except Exception as e:   # sem DATABASE_URL ou banco fora do ar: as rotas que usam o banco respondem com o erro delas
+        _log.warning("esquema do banco não conferido ao subir (%s)", type(e).__name__)
+    yield
+
+
 # em produção, sem a documentação interativa (é a única parte sem CSP: carrega o Swagger de fora)
 app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
-              openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None)
+              openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None, lifespan=_ao_subir)
 app.include_router(rotas)
 app.include_router(radio_rotas)
 app.include_router(relatorio_rotas)
@@ -756,6 +769,8 @@ def verificar_codigo(codigo: str, u: dict = Depends(usuario_atual)) -> dict:
 
 
 # Arquivos da tela: o app, o Leaflet e as fontes embutidas no projeto (vendor/) e o logo. Nada de CDN.
+# o manifest do app instalável (sem service worker: nada da API fica guardado no aparelho)
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 app.mount("/assets/app", StaticFiles(directory=TELA), name="app")
 app.mount("/assets/vendor", StaticFiles(directory=APRESENTACAO / "vendor"), name="vendor")
 app.mount("/assets/marca", StaticFiles(directory=APRESENTACAO / "marca"), name="marca")

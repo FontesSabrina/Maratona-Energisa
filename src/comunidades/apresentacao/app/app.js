@@ -37,6 +37,7 @@ const estado = {
   territorios: {},         // codigo_ibge -> GeoJSON das comunidades
   audios: {},              // codigo_ibge -> { texto, url (blob local), segundos }: o MP3 do texto atual
   audiosHoje: {},          // codigo_ibge -> { url, segundos }: o MP3 do aviso de hoje (comparativo)
+  menuAberto: false,       // celular e tablet: o menu das seções aberto pelo botão "Menu"
   verUcs: true,            // camada dos pontos das UCs (só logo depois do envio; o histórico não tem pontos)
   verRede: true,           // rede elétrica FICTÍCIA (demonstração), de perto; o botão esconde
   legendaMinimizada: false, // lembrada neste navegador (só conveniência)
@@ -343,6 +344,11 @@ function desenharTela() {
 
 function desenharAbas() {
   const atual = menuAtual(estado.vista);
+  // celular e tablet: as seções ficam atrás do botão "Menu", que diz em qual se está
+  $('abas').classList.toggle('aberto', estado.menuAberto);
+  $('botaoMenu').setAttribute('aria-expanded', String(estado.menuAberto));
+  const rotuloAtual = vistasDoPerfil().find(([v]) => v === atual)?.[1];
+  $('menuAtual').textContent = rotuloAtual ? `· ${t(rotuloAtual)}` : '';
   $('abas').replaceChildren(...vistasDoPerfil().map(([v, rotulo]) =>
     no('button', { type: 'button', 'data-vista': v, 'aria-current': atual === v ? 'page' : null, texto: t(rotulo) })));
   const noGrupo = RELATORIOS.some(([v]) => v === estado.vista) && pode('ver_historico') && !(estado.usuario?.perfil === 'consulta' && estado.vista === 'painel');
@@ -1247,12 +1253,17 @@ async function abrirFicha(latlng, municipio, nome, distrito) {
 
 // rede elétrica FICTÍCIA dos municípios na tela (de perto): média tensão por alimentador, subestação,
 // chaves e, mais de perto, os trafos. Só demonstração; nada de cliente.
-function desenharRede() {
-  camadaRede?.remove();
-  camadaRede = null;
+// o rótulo do botão da rede (também ao trocar o idioma, antes de a rede carregar)
+function desenharBotaoRede() {
   const botao = $('botaoRede');
   botao.textContent = estado.verRede ? t('Esconder rede fictícia') : t('Mostrar rede fictícia');
   botao.setAttribute('aria-pressed', String(estado.verRede));
+}
+
+function desenharRede() {
+  camadaRede?.remove();
+  camadaRede = null;
+  desenharBotaoRede();
   $('legendaRede').hidden = !estado.verRede;
   atribuicao?.removeAttribution(CREDITO_REDE);
   atribuicao?.removeAttribution(t(CREDITO_REDE));
@@ -1773,6 +1784,28 @@ async function irPara(vista) {
 }
 
 // ---- Funil do novo aviso ----
+// tabelas em cartões no celular: cada célula leva o nome da coluna (data-rotulo), que o CSS mostra ao lado do valor
+function rotularTabelas(raiz) {
+  for (const tabela of raiz.querySelectorAll?.('table.tabela') || []) {
+    const cab = [...tabela.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    // os papéis explícitos mantêm a tabela para o leitor de tela quando o CSS a mostra em blocos
+    tabela.setAttribute('role', 'table');
+    for (const g of tabela.querySelectorAll('thead, tbody')) g.setAttribute('role', 'rowgroup');
+    for (const tr of tabela.querySelectorAll('tr')) tr.setAttribute('role', 'row');
+    for (const th of tabela.querySelectorAll('thead th')) th.setAttribute('role', 'columnheader');
+    for (const tr of tabela.querySelectorAll('tbody tr'))
+      [...tr.children].forEach((c, i) => {
+        c.setAttribute('role', c.tagName === 'TH' ? 'rowheader' : 'cell');
+        if (cab[i] && !c.dataset.rotulo) c.dataset.rotulo = cab[i];
+      });
+  }
+}
+
+function alternarMenu(aberto = !estado.menuAberto) {
+  estado.menuAberto = aberto;
+  desenharAbas();
+}
+
 function irParaPasso(n) {
   if (n === 2 && passoMaximo() < 2) return avisar(validarArquivo(estado.arquivo), true);
   if (n > passoMaximo()) return;
@@ -2595,7 +2628,7 @@ async function trocarIdioma(novo, salvar = true) {
   $('idiomaTela').value = novo;
   try { sessionStorage.setItem('farol.idioma', novo); } catch (e) { /* sem armazenamento */ }
   aplicarTextos();
-  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado();
+  desenharTema(); desenharLegenda(); desenharTela(); desenharEstado(); desenharBotaoRede();
   if (salvar && estado.usuario) api('/api/eu/preferencias', { method: 'PUT', json: { idioma: novo } }).catch(() => {});
   if (estado.tela !== 'app' || !estado.config) return;
   try { estado.config = await api('/api/config'); } catch (e) { return; }   // os tipos no idioma novo
@@ -2655,7 +2688,10 @@ async function abrir() {
   $('formEntrar').addEventListener('submit', entrar);
   $('formSenha').addEventListener('submit', trocarSenha);
   $('sair').addEventListener('click', sair);
-  $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) irPara(b.dataset.vista); });
+  $('abas').addEventListener('click', e => { const b = e.target.closest('button[data-vista]'); if (b) { estado.menuAberto = false; irPara(b.dataset.vista); } });
+  $('botaoMenu').addEventListener('click', () => alternarMenu());
+  new MutationObserver(ms => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) rotularTabelas(n.matches('table') ? n.parentElement : n); })
+    .observe(document.body, { childList: true, subtree: true });
   $('arquivo').addEventListener('change', e => escolherPlanilha(e.target.files[0]));
   $('aba').addEventListener('change', e => { estado.aba = e.target.value; });
   $('tipo').addEventListener('change', e => { for (const id of ['tipoOutroRotulo', 'tipoOutroAjuda']) $(id).hidden = e.target.value !== 'outro'; });
@@ -2726,7 +2762,12 @@ async function abrir() {
   $('botaoAjuda').addEventListener('click', abrirAjuda);
   $('ajudaFechar').addEventListener('click', () => { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); });
   document.addEventListener('click', mostrarDica);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('dica').hidden = true; if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); } } });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    $('dica').hidden = true;
+    if (!$('caixaAjuda').hidden) { $('caixaAjuda').hidden = true; $('botaoAjuda').focus(); }
+    else if (estado.menuAberto) { alternarMenu(false); $('botaoMenu').focus(); }
+  });
   $('listaUsuarios').addEventListener('click', acaoUsuario);
   $('formEmpresa').addEventListener('submit', cadastrarEmpresa);
   $('caixaFechar').addEventListener('click', () => { $('caixaSenha').hidden = true; $('caixaSenhaValor').textContent = ''; });

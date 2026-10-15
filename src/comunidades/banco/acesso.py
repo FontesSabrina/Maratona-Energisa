@@ -124,6 +124,26 @@ def criar_esquema() -> None:
         radios.criar_esquema(c)   # rádios, configuração da empresa e envios (dependem de empresa, usuário e aviso)
 
 
+TRAVA_ESQUEMA = 7_020_127    # pg_advisory_lock: uma atualização do esquema por vez (vários processos subindo juntos)
+
+
+def atualizar_esquema() -> str:
+    """Ao subir a API: aplica no banco que já existe o que as versões novas acrescentaram (tabelas e colunas novas).
+    Só é aditivo e pode rodar sempre: CREATE ... IF NOT EXISTS e ADD COLUMN IF NOT EXISTS; nada é apagado, a auditoria
+    e os dados de demonstração continuam. Sem permissão de alterar tabelas (produção, onde o app usa um usuário só de
+    leitura e gravação), não muda nada e devolve o aviso: lá, quem atualiza é a semente, com o dono do banco."""
+    try:
+        with conectar() as c:
+            c.execute("SELECT pg_advisory_lock(%s)", (TRAVA_ESQUEMA,))
+            try:
+                criar_esquema()
+            finally:
+                c.execute("SELECT pg_advisory_unlock(%s)", (TRAVA_ESQUEMA,))
+        return "esquema do banco em dia"
+    except errors.InsufficientPrivilege:
+        return "esquema do banco sem permissão de atualizar: rode a semente com o dono do banco"
+
+
 def _encadear_antigas(c) -> None:
     """Uma vez só, na migração: as linhas de antes da auditoria encadeada ganham nome, perfil e hashes."""
     if not c.execute("SELECT 1 FROM registro WHERE hash IS NULL LIMIT 1").fetchone():

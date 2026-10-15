@@ -211,7 +211,7 @@ textarea[readonly] { background: var(--sup); }
 .senha-temp code { display: block; font-size: 22px; letter-spacing: .04em; padding: 10px 12px; border-radius: 10px; background: var(--sup2); text-align: center; user-select: all; }
 
 /* Celular: tudo numa coluna, mapa depois do formulário */
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   body { display: block; height: auto; }
   .layout { display: block; }
   .painel { overflow: visible; padding: 16px; }
@@ -307,7 +307,7 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
 .proximos li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .amostra.painel-amostra { background: rgba(27, 138, 138, .6); border: 1.5px solid #1B8A8A; }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .funil { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .funil li + li::before { display: none; }
   .filtros { grid-template-columns: 1fr; }
@@ -474,3 +474,86 @@ button.dica:hover { background: radial-gradient(circle at center, var(--acento) 
 .usuario-linha .campo-linha input { min-width: 12em; }
 .pedido-radio { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px dashed var(--linha); background: var(--sup2); }
 .pedido-radio h5 { margin: 6px 0 0; font-size: 14px; }
+
+/* ---------- Fase I1: qualquer tela. Celular pequeno (320–359), celular (360–599), tablet (600–1023, retrato e paisagem),
+   computador (1024–1599) e telas grandes (1600+). Sem rolagem horizontal da página em 320 px nem com zoom de 400%:
+   só o mapa e as tabelas largas rolam dentro de si. ---------- */
+.botao-menu { display: none; }
+.menu-atual { font-weight: 400; color: var(--texto2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+img, video, canvas { max-width: 100%; }
+.painel { overflow-wrap: anywhere; }
+/* tabelas largas: rolam dentro de si com a primeira coluna fixa */
+.rolagem .tabela tr > :first-child { position: sticky; left: 0; z-index: 1; background: var(--sup); }
+.rolagem .tabela thead tr > :first-child { background: var(--sup2); }
+@media (min-width: 1600px) {
+  .layout { grid-template-columns: minmax(440px, 640px) minmax(0, 1fr); }
+}
+/* celular e tablet: uma coluna (largura máxima de leitura), o menu atrás do botão "Menu" e o mapa proporcional à tela */
+@media (max-width: 1023px) {
+  .botao-menu { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: flex-start; font-weight: 600; }
+  .abas:not(.aberto) { display: none; }
+  .abas.aberto { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .abas.aberto button { text-align: left; }
+  .painel { width: 100%; max-width: 860px; margin-inline: auto; }
+  .mapa-area { height: clamp(280px, 55vh, 640px); min-height: 0; }
+}
+@media (max-width: 599px) {
+  .topo { padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); gap: 8px; }
+  .slogan { display: none; }
+  .faixa { font-size: 12px; padding: 4px 8px; }
+  .topo-acoes { width: 100%; }
+  .painel { padding: 12px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left)); gap: 12px; }
+  .cartao { padding: 14px; border-radius: 12px; }
+  .tela-acesso { padding: 16px 12px; }
+  .tela-acesso .acesso { padding: 20px 16px; }
+  .campos, .campos-2, .filtros, .filtros-relatorio .enviar-relatorio { grid-template-columns: minmax(0, 1fr); }
+  .campos label:first-child { grid-column: auto; }
+  .nav-funil button { flex: 1 1 auto; min-width: 0; }
+  .ir-para { left: 10px; right: 10px; flex-wrap: wrap; }
+  .ir-para label { flex: 1 1 120px; }
+  .ir-para select { min-width: 0; }
+  .barras { gap: 2px; }
+  .barra-mes-rotulo { font-size: 9px; }
+  /* tabelas viram cartões: uma linha por cartão, o nome da coluna ao lado de cada valor (data-rotulo, do JS) */
+  .rolagem { overflow-x: visible; }
+  .rolagem .tabela, .tabela { min-width: 0; border: 0; background: transparent; border-radius: 0; }
+  .tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabela, .tabela tbody, .tabela tr { display: block; }
+  .tabela tr { margin-bottom: 10px; border: 1px solid var(--linha); border-radius: 12px; background: var(--sup); overflow: hidden; }
+  .tabela tbody th, .tabela td { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; }
+  .rolagem .tabela tr > :first-child { position: static; }
+  .tabela tbody th { background: var(--sup2); color: var(--texto); }
+  .tabela [data-rotulo]::before { content: attr(data-rotulo); font-weight: 600; color: var(--texto2); }
+  .tabela td:not([data-rotulo]), .tabela tbody th:not([data-rotulo]) { grid-template-columns: minmax(0, 1fr); }
+  .tabela td.codigo { white-space: normal; }
+  /* janelas em tela cheia, com o Fechar sempre à vista */
+  .caixa-senha { padding: 0; place-items: stretch; }
+  .caixa-senha .cartao { width: 100%; height: 100%; max-height: none; border-radius: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); }
+  .caixa-senha .cartao > .acoes { position: sticky; bottom: 0; margin-top: auto; padding: 10px 0 max(16px, env(safe-area-inset-bottom)); background: var(--sup); }
+  .senha-temp code { font-size: 18px; overflow-wrap: anywhere; }
+}
+/* toque: alvos de pelo menos 48 px */
+@media (pointer: coarse) {
+  button, select, summary, .check, .confirmar, .arquivo,
+  input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 48px; }
+  button.dica { min-width: 48px; min-height: 48px; }
+  #mapa .leaflet-bar a, #mapa .leaflet-bar a:hover { width: 48px; height: 48px; line-height: 48px; }
+  .tocador audio { height: 48px; }
+}
+/* impressão (relatórios e comprovantes): só o conteúdo, em tema claro, sem menus, botões nem mapa */
+@media print {
+  :root:not(#nada) { color-scheme: light; --fundo: #FFFFFF; --sup: #FFFFFF; --sup2: #F3F6F9; --linha: #BFC9D3; --texto: #000000; --texto2: #333F4A;
+    --apagado: #4A5866; --acento-claro: #FCEFD2; --acento-forte: #7A5200; --erro: #B42318; --ok: #1B7D4B; --info: #1663C7; --sombra: none; }
+  .topo, .abas, .subabas, .botao-menu, .mapa-area, .funil, .nav-funil, .filtros, .filtros-relatorio, .painel > .estado,
+  .dica-texto, .caixa-senha, .acoes, button, audio, .tocador { display: none !important; }
+  html, body, .layout, .painel { display: block; height: auto; overflow: visible; background: #FFFFFF; color: #000000; }
+  .painel { max-width: none; padding: 0; }
+  .cartao, .kpi, .item, .tabela tr { box-shadow: none; break-inside: avoid; }
+  .kpi:first-child { background: #FFFFFF; color: #000000; border-color: var(--linha); }
+  .kpi:first-child .kpi-valor, .kpi:first-child .kpi-rotulo, .kpi:first-child .kpi-extra { color: #000000; }
+  .rolagem { overflow: visible; }
+  .rolagem .tabela { min-width: 0; }
+  .rolagem .tabela tr > :first-child { position: static; }
+  .texto-longo { max-height: none; overflow: visible; }
+}

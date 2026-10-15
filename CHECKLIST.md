@@ -30,7 +30,7 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   - [x] K1 aviso, mensagem, tipos, PDF, e-mail, comprovante e áudio nos 3 idiomas
   - [x] K2 telas nos 3 idiomas
 - [ ] Fase I: acessibilidade e todos os equipamentos
-  - [ ] I1 layout por tamanho de tela
+  - [x] I1 layout por tamanho de tela
   - [ ] I2 texto, cor e movimento
   - [ ] I3 teclado e leitor de tela
   - [ ] I4 tempo e trabalho perdido
@@ -142,3 +142,18 @@ Uma sessão nova continua daqui: ler docs/PLANO_FINAL.md e a última fase sem [x
   fica em português. Relatórios: o documento pronto é traduzido por catálogo (as contas não mudam); em inglês, R$ e % com ponto decimal.
 - Nomes de comunidade, município, pessoa e rádio nunca são traduzidos; o texto do "Outro" vai como foi digitado.
 - O idioma da tela só usa a sessão do navegador antes do login (nada fica no computador) e depois o perfil do usuário.
+
+### Fase K: bateria completa (15/10/2026)
+- 27 de 28 na primeira rodada: "Telas nos 3 idiomas" achou "Esconder rede fictícia" em português (o rótulo só era escrito quando a rede carregava). Corrigido (`desenharBotaoRede` também ao trocar o idioma); 8/8. Métricas iguais: 835 cenários, cobertura 88.3%, precisão 95.0%, aviso 44s -> 14s.
+
+### Correção: ERR-xxxx ao entrar num banco já existente (15/10/2026)
+- Causa: as colunas e tabelas novas das fases J e K (usuario.preferencias, pedido_radio, idiomas da empresa) só eram criadas pela semente; a API não atualizava o banco ao subir e o login lia `preferencias` (UndefinedColumn).
+- Correção: a API aplica `atualizar_esquema()` ao subir (só acréscimos, idempotente, com trava; nada apagado). Em produção, sem permissão de DDL, sobe e o log manda rodar a semente com o dono. Banco local atualizado: 208 linhas de auditoria e 51 avisos intactos.
+- Regra nova na verificação da Fase J: teste_migracao (banco de versão anterior; os 4 perfis entram; auditoria intacta; colunas iguais às de um banco novo), na bateria inclusive no -Rapido.
+
+### Fase I1 (15/10/2026)
+- Decisões: uma coluna até 1023 px (tablet em pé e deitado até 1023), botão "Menu" (aria-expanded, aria-controls, Esc fecha e devolve o foco) no lugar das abas; painel com largura máxima de leitura de 860 px; telas grandes (1600+) com painel mais largo. Tabelas em cartões abaixo de 600 px (cada valor com o nome da coluna; role table/row/cell para o leitor de tela não perder a tabela); de 600 px para cima, rolam dentro de si com a 1ª coluna fixa. Janelas em tela cheia abaixo de 600 px com o Fechar fixo embaixo e env(safe-area-inset-*). Toque (pointer: coarse): alvos de 48 px. Mapa com altura clamp(280px, 55vh, 640px); nada exige arrastar (zoom por botões e teclado, "Ir para" município/UF). Impressão sem topo, menu, mapa e botões, em tema claro. Manifest sem service worker.
+- 400% de zoom: equivale a 320 px de largura CSS em 1280 px; o teste confere 320 px.
+- Dicas "?" já abriam por clique/toque/teclado; as dicas do mapa (tooltip do Leaflet) seguem o Leaflet (toque abre ao tocar).
+- Teste: teste_telas.mjs 28/28 (9 vistas x 7 tamanhos sem rolagem horizontal, menu, cartões, tela cheia, 48 px, impressão, manifest). teste_app 110/110; verificação 110/110.
+- Intermitente a investigar: numa de 3 rodadas, a verificação teve um 401 em /api/usuarios na seção do Admin da empresa (as outras duas passaram).

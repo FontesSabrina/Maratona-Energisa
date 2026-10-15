@@ -5,6 +5,7 @@
 // O teste testes/navegador/teste_idiomas.mjs confere que todo texto usado na tela tem as duas traduções.
 const TEXTOS = {
   en: {
+    'Menu': 'Menu',
     // ---- Topo, acesso e menu ----
     'Farol · Aviso de desligamento': 'Farol · Power outage notice',
     'Cada comunidade avisada pelo nome': 'Every community warned by name',
@@ -339,6 +340,7 @@ const TEXTOS = {
     'Rede fictícia sobre as vias do © OpenStreetMap': 'Fictitious grid over © OpenStreetMap roads', 'Concessão e comunidades: IBGE · Leaflet': 'Concession and communities: IBGE · Leaflet',
   },
   es: {
+    'Menu': 'Menú',
     'Farol · Aviso de desligamento': 'Farol · Aviso de corte de energía',
     'Cada comunidade avisada pelo nome': 'Cada comunidad avisada por su nombre',
     'Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).': 'Demostración: red eléctrica y clientes ficticios; territorio y comunidades reales (IBGE, Censo 2022).',

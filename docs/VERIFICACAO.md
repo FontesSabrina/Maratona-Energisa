@@ -184,6 +184,13 @@ existia). Cada linha abaixo tem um teste que falhava antes e passa depois.
 | 13 | Com o aviso aberto, uma rádio cadastrada depois (o caminho do pedido de rádio) aparecia na lista do envio sem o valor sugerido, e o envio dizia "Informe o valor" | a escolha do envio era criada uma vez, quando a lista ainda estava vazia, e não era refeita | se a rádio escolhida não está na lista, a escolha volta à primeira rádio com o valor sugerido dela | teste_app: "rádio cadastrada pelo Admin: sugerida com o valor padrão" |
 | 12 | (regra nova, J4) o Operador cadastrava rádio direto no envio ("+ Nova rádio") | — | só o Admin da empresa cadastra; o Operador pede (ver J4) | verificação, teste_radio, teste_matriz |
 
+| 14 | (achado pela usuária, 15/10/2026) Entrar no Farol num banco já existente dava "Ocorreu um erro e nada foi gerado (código ERR-…)" para todos os perfis | as colunas e tabelas novas das fases J e K (`usuario.preferencias`, `pedido_radio`, modelos por idioma e idioma padrão da empresa) só eram criadas pela semente; a API não atualizava o banco ao subir, e o login lê `preferencias` (UndefinedColumn) | a API, ao subir, aplica `atualizar_esquema()` (só acréscimos: `CREATE … IF NOT EXISTS` e `ADD COLUMN IF NOT EXISTS`, com trava para vários processos; nada é apagado). Sem permissão de alterar tabelas (produção), sobe assim mesmo e o log manda rodar a semente com o dono do banco | teste_migracao: banco de versão anterior → 500 sem atualizar; depois de subir, os 4 perfis entram, auditoria intacta e corrente íntegra; e toda coluna de um banco novo existe no atualizado |
+
+**Regra (desde 15/10/2026):** depois de cada mudança de banco, "entrar com os 4 perfis" tem de funcionar num banco já
+existente, não só no banco novo dos testes: `uv run python -W ignore testes/api/teste_migracao.py` (também na bateria,
+inclusive no `-Rapido`). Coluna nova vai no `CREATE TABLE` **e** num `ALTER TABLE … ADD COLUMN IF NOT EXISTS`; o teste
+compara as colunas de um banco criado do zero com as de um banco antigo atualizado.
+
 ## J4 — Cadastro de rádio só do Admin da empresa
 
 - Só o Admin da empresa cadastra, edita, desativa, reativa e define o valor padrão (POST e PATCH /api/radios: `gerenciar_radios`).
