@@ -19,7 +19,12 @@ const estado = {
   usuario: null,           // /api/eu (perfil, empresa, ações permitidas)
   tela: 'carregando',      // carregando | entrar | senha | app
   vista: 'aviso',          // aviso | historico | painel | usuarios | empresas | registro
-  passo: 1,                // funil do novo aviso: 1 planilha, 2 quando, 3 conferir, 4 avisos
+  passo: 1,                // funil do novo aviso: 1 planilha, 2 quando, 3 escolher quem será desligado, 4 conferir, 5 avisos
+  leitura: null,           // resposta de /api/planilha: a base para escolher (linha a linha, sem a UC) e o pacote "base"
+  selecao: null,           // a escolha de quem será desligado (passo 3): modo, filtros, comunidades, áreas, inativas
+  chaveConferida: null,    // o critério da conferência que está na tela (mudou a escolha: confere de novo)
+  sel: null,               // as linhas escolhidas (1 por linha da base), refeitas a cada mudança da escolha
+  arquivoLido: null, abaLida: null, formularioLido: null,   // de que arquivo, aba e formulário é a leitura (para não ler de novo)
   config: null, concessao: null,
   arquivo: null, enviando: false,
   mensagem: '', erro: false,
@@ -201,10 +206,11 @@ const distritoTexto = (c, m) => c.distrito === m.nome ? t('Sede') : c.distrito;
 const nomeComDistrito = (c, m) => `${semSufixo(c.nome)} (${distritoTexto(c, m)})`;
 const homonimo = c => / \(.*\)$/.test(c.nome);
 
-// funil: até onde dá para ir (o 2 pede a planilha; o 3, a conferência; o 4, o aviso já gerado)
+// funil: até onde dá para ir (o 2 pede a planilha; o 3, a planilha lida; o 4, a conferência; o 5, o aviso já gerado)
 const temResultadoNovo = () => !!estado.resultado && estado.origem === 'novo';
 const gerado = () => temResultadoNovo() && !!estado.resultado.id;
-const passoMaximo = () => gerado() ? 4 : temResultadoNovo() ? 3 : estado.arquivo && !validarArquivo(estado.arquivo) ? 2 : 1;
+const passoMaximo = () => gerado() ? 5 : temResultadoNovo() ? 4 : estado.leitura ? 3
+  : estado.arquivo && !validarArquivo(estado.arquivo) ? 2 : 1;
 
 // o mesmo que o servidor confere antes de gerar (nucleo/travas.problema_para_gerar); a tela só antecipa
 const MAX_JUSTIFICATIVA = 300;
@@ -219,6 +225,97 @@ function problemaParaGerar() {
   return null;
 }
 const pct = f => `${(f * 100).toLocaleString(IDIOMA, { maximumFractionDigits: 1 })}%`;
+
+// ---- Escolher quem será desligado (passo 3): a planilha pode ser a base de clientes inteira. A mesma regra de
+// nucleo/selecao.py, para o contador ao vivo e o mapa; quem decide é o servidor (/api/planilha/escolha). A base vem
+// linha a linha sem a UC (posição, comunidade e os códigos como índices) e fica só na memória, como os pontos ----
+const FILTROS = ['circuito', 'conjunto', 'transformador', 'bairro'];
+const MAX_MARCAR = 300;            // itens mostrados numa lista de marcar (o resto aparece pela busca)
+const MAX_VERTICES_AREA = 20000;   // como nucleo/area.MAX_VERTICES
+// planilha com circuito, conjunto, transformador, bairro ou situação: é uma base de clientes, a pessoa escolhe;
+// sem essas colunas, já é a lista do desligamento (o comportamento de antes)
+const ehBaseDeClientes = b => b.colunas.length > 0;
+function novaSelecao(b) {
+  return { modo: ehBaseDeClientes(b) ? 'escolha' : 'planilha', filtros: Object.fromEntries(FILTROS.map(f => [f, new Set()])),
+    comunidades: new Set(), poligonos: [], incluirInativas: false, buscas: {}, abertos: new Set(), desenho: null };
+}
+const temFiltroSel = s => FILTROS.some(f => s.filtros[f].size) || s.poligonos.length > 0 || s.comunidades.size > 0;
+// ponto no anel (raio cruzando as bordas), a mesma conta de nucleo/abrangencia._no_anel; a área em [lon, lat]
+function noAnelArea(lat, lon, anel) {
+  let dentro = false;
+  for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+    const [xi, yi] = anel[i], [xj, yj] = anel[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+const naArea = (lat, lon, p) => noAnelArea(lat, lon, p[0]) && !p.slice(1).some(b => noAnelArea(lat, lon, b));
+function caixaArea(p) {
+  const xs = p[0].map(v => v[0]), ys = p[0].map(v => v[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+const verticesArea = polis => polis.reduce((s, p) => s + p.reduce((n, a) => n + a.length - 1, 0), 0);
+// as linhas escolhidas (1) da base lida: inativas fora (salvo incluir); na escolha, todos os filtros usados (dentro de
+// um filtro, qualquer valor marcado) e o mapa (dentro de uma área ou numa comunidade; vital sem posição entra)
+function selecionadas(b, s) {
+  const ln = b.linhas, n = b.lidas, sel = new Uint8Array(n);
+  if (s.modo === 'escolha' && !temFiltroSel(s)) return sel;
+  const marcados = FILTROS.filter(f => s.filtros[f].size), caixas = s.poligonos.map(caixaArea);
+  const usaMapa = s.poligonos.length > 0 || s.comunidades.size > 0;
+  for (let i = 0; i < n; i++) {
+    if (ln.inativa[i] && !s.incluirInativas) continue;
+    if (s.modo === 'escolha') {
+      if (marcados.some(f => !s.filtros[f].has(ln[f][i]))) continue;
+      if (usaMapa) {
+        const lat = ln.lat[i], lon = ln.lon[i];
+        const dentro = lat !== null && s.poligonos.some((p, k) => {
+          const [x0, y0, x1, y1] = caixas[k];
+          return x0 <= lon && lon <= x1 && y0 <= lat && lat <= y1 && naArea(lat, lon, p);
+        });
+        if (!(dentro || s.comunidades.has(ln.com[i]) || ln.vital_sem_posicao[i])) continue;
+      }
+    }
+    sel[i] = 1;
+  }
+  return sel;
+}
+// "X de Y UCs selecionadas · Z comunidades" (e as inativas que ficaram fora)
+function contaSelecao(b, s, sel) {
+  const ln = b.linhas, coms = new Set();
+  let x = 0, inativas = 0;
+  for (let i = 0; i < b.lidas; i++) {
+    if (sel[i]) { x++; if (ln.com[i] >= 0) coms.add(ln.com[i]); }
+    else if (ln.inativa[i] && !s.incluirInativas) inativas++;
+  }
+  return { x, y: b.lidas, z: coms.size, inativas };
+}
+// o critério que vai ao servidor (os valores, nunca as linhas); o servidor deixa em forma canônica
+function criterioDe(b, s) {
+  if (s.modo === 'planilha') return { modo: 'planilha', incluir_inativas: s.incluirInativas };
+  return { modo: 'escolha', incluir_inativas: s.incluirInativas,
+    ...Object.fromEntries(FILTROS.map(f => [f, [...s.filtros[f]].map(i => b.valores[f][i]).sort()])), poligonos: s.poligonos,
+    comunidades: [...s.comunidades].sort((a, c) => a - c).map(i => ({ municipio: b.municipios[b.comunidades[i].municipio].codigo_ibge,
+      nome: b.comunidades[i].nome })) };
+}
+const chaveSelecao = (b, s) => JSON.stringify(criterioDe(b, s));
+function problemaDaSelecao(s, conta) {
+  if (s.desenho) return t('Conclua ou cancele o desenho da área.');
+  if (s.modo === 'escolha' && !temFiltroSel(s)) return t('Escolha pelo menos um filtro, uma comunidade ou uma área no mapa.');
+  if (!conta.x) return t('Nenhuma UC selecionada: mude a escolha.');
+  return null;
+}
+// a escolha como o histórico guarda (nucleo/selecao.resumo), no idioma da tela: o critério, nunca as UCs
+function descreverEscolha(r) {
+  if (!r) return '';
+  const lista = v => v.slice(0, 8).join(', ') + (v.length > 8 ? ` (+${fmt(v.length - 8)})` : '');
+  const partes = r.modo === 'planilha' ? [t('a planilha inteira (lista do desligamento)')] : [];
+  if (r.poligonos) partes.push(t('área desenhada ({n} polígono(s), {v} vértices)', { n: fmt(r.poligonos), v: fmt(r.vertices) }));
+  if (r.comunidades?.length) partes.push(t('comunidade(s) {lista}', { lista: lista(r.comunidades.map(semSufixo)) }));
+  for (const f of FILTROS) if (r[f]?.length) partes.push(t({ circuito: 'circuito(s) {lista}', conjunto: 'conjunto(s) {lista}',
+    transformador: 'transformador(es) {lista}', bairro: 'bairro(s) {lista}' }[f], { lista: lista(r[f]) }));
+  partes.push(t('{x} UC(s) · {z} comunidade(s)', { x: fmt(r.conta.escolhidas), z: fmt(r.comunidades_no_aviso) }));
+  return partes.join(' · ') + (r.incluir_inativas ? ` · ${t('inativas incluídas')}` : '');
+}
 
 // o texto da rádio: o final guardado, a mensagem pelo modelo da empresa ou (em outro idioma) o aviso do algoritmo
 const textoGerado = m => m.mensagem || m.aviso;
@@ -301,7 +398,7 @@ function doHistorico(a) {
     planilha: { linhas: r.linhas, validas: r.validas, total_problemas: r.problemas, problemas: [], problemas_por_motivo: {} },
     fora_da_concessao: { ucs: r.fora_da_concessao, linhas: [] },
     criado_em: a.criado_em, usuario: a.usuario, usuario_perfil: a.usuario_perfil, codigo: a.codigo, status: a.status,
-    desligamento: a.desligamento,
+    desligamento: a.desligamento, escolha: r.escolha || null,
   };
 }
 
@@ -367,12 +464,12 @@ function desenharAbas() {
     no('button', { type: 'button', 'data-vista': v, 'aria-current': estado.vista === v ? 'page' : null, texto: t(rotulo) })) : []));
   for (const v of VISTAS) $(`vista-${v}`).hidden = estado.vista !== v;
   // o resultado aparece só na vista de onde veio (um aviso novo em "Novo aviso", um antigo no "Histórico");
-  // no funil, o passo 3 mostra a conferência e o 4, os avisos
+  // no funil, o passo 4 mostra a conferência e o 5, os avisos (o 3 é a escolha de quem será desligado)
   const vistaDoResultado = { novo: 'aviso', historico: 'historico' }[estado.origem];
   const r = $('resultado');
   if (vistaDoResultado && r.parentElement.id !== `lugar-${vistaDoResultado}`) $(`lugar-${vistaDoResultado}`).append(r);
   r.dataset.modo = estado.origem === 'novo' ? `passo${estado.passo}` : 'completo';
-  r.hidden = !estado.resultado || estado.vista !== vistaDoResultado || (estado.origem === 'novo' && estado.passo < 3);
+  r.hidden = !estado.resultado || estado.vista !== vistaDoResultado || (estado.origem === 'novo' && estado.passo < 4);
   desenharFunil();
 }
 
@@ -391,16 +488,18 @@ function desenharFunil() {
   $('voltar').hidden = n !== 2;
   $('avancar').hidden = n !== 1;
   $('gerar').hidden = n !== 2;
-  $('navResultado').hidden = n < 3 || !temResultadoNovo();
-  $('avancarResultado').hidden = n !== 3;
-  // passo 3: antes de gerar, o botão gera (se as travas deixarem); depois, só leva aos avisos
+  $('escolha').hidden = n !== 3 || !estado.leitura;
+  $('navEscolha').hidden = $('motivoEscolha').hidden = n !== 3 || !estado.leitura;
+  $('navResultado').hidden = n < 4 || !temResultadoNovo();
+  $('avancarResultado').hidden = n !== 4;
+  // passo 4: antes de gerar, o botão gera (se as travas deixarem); depois, só leva aos avisos
   $('avancarResultado').textContent = gerado() ? t('Avançar para os avisos') : estado.enviando ? t('Gerando…') : t('Gerar aviso');
   $('avancarResultado').disabled = !gerado() && (estado.enviando || !!problemaParaGerar());
   const motivo = $('motivoGerar');
-  if (motivo) motivo.textContent = n === 3 && !gerado() ? (problemaParaGerar() || t('Tudo conferido: pode gerar o aviso.')) : '';
+  if (motivo) motivo.textContent = n === 4 && !gerado() ? (problemaParaGerar() || t('Tudo conferido: pode gerar o aviso.')) : '';
   $('abaRotulo').hidden = !estado.abas.length;
-  $('novoAviso').hidden = n !== 4;
-  $('verComparativo').hidden = n !== 4 || !pode('ver_historico');
+  $('novoAviso').hidden = n !== 5;
+  $('verComparativo').hidden = n !== 5 || !pode('ver_historico');
   $('passo2Arquivo').textContent = estado.arquivo ? t('Planilha: {nome}', { nome: estado.arquivo.name }) : '';
   if (estado.resultado && estado.origem === 'novo') $('tituloResultado').textContent = tituloResultado();
 }
@@ -487,6 +586,8 @@ function desenharResumo() {
     filhos.push(no('p', { classe: 'alerta', texto: t('{n} UC(s) fora da área de concessão, sem aviso: linha(s) {linhas}{mais}.',
       { n: fmt(r.fora_da_concessao.ucs), linhas: r.fora_da_concessao.linhas.join(', '), mais }) }));
   }
+  if (r.escolha && estado.origem === 'historico')   // o critério de quem foi desligado (nunca as UCs)
+    filhos.push(no('p', {}, no('strong', { texto: t('Quem foi desligado: ') }), no('span', { texto: descreverEscolha(r.escolha) })));
   filhos.push(no('p', { classe: 'ajuda', texto: t(r.aviso_ficticio) }));
   $('resumo').replaceChildren(...filhos);
 }
@@ -651,7 +752,7 @@ function desenharProblemas() {
     p.total_problemas > p.problemas.length ? no('p', { classe: 'ajuda', texto: t('Mostrando as primeiras {n}.', { n: fmt(p.problemas.length) }) }) : '');
 }
 
-// ---- Conferência humana (passo 3 de um aviso novo): números, travas, correções e a caixa "Conferi" ----
+// ---- Conferência humana (passo 4 de um aviso novo): quem será desligado, números, travas, correções e a caixa "Conferi" ----
 function desenharConferencia() {
   const r = estado.resultado, c = r?.conferencia, lugar = $('conferencia');
   lugar.hidden = !c || estado.origem !== 'novo';
@@ -663,7 +764,15 @@ function desenharConferencia() {
   const arquivo = no('p', { classe: 'ajuda', texto: t('Arquivo {nome}', { nome: tr.arquivo.nome }) + (tr.arquivo.aba ? t(', aba {aba}', { aba: tr.arquivo.aba }) : '')
     + t(' · {linhas} linhas · colunas reconhecidas: {colunas} · {ignoradas} coluna(s) ignorada(s)', { linhas: fmt(tr.arquivo.linhas),
       colunas: tr.colunas.join(', '), ignoradas: fmt(tr.arquivo.colunas_ignoradas) }) + t(' · tradutor {versao}', { versao: tr.versao }) });
-  const blocos = [no('h3', { texto: t('Conferência da planilha') }), arquivo, numeros,
+  // a escolha: o critério e a conta fechada (lidas = inativas fora + não escolhidas + escolhidas = ok + corrigidas + rejeitadas)
+  const k = r.escolha?.conta;
+  const escolha = k ? no('div', { classe: 'conta-fechada' },
+    no('p', {}, no('strong', { texto: t('Quem será desligado: ') }), no('span', { texto: descreverEscolha(r.escolha) })),
+    no('p', { classe: 'ajuda', texto: t('Conta fechada: {lidas} lidas = {inativas} inativas fora + {nao} não escolhidas + {escolhidas} escolhidas; escolhidas = {ok} ok + {corrigidas} corrigidas + {rejeitadas} rejeitadas.',
+      { lidas: fmt(k.lidas), inativas: fmt(k.inativas_fora), nao: fmt(k.nao_escolhidas), escolhidas: fmt(k.escolhidas), ok: fmt(k.ok),
+        corrigidas: fmt(k.corrigidas), rejeitadas: fmt(k.rejeitadas) }) }),
+    no('p', { classe: 'ajuda', texto: t('As travas abaixo (equipamento vital, pontos suspeitos, limite de rejeição e área de atuação) valem só para as escolhidas.') })) : null;
+  const blocos = [no('h3', { texto: t('Conferência da planilha') }), arquivo, escolha, numeros,
     no('p', { classe: 'dicas' }, no('span', { classe: 'ajuda', texto: t('O que é: ') }),
       no('span', { texto: t('UC') }), dica('uc', 'UC'), no('span', { texto: t('equipamento vital') }), dica('vital', 'equipamento vital'),
       no('span', { texto: t('corrigida') }), dica('corrigida', 'linha corrigida'), no('span', { texto: t('rejeitada') }), dica('rejeitada', 'linha rejeitada'),
@@ -715,6 +824,138 @@ function desenharConferencia() {
   desenharFunil();
 }
 
+// ---- Escolher quem será desligado (passo 3): o modo, as inativas, o mapa (áreas e comunidades) e os filtros. O mapa
+// tem alternativa em lista: pelo teclado, a lista de comunidades e os filtros fazem o mesmo que os cliques ----
+function desenharEscolha() {
+  const lugar = $('escolhaCorpo'), b = estado.leitura?.base, s = estado.selecao;
+  if (!b || !s) { lugar.replaceChildren(); return desenharContaEscolha(); }
+  if (gerado()) {
+    lugar.replaceChildren(no('p', { texto: t('Escolha usada no aviso: {texto}', { texto: descreverEscolha(estado.resultado.escolha) }) }));
+    return desenharContaEscolha();
+  }
+  const radio = (valor, texto) => {
+    const r = no('input', { type: 'radio', name: 'modoEscolha', id: `modo-${valor}`, value: valor });
+    r.checked = s.modo === valor;
+    return no('label', { classe: 'opcao', for: `modo-${valor}` }, r, no('span', { texto }));
+  };
+  const blocos = [no('p', { classe: 'ajuda', texto: t('A planilha pode ser a base de clientes inteira: escolha quem fica sem luz neste desligamento. Só as UCs escolhidas seguem para a conferência e o aviso.') }),
+    no('fieldset', { classe: 'modo-escolha' }, no('legend', { texto: t('Como escolher') }),
+      radio('escolha', t('Escolher no mapa e pelos filtros')), radio('planilha', t('A planilha já é a lista do desligamento (veio do sistema de manobras)')))];
+  const inativas = b.linhas.inativa.reduce((n, v) => n + v, 0);
+  if (inativas) blocos.push(blocoInativas(b, s, inativas));
+  if (s.modo === 'escolha') {
+    blocos.push(no('p', { classe: 'ajuda', texto: t('Os filtros se somam: a UC entra se atender a todos os filtros usados; dentro de um filtro, vale qualquer um dos marcados. O mapa (áreas e comunidades) conta como mais um filtro.') }));
+    blocos.push(blocoMapa(b, s), blocoLista(b, s, 'comunidade'));
+    for (const f of FILTROS) if (b.colunas.includes(f)) blocos.push(blocoLista(b, s, f));
+    const semPosicao = b.linhas.vital_sem_posicao.reduce((n, v) => n + v, 0);
+    if (semPosicao) blocos.push(no('p', { classe: 'ajuda', texto: t('{n} linha(s) com equipamento vital sem coordenada: com o mapa, entram na escolha (não dá para saber se estão na área) e bloqueiam o aviso até a planilha ser corrigida.', { n: fmt(semPosicao) }) }));
+  }
+  lugar.replaceChildren(...blocos);
+  desenharContaEscolha();
+}
+
+// as inativas (SITUACAO = INATIVO...) ficam fora por padrão: a contagem e, ao abrir, por bairro e por circuito (nunca a UC)
+function blocoInativas(b, s, n) {
+  const caixa = no('input', { type: 'checkbox', id: 'incluirInativas' });
+  caixa.checked = s.incluirInativas;
+  const tabela = campo => {
+    const conta = new Map();
+    b.linhas[campo].forEach((v, i) => {
+      if (!b.linhas.inativa[i]) return;
+      const k = v >= 0 ? b.valores[campo][v] : t('não informado');
+      conta.set(k, (conta.get(k) || 0) + 1);
+    });
+    return no('div', { classe: 'rolagem' }, no('table', { classe: 'tabela' },
+      no('thead', {}, no('tr', {}, no('th', { scope: 'col', texto: t({ bairro: 'Bairro', circuito: 'Circuito' }[campo]) }), no('th', { scope: 'col', texto: t('UCs inativas') }))),
+      no('tbody', {}, [...conta].sort((a, c) => c[1] - a[1] || (a[0] < c[0] ? -1 : 1)).map(([k, v]) => no('tr', {}, no('td', { texto: k }), no('td', { texto: fmt(v) }))))));
+  };
+  const campos = ['bairro', 'circuito'].filter(c => b.colunas.includes(c));
+  return no('div', { classe: 'alerta-amarelo inativas' },
+    no('strong', { texto: s.incluirInativas ? t('{n} UC(s) inativa(s) incluída(s) no aviso', { n: fmt(n) }) : t('{n} UC(s) inativa(s) não entram no aviso', { n: fmt(n) }) }),
+    campos.length ? no('details', {}, no('summary', { texto: t('Ver quais (contagem por bairro e por circuito, sem o número da UC)') }),
+      no('div', { classe: 'tabelas-inativas' }, campos.map(tabela))) : null,
+    no('label', { classe: 'confirmar', for: 'incluirInativas' }, caixa, no('span', { texto: t('Incluir as inativas no aviso') })));
+}
+
+// desenhar uma área (cliques nos cantos) e as áreas já desenhadas, com as UCs dentro de cada uma
+function blocoMapa(b, s) {
+  const d = s.desenho, ln = b.linhas;
+  const dentro = p => { const [x0, y0, x1, y1] = caixaArea(p); let n = 0;
+    for (let i = 0; i < b.lidas; i++) { const lat = ln.lat[i], lon = ln.lon[i];
+      if (lat !== null && (!ln.inativa[i] || s.incluirInativas) && x0 <= lon && lon <= x1 && y0 <= lat && lat <= y1 && naArea(lat, lon, p)) n++; }
+    return n; };
+  const acoes = d ? [no('p', { classe: 'ajuda', id: 'passosDesenho', texto: d.length === 0 ? t('Clique no mapa para marcar o primeiro canto da área.')
+      : d.length < 3 ? t('{n} ponto(s) marcado(s). Marque pelo menos 3 para concluir.', { n: fmt(d.length) })
+        : t('{n} pontos marcados. Continue clicando nos cantos ou conclua a área.', { n: fmt(d.length) }) }),
+    no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-sel': 'desfazer', disabled: !d.length, texto: t('Desfazer o último ponto') }),
+      no('button', { type: 'button', classe: 'prim', 'data-sel': 'concluir', disabled: d.length < 3, texto: t('Concluir a área') }),
+      no('button', { type: 'button', 'data-sel': 'cancelar', texto: t('Cancelar o desenho') }))]
+    : [no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-sel': 'desenhar', texto: t('Desenhar uma área no mapa') }))];
+  const areas = s.poligonos.map((p, k) => no('li', {}, no('span', { texto: t('Área {n} · {v} vértices · {x} UC(s) dentro', { n: k + 1, v: fmt(p[0].length - 1), x: fmt(dentro(p)) }) }),
+    no('button', { type: 'button', 'data-sel': 'remover', 'data-area': String(k), 'aria-label': t('Remover a área {n}', { n: k + 1 }), texto: t('Remover') })));
+  return no('div', { classe: 'bloco-mapa', id: 'blocoMapa' }, no('h3', { texto: t('No mapa') }),
+    no('p', { classe: 'ajuda', texto: t('Clique numa comunidade no mapa para incluir ou tirar, ou desenhe uma área clicando nos cantos. Sem mouse, use a lista de comunidades e os filtros abaixo: eles fazem o mesmo.') }),
+    ...acoes, areas.length ? no('ul', { classe: 'areas-escolha' }, areas) : null);
+}
+
+const rotuloComunidadeBase = (b, i) => {
+  const c = b.comunidades[i], m = b.municipios[c.municipio];
+  return `${semSufixo(c.nome)} (${distritoDe(c.distrito, m.nome)}) · ${m.nome}`;
+};
+const TITULO_LISTA = tipo => t({ comunidade: 'Comunidades', circuito: 'Circuito', conjunto: 'Conjunto', transformador: 'Transformador', bairro: 'Bairro' }[tipo]);
+const marcadosDe = (s, tipo) => tipo === 'comunidade' ? s.comunidades : s.filtros[tipo];
+// [índice, rótulo, UCs] de cada valor (as UCs que podem entrar: sem as inativas, salvo incluir)
+function itensDaLista(b, s, tipo) {
+  const ln = b.linhas, campo = tipo === 'comunidade' ? 'com' : tipo;
+  const n = new Array(tipo === 'comunidade' ? b.comunidades.length : b.valores[tipo].length).fill(0);
+  for (let i = 0; i < b.lidas; i++) if (ln[campo][i] >= 0 && (!ln.inativa[i] || s.incluirInativas)) n[ln[campo][i]]++;
+  return n.map((x, i) => [i, tipo === 'comunidade' ? rotuloComunidadeBase(b, i) : b.valores[tipo][i], x]);
+}
+const itensBuscados = (b, s, tipo) => { const busca = normalizar((s.buscas[tipo] || '').trim());
+  return itensDaLista(b, s, tipo).filter(([, r]) => !busca || normalizar(r).includes(busca)); };
+
+// uma lista de marcar com busca (comunidades, circuitos, conjuntos, transformadores, bairros)
+function blocoLista(b, s, tipo) {
+  const titulo = TITULO_LISTA(tipo);
+  const busca = no('input', { type: 'search', id: `busca-${tipo}`, 'data-busca': tipo, autocomplete: 'off', placeholder: t('Buscar'),
+    'aria-label': t('Buscar em {lista}', { lista: titulo }) });
+  busca.value = s.buscas[tipo] || '';
+  const itens = no('div', { classe: 'itens-marcar', id: `itens-${tipo}`, role: 'group', 'aria-label': titulo });
+  const det = no('details', { classe: 'lista-escolha', 'data-lista': tipo, open: s.abertos.has(tipo) || marcadosDe(s, tipo).size > 0 },
+    no('summary', {}, no('span', { texto: titulo }), no('span', { classe: 'marcados', id: `marcados-${tipo}` })),
+    busca, no('div', { classe: 'acoes' }, no('button', { type: 'button', 'data-sel': 'marcar', 'data-tipo': tipo, texto: t('Marcar os mostrados') }),
+      no('button', { type: 'button', 'data-sel': 'desmarcar', 'data-tipo': tipo, texto: t('Desmarcar todos') })), itens);
+  desenharItens(itens, b, s, tipo);
+  return det;
+}
+function desenharItens(lugar, b, s, tipo) {
+  const marcados = marcadosDe(s, tipo), itens = itensBuscados(b, s, tipo);
+  lugar.replaceChildren(...itens.slice(0, MAX_MARCAR).map(([i, rotulo, n]) => {
+    const c = no('input', { type: 'checkbox', id: `sel-${tipo}-${i}`, 'data-sel-tipo': tipo, value: String(i) });
+    c.checked = marcados.has(i);
+    return no('label', { classe: 'item-marcar', for: c.id }, c, no('span', { texto: rotulo }), no('span', { classe: 'ajuda', texto: t('{n} UC(s)', { n: fmt(n) }) }));
+  }), itens.length > MAX_MARCAR ? no('p', { classe: 'ajuda', texto: t('Mostrando {n} de {total}: use a busca.', { n: fmt(MAX_MARCAR), total: fmt(itens.length) }) }) : null,
+  itens.length ? null : no('p', { classe: 'ajuda', texto: t('Nada encontrado.') }));
+}
+
+// o contador ao vivo ("X de Y UCs selecionadas · Z comunidades"), o que falta para conferir e quantos marcados em cada lista
+function desenharContaEscolha() {
+  const b = estado.leitura?.base, s = estado.selecao, mostra = estado.passo === 3 && !!b && !!s;
+  $('motivoEscolha').hidden = !mostra;
+  if (!mostra) { $('contaEscolha').textContent = ''; return; }
+  const r = gerado() ? estado.resultado.escolha?.conta : null;
+  const c = r ? { x: r.escolhidas, y: r.lidas, z: estado.resultado.escolha.comunidades_no_aviso } : contaSelecao(b, s, estado.sel);
+  $('contaEscolha').textContent = t('{x} de {y} UCs selecionadas · {z} comunidade(s)', { x: fmt(c.x), y: fmt(c.y), z: fmt(c.z) });
+  const problema = gerado() ? null : problemaDaSelecao(s, c);
+  $('motivoEscolha').textContent = gerado() ? '' : problema || t('Pronto para conferir: as travas e o aviso valem só para as UCs escolhidas.');
+  $('conferirEscolha').textContent = gerado() ? t('Avançar para a conferência') : estado.enviando ? t('Conferindo…') : t('Conferir a escolha');
+  $('conferirEscolha').disabled = !gerado() && (estado.enviando || !!problema);
+  for (const tipo of ['comunidade', ...FILTROS]) {
+    const lugar = $(`marcados-${tipo}`);
+    if (lugar) lugar.textContent = marcadosDe(s, tipo).size ? t(' · {n} marcado(s)', { n: fmt(marcadosDe(s, tipo).size) }) : '';
+  }
+}
+
 // quem pediu, quando e o código; no histórico, mudar a data ou cancelar (quem gera aviso)
 function desenharSolicitado() {
   const r = estado.resultado;
@@ -755,7 +996,7 @@ function desenharResultado() {
 
 function tituloResultado() {
   const f = estado.formulario;
-  return t('{titulo} · {data}, {horario}', { titulo: estado.passo === 4 ? t('Avisos para a rádio') : t('Conferir o resultado'), data: f.data, horario: f.horario })
+  return t('{titulo} · {data}, {horario}', { titulo: estado.passo === 5 ? t('Avisos para a rádio') : t('Conferir o resultado'), data: f.data, horario: f.horario })
     + (estado.resultado?.id ? t(' · aviso nº {id}', { id: estado.resultado.id }) : '');
 }
 
@@ -1544,6 +1785,7 @@ function iniciarMapa() {
   trocarFundoDoMapa();
   mapa.setView([-21.0, -42.6], 8);
   mapa.on('moveend', aoMoverMapa);
+  mapa.on('click', cliqueNoMapa);   // desenhar a área da escolha (passo 3)
 }
 
 // municípios da concessão que aparecem na tela (pelo retângulo do contorno)
@@ -1556,7 +1798,7 @@ function desenharBase() {
   camadaBase?.remove();
   camadaBase = null;
   if (!mapa || mapa.getZoom() < ZOOM_COMUNIDADES) return;
-  const doAviso = new Set((estado.resultado?.municipios || []).map(m => m.codigo_ibge));
+  const doAviso = new Set([...(estado.resultado?.municipios || []), ...(emEscolha() ? estado.leitura.base.municipios : [])].map(m => m.codigo_ibge));
   const feicoes = municipiosNaTela().filter(m => !doAviso.has(m.codigo_ibge) && estado.territorios[m.codigo_ibge])
     .flatMap(m => estado.territorios[m.codigo_ibge].features.map(f => ({ ...f, properties: { ...f.properties, municipio: m.nome,
       codigo_ibge: m.codigo_ibge } })));
@@ -1811,7 +2053,7 @@ function desenharComunidades() {
   camadaComunidades?.remove();
   camadaComunidades = null;
   const r = estado.resultado;
-  if (!r) return;
+  if (!r || naEscolha()) return;   // no passo 3, o mapa é o da escolha (desenharMapaEscolha)
   // as afetadas preenchidas; as outras comunidades dos mesmos municípios só com o contorno, por baixo
   const feicoes = [], outras = [];
   for (const m of r.municipios) {
@@ -1851,10 +2093,10 @@ function desenharUcs() {
   camadaUcs?.remove();
   camadaUcs = null;
   const r = estado.resultado, botao = $('botaoUcs');
-  botao.closest('li').hidden = !temPontos();
+  botao.closest('li').hidden = !temPontos() || naEscolha();
   botao.textContent = estado.verUcs ? t('Esconder UCs') : t('Mostrar UCs');
   botao.setAttribute('aria-pressed', String(estado.verUcs));
-  if (!temPontos() || !estado.verUcs) return;
+  if (!temPontos() || !estado.verUcs || naEscolha()) return;
   telaUcs ||= L.canvas({ padding: .3 });
   const ponto = (lat, lon, cor, dica) => L.circleMarker([lat, lon], { renderer: telaUcs, radius: 3.5, weight: 1, color: '#FFFFFF', fillColor: cor, fillOpacity: .95 })
     .bindTooltip(() => no('span', { texto: dica }));   // nó de texto: o Leaflet poria uma string como HTML
@@ -1871,6 +2113,77 @@ function desenharUcs() {
   for (const [lat, lon] of r.pontos_corrigidos || []) marcas.push(ponto(lat, lon, COR.corrigida, t('UC com coordenada corrigida (confira)')));
   camadaUcs = L.layerGroup(marcas).addTo(mapa);
   if (!camadaComunidades && marcas.length) mapa.fitBounds(L.featureGroup(marcas).getBounds(), { padding: [30, 30], maxZoom: 13 });
+}
+
+// ---- Mapa da escolha (passo 3): as comunidades dos municípios da planilha (clique: incluir ou tirar), as UCs da base num
+// canvas sem clique (as escolhidas em âmbar, as inativas fora vazadas) e as áreas desenhadas. Nada disso vai para o HTML ----
+let camadaEscolhaComunidades, camadaEscolhaPontos, camadaEscolhaAreas, telaEscolha, marcasEscolha = [], estilosEscolha = [];
+const naEscolha = () => estado.passo === 3 && (estado.origem === 'novo' || !estado.resultado);
+const emEscolha = () => estado.vista === 'aviso' && estado.passo === 3 && !!estado.leitura && !!estado.selecao;
+function apagarMapaEscolha() {
+  for (const c of [camadaEscolhaComunidades, camadaEscolhaPontos, camadaEscolhaAreas]) c?.remove();
+  camadaEscolhaComunidades = camadaEscolhaPontos = camadaEscolhaAreas = null;
+  marcasEscolha = []; estilosEscolha = [];
+  if (mapa) { mapa.getContainer().classList.remove('desenhando'); mapa.doubleClickZoom.enable(); }
+}
+const ESTILO_PONTO = [   // 0 fora da escolha, 1 escolhida, 2 inativa (fora)
+  { radius: 2.5, weight: 1, color: COR.cinza, fillColor: COR.cinza, fillOpacity: .35, opacity: .8 },
+  { radius: 3.5, weight: 1, color: '#FFFFFF', fillColor: COR.ambarForte, fillOpacity: .95, opacity: 1 },
+  { radius: 2.5, weight: 1, color: COR.cinza, fillColor: COR.cinza, fillOpacity: 0, opacity: .7 },
+];
+function estiloComunidadeEscolha(f) {
+  const i = f.properties.indice;
+  if (i < 0) return { color: COR.cinza, weight: .8, dashArray: null, fillColor: COR.cinza, fillOpacity: .02 };
+  return estado.selecao.comunidades.has(i) ? { color: COR.ambarForte, weight: 2, dashArray: null, fillColor: COR.ambar, fillOpacity: .45 }
+    : { color: COR.ambarForte, weight: 1, dashArray: '4 4', fillColor: COR.ambar, fillOpacity: .06 };
+}
+function desenharMapaEscolha(enquadrar = false) {
+  if (!mapa) return;
+  if (!emEscolha()) return apagarMapaEscolha();
+  const b = estado.leitura.base, s = estado.selecao, sel = estado.sel, ln = b.linhas;
+  if (!mapa.getPane('escolhaPontos')) {   // por cima das comunidades e sem pegar o clique (o clique vai para a comunidade ou o mapa)
+    for (const [nome, z] of [['escolhaPontos', 450], ['escolhaDesenho', 460]]) {
+      const pane = mapa.createPane(nome);
+      pane.style.zIndex = z; pane.style.pointerEvents = 'none';
+    }
+  }
+  if (!camadaEscolhaComunidades && b.municipios.every(m => estado.territorios[m.codigo_ibge])) {
+    const indice = new Map(b.comunidades.map((c, i) => [`${b.municipios[c.municipio].codigo_ibge}|${c.nome}`, i]));
+    const ucs = itensDaLista(b, s, 'comunidade');
+    const feicoes = b.municipios.flatMap(m => estado.territorios[m.codigo_ibge].features.map(f => ({ ...f, properties: { ...f.properties,
+      municipio: m.nome, indice: indice.get(`${m.codigo_ibge}|${f.properties.nome}`) ?? -1 } })));
+    camadaEscolhaComunidades = L.geoJSON({ type: 'FeatureCollection', features: feicoes }, {
+      style: estiloComunidadeEscolha,
+      onEachFeature: (f, l) => {
+        const p = f.properties;
+        l.bindTooltip(() => no('span', { texto: `${semSufixo(p.nome)} (${distritoDe(p.distrito, p.municipio)}) · `
+          + (p.indice >= 0 ? t('{n} UC(s) da planilha · clique para incluir ou tirar', { n: fmt(ucs[p.indice][2]) }) : t('nenhuma UC da planilha')) }), { sticky: true });
+      },   // o clique é tratado no mapa (cliqueNoMapa): assim vale mesmo com a rede fictícia por cima
+    }).addTo(mapa);
+  } else camadaEscolhaComunidades?.setStyle(estiloComunidadeEscolha);
+  if (!camadaEscolhaPontos) {
+    telaEscolha ||= L.canvas({ padding: .3, pane: 'escolhaPontos' });
+    marcasEscolha = ln.lat.map((lat, i) => lat === null ? null
+      : L.circleMarker([lat, ln.lon[i]], { renderer: telaEscolha, pane: 'escolhaPontos', interactive: false, ...ESTILO_PONTO[0] }));
+    estilosEscolha = marcasEscolha.map(() => 0);
+    camadaEscolhaPontos = L.layerGroup(marcasEscolha.filter(Boolean)).addTo(mapa);
+  }
+  marcasEscolha.forEach((m, i) => {
+    const e = sel[i] ? 1 : ln.inativa[i] && !s.incluirInativas ? 2 : 0;
+    if (m && e !== estilosEscolha[i]) { m.setStyle(ESTILO_PONTO[e]); m.setRadius(ESTILO_PONTO[e].radius); estilosEscolha[i] = e; }
+  });
+  camadaEscolhaAreas?.remove();
+  const areas = s.poligonos.map(p => L.polygon(p.map(anel => anel.map(([x, y]) => [y, x])), { pane: 'escolhaDesenho', interactive: false,
+    color: COR.ambarForte, weight: 2.5, dashArray: '6 4', fillColor: COR.ambar, fillOpacity: .12 }));
+  const d = s.desenho || [];
+  if (d.length > 1) areas.push(L.polyline(d, { pane: 'escolhaDesenho', interactive: false, color: COR.ambarForte, weight: 3 }));
+  if (d.length > 2) areas.push(L.polyline([d[d.length - 1], d[0]], { pane: 'escolhaDesenho', interactive: false, color: COR.ambarForte, weight: 2, dashArray: '4 6' }));
+  for (const v of d) areas.push(L.circleMarker(v, { pane: 'escolhaDesenho', interactive: false, radius: 5, color: '#0E1620', weight: 2, fillColor: COR.ambar, fillOpacity: 1 }));
+  camadaEscolhaAreas = L.layerGroup(areas).addTo(mapa);
+  mapa.getContainer().classList.toggle('desenhando', !!s.desenho);
+  if (s.desenho) mapa.doubleClickZoom.disable(); else mapa.doubleClickZoom.enable();
+  const comPonto = marcasEscolha.filter(Boolean);
+  if (enquadrar && comPonto.length) mapa.fitBounds(L.featureGroup(comPonto).getBounds(), { padding: [30, 30], maxZoom: 14 });
 }
 
 // ======================= Controller: eventos e chamadas à API (atualiza o estado e redesenha) =======================
@@ -2146,6 +2459,7 @@ function limparTela() {
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
   Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null, opcoesRelatorio: null, vias: [], ficha: null,
     calor: null, simulador: null });
+  descartarLeitura();
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
     'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes',
     'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo', 'listaPedidos', 'simulador', 'simPeriodo'])
@@ -2287,7 +2601,29 @@ function irParaPasso(n) {
   estado.passo = n;
   if (n < 3) avisar('');
   desenharAbas();
+  desenharEscolha();
+  desenharMapaDoPasso();
+  if (n === 3) carregarTerritoriosEscolha();
   $('vista-aviso').scrollIntoView({ block: 'start' });
+}
+
+// as comunidades dos municípios da planilha lida (para clicar no mapa da escolha); só as que faltam
+async function carregarTerritoriosEscolha(enquadrar = false) {
+  const b = estado.leitura?.base;
+  if (!b) return;
+  try {
+    await Promise.all(b.municipios.filter(m => !estado.territorios[m.codigo_ibge]).map(async m => {
+      estado.territorios[m.codigo_ibge] = await api(`/api/municipios/${m.codigo_ibge}/comunidades`);
+    }));
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+  desenharMapaEscolha(enquadrar);
+}
+
+// o mapa de cada passo: no 3, a escolha (a base inteira); no 4 e no 5, a conferência e o aviso (só as escolhidas)
+function desenharMapaDoPasso() {
+  desenharComunidades(); desenharUcs(); desenharMapaEscolha(); desenharBase(); desenharNomes();
 }
 
 // começa outro desligamento: tira o resultado do envio anterior da tela e do mapa (o histórico já o guardou)
@@ -2302,10 +2638,26 @@ function novoAviso() {
 
 // tira da tela e do mapa a conferência ou o aviso novo (a planilha escolhida fica)
 function descartarNovo() {
-  Object.assign(estado, { conferi: false, justificativa: '', abas: [], aba: '' });
+  Object.assign(estado, { abas: [], aba: '' });
   $('aba').replaceChildren();
+  descartarLeitura();
+  if (estado.origem === 'novo') estado.formulario = null;
+  descartarConferencia();
+}
+
+// a planilha lida (a base para escolher, com os pontos) sai da memória e do mapa
+function descartarLeitura() {
+  Object.assign(estado, { leitura: null, selecao: null, sel: null, arquivoLido: null, abaLida: null, formularioLido: null });
+  $('escolhaCorpo').replaceChildren();
+  apagarMapaEscolha();
+  desenharContaEscolha();
+}
+
+// a conferência na tela não vale mais (a escolha mudou, ou começou outro desligamento); a planilha lida fica
+function descartarConferencia() {
+  Object.assign(estado, { conferi: false, justificativa: '', chaveConferida: null });
   if (estado.origem === 'novo') {
-    Object.assign(estado, { resultado: null, origem: null, avisos: {}, finais: {}, formulario: null });
+    Object.assign(estado, { resultado: null, origem: null, avisos: {}, finais: {} });
     for (const a of [...Object.values(estado.audios), ...Object.values(estado.audiosHoje)]) URL.revokeObjectURL(a.url);
     estado.audios = {}; estado.audiosHoje = {};
     for (const id of ['resumo', 'municipios', 'problemasCorpo']) $(id).replaceChildren();
@@ -2315,16 +2667,18 @@ function descartarNovo() {
   }
 }
 
-// outra planilha escolhida: a conferência da anterior não vale mais
+// outra planilha escolhida: a conferência (e a leitura) da anterior não vale mais
 function escolherPlanilha(arquivo) {
-  if (temResultadoNovo() && !gerado()) descartarNovo();
+  if (temResultadoNovo() && !gerado() || estado.leitura && !gerado()) descartarNovo();
   else Object.assign(estado, { abas: [], aba: '' });
   estado.arquivo = arquivo || null;
   avisar('');
 }
 
 async function mostrarResultado(resultado, origem, formulario) {
+  if (origem === 'historico' && estado.leitura) descartarLeitura();   // os pontos somem ao abrir um aviso do histórico
   estado.resultado = resultado; estado.origem = origem; estado.formulario = formulario;
+  desenharEscolha(); desenharMapaEscolha();
   Object.assign(estado, { envios: [], sugestao: {}, escolha: {} });
   estado.avisos = Object.fromEntries(resultado.municipios.map(m => [m.codigo_ibge, textoAviso(m)]));
   estado.finais = Object.fromEntries(resultado.municipios.filter(m => m.texto_final).map(m => [m.codigo_ibge, m.texto_final]));
@@ -2336,8 +2690,8 @@ async function mostrarResultado(resultado, origem, formulario) {
   await carregarEnvios();
 }
 
-// 1º passo (Conferir): a planilha vai ao servidor, que devolve a conferência e o pacote assinado (15 min).
-// Nada vai para o histórico ainda.
+// 1º passo (Conferir a planilha): a planilha vai ao servidor, que devolve a base para escolher quem será desligado (sem a
+// UC), a conferência da planilha inteira e os pacotes assinados (15 min). Nada vai para o histórico ainda.
 async function enviar(evento) {
   evento.preventDefault();
   const form = { arquivo: estado.arquivo, data: $('data').value, inicio: $('inicio').value, fim: $('fim').value, idioma: $('idioma').value,
@@ -2346,10 +2700,23 @@ async function enviar(evento) {
   const erros = validarFormulario(form);
   if (erros.length) { mostrarErros($('form'), erros); return avisar(erros[0][1], true); }
   limparErros($('form'));
-  if (temResultadoNovo() && !gerado()) descartarNovo();
+  const horario = `${horaTexto(form.inicio)} às ${horaTexto(form.fim)}`;
+  const formulario = { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma,
+    tipo: form.tipo, tipoOutro: form.tipo === 'outro' ? form.tipoOutro : null };
+  // a mesma planilha já lida (e o pacote ainda vale): só a data, o horário ou o tipo mudaram; a escolha fica
+  const l = estado.leitura;
+  if (l && estado.arquivoLido === form.arquivo && estado.aba === estado.abaLida && !gerado()
+      && Date.now() < new Date(l.pacote_vence).getTime() - 60_000) {
+    if (JSON.stringify(formulario) !== estado.formularioLido) descartarConferencia();
+    estado.formulario = formulario;
+    estado.passo = 3;
+    avisar(t('Planilha já lida: escolha quem será desligado e confira.'));
+    return irParaPasso(3);
+  }
+  const selecaoAnterior = l && estado.arquivoLido === form.arquivo ? estado.selecao : null;   // a mesma planilha lida de novo
+  if (temResultadoNovo() && !gerado() || l) { descartarLeitura(); descartarConferencia(); }   // a aba escolhida fica
   estado.enviando = true;
   avisar(t('Lendo a planilha, conferindo as linhas e localizando as comunidades…'));
-  const horario = `${horaTexto(form.inicio)} às ${horaTexto(form.fim)}`;
   const dados = new FormData();
   dados.append('arquivo', form.arquivo);
   dados.append('data', dataTexto(form.data));
@@ -2360,15 +2727,23 @@ async function enviar(evento) {
   if (estado.aba) dados.append('aba', estado.aba);
   try {
     const j = await api('/api/planilha', { method: 'POST', body: dados });
-    const c = j.conferencia;
-    avisar(c.vital_bloqueio.length ? t('Conferência pronta, com bloqueio: há equipamento vital com problema (veja em vermelho).')
-      : t('Conferência pronta: {clientes} cliente(s), {comunidades} comunidade(s). Confira os números e o mapa para gerar o aviso.',
-        { clientes: fmt(c.numeros.clientes), comunidades: fmt(c.numeros.comunidades) }),
-      !!c.vital_bloqueio.length || !j.municipios.length);
+    Object.assign(estado, { leitura: j, arquivoLido: form.arquivo, abaLida: estado.aba, formulario, formularioLido: JSON.stringify(formulario),
+      chaveConferida: null });
+    estado.selecao = selecaoAnterior || novaSelecao(j.base);
+    estado.sel = selecionadas(j.base, estado.selecao);
+    const inativas = j.escolha.conta.inativas_fora;
+    avisar(t('Planilha lida: {lidas} linha(s). Escolha quem será desligado e confira.', { lidas: fmt(j.base.lidas) })
+      + (inativas ? ` ${t('{n} UC(s) inativa(s) não entram no aviso.', { n: fmt(inativas) })}` : ''));
+    // sem as colunas de uma base de clientes, a planilha já é a lista do desligamento (como antes): vai direto à
+    // conferência da planilha inteira; o passo 3 fica aberto para escolher no mapa, se a pessoa quiser
+    if (!ehBaseDeClientes(j.base)) {
+      estado.enviando = false;
+      return await conferirEscolha();
+    }
     estado.passo = 3;
-    await mostrarResultado(j, 'novo', { data: dataTexto(form.data), dataLonga: dataLonga(form.data), horario, idioma: form.idioma,
-      tipo: form.tipo, tipoOutro: form.tipo === 'outro' ? form.tipoOutro : null });
-    document.documentElement.dataset.farol = 'conferencia';
+    irParaPasso(3);
+    document.documentElement.dataset.farol = 'escolha';
+    await carregarTerritoriosEscolha(true);
   } catch (e) {
     if (e.status === 409 && e.dados.abas) {   // mais de uma aba serve: a pessoa escolhe e confere de novo
       estado.abas = e.dados.abas;
@@ -2382,6 +2757,136 @@ async function enviar(evento) {
   } finally {
     estado.enviando = false;
     desenharEstado();
+  }
+}
+
+// ---- Passo 3: escolher quem será desligado. Cada mudança refaz o contador e o mapa (a regra de nucleo/selecao.py);
+// a conferência anterior deixa de valer (a escolha conferida é a que gera o aviso) ----
+function selecaoMudou(tudo = false) {
+  if (temResultadoNovo() && !gerado()) descartarConferencia();
+  estado.sel = selecionadas(estado.leitura.base, estado.selecao);
+  if (tudo) desenharEscolha(); else desenharContaEscolha();
+  desenharMapaEscolha();
+  desenharFunil();
+}
+function alternarComunidade(i) {
+  const c = estado.selecao.comunidades;
+  if (c.has(i)) c.delete(i); else c.add(i);
+  const caixa = $(`sel-comunidade-${i}`);
+  if (caixa) caixa.checked = c.has(i);
+  selecaoMudou();
+}
+const redesenharBlocoMapa = () => $('blocoMapa')?.replaceWith(blocoMapa(estado.leitura.base, estado.selecao));
+// a comunidade da base (índice) que contém o ponto, pelo contorno do IBGE; -1 se nenhuma
+function comunidadeNoPonto(lat, lon) {
+  for (const l of camadaEscolhaComunidades?.getLayers() || []) {
+    const p = l.feature.properties, g = l.feature.geometry;
+    if (p.indice < 0 || !l.getBounds().contains([lat, lon])) continue;
+    const polis = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    if (polis.some(pp => naArea(lat, lon, pp))) return p.indice;
+  }
+  return -1;
+}
+// clique no mapa do passo 3: desenhando, é um canto da área; senão, inclui ou tira a comunidade clicada (pelo contorno,
+// mesmo com a rede fictícia ou um nome por cima)
+function cliqueNoMapa(e) {
+  const s = estado.selecao;
+  if (!emEscolha()) return;
+  if (!s.desenho) {
+    const i = s.modo === 'escolha' ? comunidadeNoPonto(e.latlng.lat, e.latlng.lng) : -1;
+    if (i >= 0) alternarComunidade(i);
+    return;
+  }
+  if (verticesArea(s.poligonos) + s.desenho.length + 1 > MAX_VERTICES_AREA) return avisar(t('A área passou do limite de {n} vértices.', { n: fmt(MAX_VERTICES_AREA) }), true);
+  s.desenho.push([e.latlng.lat, e.latlng.lng]);
+  redesenharBlocoMapa(); desenharContaEscolha(); desenharMapaEscolha();
+}
+const arred6 = v => +v.toFixed(6);   // como nucleo/area.CASAS
+function acaoEscolha(evento) {
+  const b = evento.target.closest('button[data-sel]');
+  if (!b || !estado.selecao) return;
+  const s = estado.selecao, acao = b.dataset.sel;
+  if (acao === 'desenhar') { s.desenho = []; mapa?.closePopup(); redesenharBlocoMapa(); desenharContaEscolha(); desenharMapaEscolha(); $('passosDesenho')?.focus?.(); }
+  else if (acao === 'desfazer') { s.desenho.pop(); redesenharBlocoMapa(); desenharContaEscolha(); desenharMapaEscolha(); }
+  else if (acao === 'cancelar') { s.desenho = null; redesenharBlocoMapa(); desenharContaEscolha(); desenharMapaEscolha(); $('blocoMapa')?.querySelector('button')?.focus(); }
+  else if (acao === 'concluir') {
+    const anel = s.desenho.map(([lat, lon]) => [arred6(lon), arred6(lat)]);
+    s.poligonos.push([[...anel, anel[0]]]);
+    s.desenho = null;
+    selecaoMudou(true);
+    $('blocoMapa')?.querySelector('button')?.focus();
+  } else if (acao === 'remover') { s.poligonos.splice(Number(b.dataset.area), 1); selecaoMudou(true); $('blocoMapa')?.querySelector('button')?.focus(); }
+  else if (acao === 'marcar' || acao === 'desmarcar') {
+    const tipo = b.dataset.tipo, marcados = marcadosDe(s, tipo);
+    if (acao === 'marcar') for (const [i] of itensBuscados(estado.leitura.base, s, tipo)) marcados.add(i);
+    else marcados.clear();
+    desenharItens($(`itens-${tipo}`), estado.leitura.base, s, tipo);
+    selecaoMudou();
+  }
+}
+function editarEscolha(evento) {
+  const alvo = evento.target, s = estado.selecao;
+  if (!s) return;
+  if (alvo.name === 'modoEscolha') {
+    s.modo = alvo.value;
+    if (s.modo === 'planilha') s.desenho = null;
+    selecaoMudou(true);
+    $(`modo-${s.modo}`)?.focus();
+  } else if (alvo.id === 'incluirInativas') {
+    s.incluirInativas = alvo.checked;
+    selecaoMudou(true);
+    $('incluirInativas')?.focus();
+  } else if (alvo.dataset.selTipo) {
+    const marcados = marcadosDe(s, alvo.dataset.selTipo), i = Number(alvo.value);
+    if (alvo.checked) marcados.add(i); else marcados.delete(i);
+    selecaoMudou();
+  }
+}
+function buscarNaEscolha(evento) {
+  const tipo = evento.target.dataset.busca;
+  if (!tipo || !estado.selecao) return;
+  estado.selecao.buscas[tipo] = evento.target.value;
+  desenharItens($(`itens-${tipo}`), estado.leitura.base, estado.selecao, tipo);
+}
+function abrirListaEscolha(evento) {   // lembra quais listas ficaram abertas (o painel é redesenhado ao mudar o modo)
+  const d = evento.target, tipo = d.dataset?.lista;
+  if (!tipo || !estado.selecao) return;
+  if (d.open) estado.selecao.abertos.add(tipo); else estado.selecao.abertos.delete(tipo);
+}
+
+// passo 3 -> 4: o servidor aplica o critério e confere só as escolhidas (o pacote "escolha" leva o critério assinado).
+// A planilha inteira sem as inativas já veio conferida em /api/planilha (com a mesma data e horário).
+async function conferirEscolha() {
+  if (gerado()) return irParaPasso(4);
+  const b = estado.leitura?.base, s = estado.selecao;
+  if (!b) return;
+  const problema = problemaDaSelecao(s, contaSelecao(b, s, estado.sel));
+  if (problema) return avisar(problema, true);
+  const chave = chaveSelecao(b, s);
+  if (temResultadoNovo() && estado.chaveConferida === chave) return irParaPasso(4);
+  const f = estado.formulario;
+  estado.enviando = true;
+  desenharContaEscolha();
+  avisar(t('Conferindo a escolha: as travas e o aviso só para as UCs escolhidas…'));
+  try {
+    const mesmo = s.modo === 'planilha' && !s.incluirInativas && JSON.stringify(f) === estado.formularioLido;
+    const j = mesmo ? estado.leitura : await api('/api/planilha/escolha', { method: 'POST', json: { pacote: estado.leitura.pacote_base,
+      criterio: criterioDe(b, s), data: f.data, horario: f.horario, idioma: f.idioma, tipo: f.tipo, tipo_outro: f.tipoOutro } });
+    const c = j.conferencia;
+    avisar(c.vital_bloqueio.length ? t('Conferência pronta, com bloqueio: há equipamento vital com problema (veja em vermelho).')
+      : t('Conferência pronta: {clientes} cliente(s), {comunidades} comunidade(s). Confira os números e o mapa para gerar o aviso.',
+        { clientes: fmt(c.numeros.clientes), comunidades: fmt(c.numeros.comunidades) }),
+      !!c.vital_bloqueio.length || !j.municipios.length);
+    estado.chaveConferida = chave;
+    estado.passo = 4;
+    await mostrarResultado(j, 'novo', f);
+    document.documentElement.dataset.farol = 'conferencia';
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  } finally {
+    estado.enviando = false;
+    desenharContaEscolha();
+    desenharFunil();
   }
 }
 
@@ -2400,7 +2905,7 @@ async function gerarAviso() {
     avisar(n ? t('Pronto: {n} município(s), {comunidades} comunidade(s). Guardado no histórico (aviso nº {id}).',
       { n, comunidades: fmt(j.municipios.reduce((s, m) => s + m.comunidades.length, 0)), id: j.id })
       : t('Nenhuma UC na área de concessão. Guardado no histórico (aviso nº {id}).', { id: j.id }), !n);
-    estado.passo = 4;
+    estado.passo = 5;
     await mostrarResultado(j, 'novo', f);
     document.documentElement.dataset.farol = 'resultado';
   } catch (e) {
@@ -3176,6 +3681,7 @@ async function trocarIdioma(novo, salvar = true) {
   atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
   for (const id of ['relMes', 'audMes', 'simPeriodo']) $(id).replaceChildren();   // os meses no formato do idioma
   if (estado.resultado) desenharResultado();
+  desenharEscolha();   // o passo 3 (escolher quem será desligado) no idioma novo
   if (ehFarol()) { desenharLegendaEmpresas(); desenharSobreposicao(); }
   await irPara(estado.vista);
 }
@@ -3384,7 +3890,13 @@ async function abrir() {
   $('avancar').addEventListener('click', () => irParaPasso(2));
   $('voltar').addEventListener('click', () => irParaPasso(1));
   $('voltarResultado').addEventListener('click', () => irParaPasso(estado.passo - 1));
-  $('avancarResultado').addEventListener('click', () => gerado() ? irParaPasso(4) : gerarAviso());
+  $('voltarEscolha').addEventListener('click', () => irParaPasso(2));
+  $('conferirEscolha').addEventListener('click', conferirEscolha);
+  $('escolha').addEventListener('change', editarEscolha);
+  $('escolha').addEventListener('input', buscarNaEscolha);
+  $('escolha').addEventListener('click', acaoEscolha);
+  $('escolha').addEventListener('toggle', abrirListaEscolha, true);   // o toggle do <details> não sobe: na captura
+  $('avancarResultado').addEventListener('click', () => gerado() ? irParaPasso(5) : gerarAviso());
   $('novoAviso').addEventListener('click', novoAviso);
   $('verComparativo').addEventListener('click', () => irPara('comparativo'));
   $('comparativo').addEventListener('click', acaoComparativo);

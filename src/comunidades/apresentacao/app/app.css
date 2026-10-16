@@ -259,8 +259,8 @@ legend { font-size: 1rem; }
 .nav-funil button { min-width: 120px; }
 .lugar-resultado:empty { display: none; }
 /* passo 3 (conferir): números, problemas e comunidades; passo 4 (avisos): o texto, o áudio e o PDF */
-.resultado[data-modo="passo3"] .bloco-aviso { display: none; }
-.resultado[data-modo="passo4"] .resumo, .resultado[data-modo="passo4"] .problemas, .resultado[data-modo="passo4"] .listas { display: none; }
+.resultado[data-modo="passo4"] .bloco-aviso { display: none; }
+.resultado[data-modo="passo5"] .resumo, .resultado[data-modo="passo5"] .problemas, .resultado[data-modo="passo5"] .listas { display: none; }
 .bloco-aviso { display: grid; gap: 12px; }
 .municipio .listas { padding: 12px; border-radius: 12px; background: var(--sup2); }
 
@@ -370,8 +370,39 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
 .confirmar:has(input:focus-visible) { outline: 2px solid var(--foco); outline-offset: 2px; }
 .confirmar:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .confirmar:has(input:disabled) input { cursor: not-allowed; }
-.resultado[data-modo="passo4"] .conferencia { display: none; }
+.resultado[data-modo="passo5"] .conferencia { display: none; }
 #motivoGerar:empty { display: none; }
+/* Passo 3: escolher quem será desligado (modo, inativas, mapa e listas de marcar com busca) */
+.escolha { display: grid; gap: 14px; }
+.escolha h2 { margin: 0; font-size: 1.125rem; }
+.escolha h3 { margin: 0; font-size: 1rem; }
+.conta-escolha { margin: 0; font-size: 1.125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.modo-escolha { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; min-width: 0; }
+.modo-escolha legend { font-weight: 600; margin-bottom: 4px; padding: 0; }
+.opcao { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--linha); border-radius: 10px; cursor: pointer; }
+.opcao input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--acento-borda); }
+.opcao:has(input:checked) { border-color: var(--acento-borda); background: color-mix(in srgb, var(--ambar) 12%, var(--sup)); }
+.opcao:has(input:focus-visible) { outline: 2px solid var(--foco); outline-offset: 2px; }
+.tabelas-inativas { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+.inativas details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.bloco-mapa { display: grid; gap: 8px; }
+.areas-escolha { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.areas-escolha li { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.lista-escolha { border: 1px solid var(--linha); border-radius: 12px; padding: 0 12px; }
+.lista-escolha summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.lista-escolha .marcados { font-weight: 400; color: var(--texto2); white-space: pre; }
+.lista-escolha[open] { display: grid; gap: 8px; padding-bottom: 12px; }
+.itens-marcar { display: grid; gap: 2px; max-height: 280px; overflow-y: auto; }
+.item-marcar { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: 8px; cursor: pointer; }
+.item-marcar:hover { background: color-mix(in srgb, var(--ambar) 10%, var(--sup)); }
+.item-marcar input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--acento-borda); }
+.item-marcar span:first-of-type { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.item-marcar:has(input:focus-visible) { outline: 2px solid var(--foco); outline-offset: -2px; }
+.conta-fechada { display: grid; gap: 4px; padding: 10px 12px; border-left: 4px solid var(--ambar); border-radius: 8px;
+  background: color-mix(in srgb, var(--ambar) 8%, var(--sup)); }
+.conta-fechada p { margin: 0; }
+#motivoEscolha:empty { display: none; }
+.desenhando, .desenhando .leaflet-interactive { cursor: crosshair !important; }
 .amostra.uc.corrigida { background: #7A4FD1; }
 
 /* ---------- Quem pediu, tipo, cancelado e auditoria ---------- */

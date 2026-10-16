@@ -77,14 +77,15 @@
 
     <p id="estado" class="estado" role="status" aria-live="polite"></p>
 
-    <!-- Novo desligamento: funil em 4 passos (planilha, quando, conferir e avisos) -->
+    <!-- Novo desligamento: funil em 5 passos (planilha, quando, escolher quem será desligado, conferir e avisos) -->
     <section id="vista-aviso" class="vista" hidden aria-labelledby="titulo">
       <h1 id="titulo" data-t>Novo desligamento programado</h1>
       <ol class="funil" id="funil" aria-label="Passos do aviso" data-t-aria-label="Passos do aviso">
         <li><button type="button" data-passo="1"><span class="num">1</span><span class="rotulo-passo" data-t>Planilha</span></button></li>
         <li><button type="button" data-passo="2"><span class="num">2</span><span class="rotulo-passo" data-t>Quando</span></button></li>
-        <li><button type="button" data-passo="3"><span class="num">3</span><span class="rotulo-passo" data-t>Conferir</span></button></li>
-        <li><button type="button" data-passo="4"><span class="num">4</span><span class="rotulo-passo" data-t>Avisos</span></button></li>
+        <li><button type="button" data-passo="3"><span class="num">3</span><span class="rotulo-passo" data-t>Escolher</span></button></li>
+        <li><button type="button" data-passo="4"><span class="num">4</span><span class="rotulo-passo" data-t>Conferir</span></button></li>
+        <li><button type="button" data-passo="5"><span class="num">5</span><span class="rotulo-passo" data-t>Avisos</span></button></li>
       </ol>
       <form id="form" class="cartao" novalidate>
         <fieldset id="passo-1">
@@ -121,6 +122,17 @@
           <button type="submit" class="prim" id="gerar" hidden>Conferir a planilha</button>
         </div>
       </form>
+      <!-- Passo 3: escolher quem será desligado (a planilha pode ser a base de clientes inteira; nucleo/selecao.py) -->
+      <section id="escolha" class="cartao escolha" hidden aria-labelledby="tituloEscolha">
+        <h2 id="tituloEscolha" data-t>Escolher quem será desligado</h2>
+        <p id="contaEscolha" class="conta-escolha" role="status" aria-live="polite"></p>
+        <div id="escolhaCorpo"></div>
+      </section>
+      <div class="nav-funil" id="navEscolha" hidden>
+        <button type="button" id="voltarEscolha" data-t>Voltar</button>
+        <button type="button" class="prim" id="conferirEscolha" data-t>Conferir a escolha</button>
+      </div>
+      <p class="ajuda" id="motivoEscolha" aria-live="polite"></p>
       <div id="lugar-aviso" class="lugar-resultado"></div>
       <div class="nav-funil" id="navResultado" hidden>
         <button type="button" id="voltarResultado" data-t>Voltar</button>

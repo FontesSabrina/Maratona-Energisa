@@ -1,4 +1,4 @@
-# Roteiro da demonstração (5 minutos)
+# Roteiro da demonstração (5 minutos e meio)
 
 Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádios e histórico fictícios.
 
@@ -16,7 +16,7 @@ Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádi
 
 3. Abra dois terminais: o Mailpit (`data\raw\mailpit\mailpit.exe --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025`) e a API (`uv run uvicorn comunidades.api.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers`).
 4. Deixe abertas no navegador: `http://127.0.0.1:8000` (o Farol) e `http://127.0.0.1:8025` (a caixa de e-mail da rádio).
-5. Planilhas em `testes/planilha/exemplos/demo/`.
+5. Planilhas em `testes/planilha/exemplos/demo/`. A base de clientes no formato da Energisa é a `6_base_clientes.xlsx` (400 UCs fictícias da rede fictícia de Leopoldina, as mesmas colunas da planilha da Energisa). A planilha que a Energisa mandou fica fora do git: se for usá-la, copie para `data/raw/energisa/BASE_CLIENTES.xlsx` (200 linhas, 104 inativas).
 
 ## O roteiro
 
@@ -26,14 +26,15 @@ Tudo com dados de demonstração: território real (IBGE), rede, clientes, rádi
 | 0:15 | Entre como **Operador**. Clique em **Ajuda**. | "Cada perfil vê só o que pode fazer, e o servidor confere tudo." |
 | 0:30 | **Novo aviso** → `3_vital_rejeitado.xlsx` → data, horário, tipo "Poda de árvores" → **Conferir a planilha** | **Momento-chave:** alerta vermelho com as 2 linhas de equipamento vital (uma sem coordenada, uma fora da concessão). "Conferi" e "Gerar aviso" ficam travados. "Quem depende de aparelho para viver não pode ficar sem aviso: o Farol não deixa passar." |
 | 1:15 | Volte ao passo 1 → `2_coordenadas_corrigidas.xlsx` → Conferir | 6 linhas corrigidas em roxo no mapa; os "?" explicam corrigida e rejeitada. Marque **Conferi os números e o mapa** → **Gerar aviso**. |
-| 1:45 | Passo 4 (Avisos): a mensagem pelo modelo da empresa, **Ouvir**, **Baixar PDF para a rádio** | "Solicitado por Operador da EMG (Operador) · código FRL-…": tudo fica na auditoria. |
+| 1:45 | Passo 5 (Avisos): a mensagem pelo modelo da empresa, **Ouvir**, **Baixar PDF para a rádio** | "Solicitado por Operador da EMG (Operador) · código FRL-…": tudo fica na auditoria. |
 | 2:10 | **Enviar para a rádio** → Rádio Leopoldina FM (sugerida pelo alcance), valor por minuto → prévia da economia → **Enviar por e-mail** (confirmação) | Na aba do Mailpit: o e-mail com PDF e MP3 → **Confirmar recebimento** → de volta ao Farol, o envio aparece como "a rádio confirmou". |
-| 3:00 | **Relatórios** → **Custos por rádio** (período: ano): gasto mês a mês com a projeção até dezembro (a conta escrita), orçamento usado, a rádio cara no ranking e o alerta de preço → **Baixar PDF** (rodapé com o seu nome, o código FRL e "página X de Y"; a última página é "Como calculamos") | "Nenhum número inventado: a projeção é o acumulado mais a média dos meses fechados vezes os meses que faltam, e a conta está no relatório." |
-| 3:25 | No mapa, aproxime em Leopoldina → **Mapa de calor (12 meses)** → clique numa comunidade vermelha (ex.: Braúna) | A ficha da comunidade: desligamentos, horas sem luz, rádios que alcançam, último e próximo → **Relatório desta comunidade (PDF)**. "Na hora de gerar um aviso, o Farol avisa em amarelo se a comunidade já teve 3 desligamentos em 30 dias." |
-| 3:40 | Entre como **Admin da empresa**: **Rádios** (alcance por comunidade com o distrito; em **Pedidos de rádio**, o pedido que o Operador fez no envio → **Atender** abre o cadastro já preenchido), **Configurações** (modelo da mensagem com a prévia), **Auditoria** → **Conferir a integridade** | "A auditoria não se apaga nem se edita: cada linha guarda o código da anterior." |
-| 4:20 | Entre como **Consulta**: **Mapa**, um aviso do **Histórico** → **Comprovante (PDF)** e **Linha do tempo** | "Quem só consulta baixa comprovantes e relatórios, mas não gera aviso nem envia nada. A linha do tempo mostra tudo o que aconteceu com o aviso, com nome e perfil." |
-| 4:40 | Entre como **Admin do Farol**: **Empresas** (CNPJ, suspender), **Auditoria geral** | "Várias distribuidoras no mesmo Farol, cada uma isolada." |
-| 5:00 | Fim | "Tudo testado: 23 baterias de teste, a matriz de cada rota com cada perfil e um teste que confere que toda rota que muda, baixa ou gera grava na auditoria." |
+| 3:00 | **Enviar a base da Energisa e desenhar a área do desligamento:** **Novo desligamento** → `6_base_clientes.xlsx` → data e horário → **Conferir a planilha**. O passo 3 **Escolher** abre com "0 de 400 UCs selecionadas" e o aviso "71 UC(s) inativa(s) não entram no aviso" (**Ver quais**: só a contagem por bairro e por circuito). **Desenhar uma área no mapa** → clique em 4 cantos → **Concluir a área**: o contador e o mapa mudam ao vivo. Clique numa comunidade para incluir ou tirar; marque um circuito na lista (os filtros se somam) → **Conferir a escolha** | "A Energisa manda a base inteira de clientes, não a lista de um desligamento. O operador diz quem fica sem luz: desenha a área, clica nas comunidades ou marca circuitos e transformadores. As travas valem só para os escolhidos, e a auditoria guarda o critério com o nome de quem escolheu, nunca a lista de UCs." Na conferência: "Quem será desligado: área desenhada…" e a conta fechada (lidas = inativas fora + não escolhidas + escolhidas). |
+| 3:30 | **Relatórios** → **Custos por rádio** (período: ano): gasto mês a mês com a projeção até dezembro (a conta escrita), orçamento usado, a rádio cara no ranking e o alerta de preço → **Baixar PDF** (rodapé com o seu nome, o código FRL e "página X de Y"; a última página é "Como calculamos") | "Nenhum número inventado: a projeção é o acumulado mais a média dos meses fechados vezes os meses que faltam, e a conta está no relatório." |
+| 3:55 | No mapa, aproxime em Leopoldina → **Mapa de calor (12 meses)** → clique numa comunidade vermelha (ex.: Braúna) | A ficha da comunidade: desligamentos, horas sem luz, rádios que alcançam, último e próximo → **Relatório desta comunidade (PDF)**. "Na hora de gerar um aviso, o Farol avisa em amarelo se a comunidade já teve 3 desligamentos em 30 dias." |
+| 4:10 | Entre como **Admin da empresa**: **Rádios** (alcance por comunidade com o distrito; em **Pedidos de rádio**, o pedido que o Operador fez no envio → **Atender** abre o cadastro já preenchido), **Configurações** (modelo da mensagem com a prévia), **Auditoria** → **Conferir a integridade** | "A auditoria não se apaga nem se edita: cada linha guarda o código da anterior." |
+| 4:50 | Entre como **Consulta**: **Mapa**, um aviso do **Histórico** → **Comprovante (PDF)** e **Linha do tempo** | "Quem só consulta baixa comprovantes e relatórios, mas não gera aviso nem envia nada. A linha do tempo mostra tudo o que aconteceu com o aviso, com nome e perfil." |
+| 5:10 | Entre como **Admin do Farol**: **Empresas** (CNPJ, suspender), **Auditoria geral** | "Várias distribuidoras no mesmo Farol, cada uma isolada." |
+| 5:30 | Fim | "Tudo testado: 23 baterias de teste, a matriz de cada rota com cada perfil e um teste que confere que toda rota que muda, baixa ou gera grava na auditoria." |
 
 ## Se sobrar tempo ou alguém perguntar
 

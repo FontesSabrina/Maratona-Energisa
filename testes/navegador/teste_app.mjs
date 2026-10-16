@@ -189,8 +189,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   const conferencia = await p.avaliar(`({ passo: estado.passo, resumo: ${visivel('resumo')}, form: ${visivel('form')},
     texto: !!document.querySelector('#municipios textarea')?.offsetParent, listas: !!document.querySelector('#municipios .listas')?.offsetParent,
     titulo: $('tituloResultado').textContent })`);
-  conferir('funil: passo 3 (conferir) mostra os números e as comunidades, sem o texto do aviso',
-    conferencia.passo === 3 && conferencia.resumo && !conferencia.form && !conferencia.texto && conferencia.listas && /^Conferir/.test(conferencia.titulo),
+  conferir('funil: passo 4 (conferir) mostra os números e as comunidades, sem o texto do aviso',
+    conferencia.passo === 4 && conferencia.resumo && !conferencia.form && !conferencia.texto && conferencia.listas && /^Conferir/.test(conferencia.titulo),
     JSON.stringify(conferencia));
   const tela = await p.avaliar(`({ avisos: [...document.querySelectorAll('#municipios textarea')].map(t => t.value),
     titulos: [...document.querySelectorAll('.mun-cab h3')].map(h => h.textContent),
@@ -240,8 +240,8 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
     /^Solicitado por Operador da EMG \(Operador\) em \d{2}\/\d{2}\/\d{4} às \d{2}:\d{2} · código de verificação FRL-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}Tipo: Poda de árvores/.test(sol), sol);
   const avisos = await p.avaliar(`({ passo: estado.passo, resumo: ${visivel('resumo')}, texto: !!document.querySelector('#municipios textarea')?.offsetParent,
     novo: ${visivel('novoAviso')}, titulo: $('tituloResultado').textContent })`);
-  conferir('funil: passo 4 (avisos) mostra o texto para a rádio e o "Novo desligamento"',
-    avisos.passo === 4 && !avisos.resumo && avisos.texto && avisos.novo && /^Avisos para a rádio/.test(avisos.titulo), JSON.stringify(avisos));
+  conferir('funil: passo 5 (avisos) mostra o texto para a rádio e o "Novo desligamento"',
+    avisos.passo === 5 && !avisos.resumo && avisos.texto && avisos.novo && /^Avisos para a rádio/.test(avisos.titulo), JSON.stringify(avisos));
   await captura(p, '2c_avisos.png');
   await p.avaliar(`($('verComparativo').click(), 0)`);
   await ate(p, `estado.vista === 'comparativo' && document.querySelector('#comparativo .comp')`);
