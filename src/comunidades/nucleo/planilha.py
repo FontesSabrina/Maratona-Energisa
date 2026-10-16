@@ -12,7 +12,8 @@ Regras:
   seguintes são rejeitadas apontando a linha que entrou;
 - coordenada: nucleo/coordenadas.py (formatos, correção só dentro da concessão, motivos);
 - textos: Unicode normalizado (NFC), sem caracteres de controle e invisíveis, espaços juntados e
-  cortados no limite do campo (40 para classe, transformador e circuito; 80 para o local);
+  cortados no limite do campo (40 para classe, transformador, circuito e conjunto; 60 para o bairro;
+  20 para a situação; 80 para o local);
 - local: de uma coluna de endereço, só o nome da rua (so_rua); URBANO/RURAL não é local;
 - avisos de grupo: coordenada repetida, a mesma coordenada em muitas UCs, ponto isolado (longe de
   todos os outros da planilha).
@@ -34,7 +35,7 @@ from . import coordenadas as K
 from .esquema_planilha import FORMATO, VERSAO, PlanilhaJSON, validar_dados
 from .motivos import Aviso, FormulaSemValor, Motivo
 
-VERSAO_TRADUTOR = "2.0.0"   # muda quando a tradução de um mesmo arquivo puder mudar
+VERSAO_TRADUTOR = "2.1.0"   # muda quando a tradução de um mesmo arquivo puder mudar
 
 # nomes de coluna aceitos para cada campo (depois de minúsculas, sem acento e com "_" no lugar de espaço)
 SINONIMOS = {
@@ -49,6 +50,10 @@ SINONIMOS = {
     "local": ("local_aviso", "imovel", "nome_imovel", "endereco", "local"),
     "transformador": ("transformador", "trafo", "cod_trafo", "codigo_trafo", "cod_transformador"),
     "circuito": ("circuito", "alimentador", "cod_circuito", "codigo_circuito"),
+    # para escolher quem será desligado numa base de clientes (nucleo/selecao.py): conjunto, bairro e situação
+    "conjunto": ("conjunto", "conjunto_eletrico", "cod_conjunto", "codigo_conjunto"),
+    "bairro": ("bairro", "nome_bairro"),
+    "situacao": ("situacao", "situacao_uc", "status_uc", "situacao_cliente"),
     # alternativas à latitude/longitude decimal (nucleo/coordenadas.py)
     "celula": ("coordenada", "coordenadas", "lat_lon", "latlon", "lat_long", "latitude_longitude", "gps"),
     "lat_gms": ("lat_gms", "latitude_gms"),
@@ -69,7 +74,9 @@ NAO = {"nao", "n", "0", "false", "falso", "no", ""}
 MAX_LINHAS = 50_000
 LIMITE_CELULA = 200          # caracteres de uma célula mantida (mais que isso: a linha é rejeitada)
 MAX_UC = 40
-LIMITES_TEXTO = {"classe": 40, "transformador": 40, "circuito": 40, "local": 80}
+LIMITES_TEXTO = {"classe": 40, "transformador": 40, "circuito": 40, "conjunto": 40, "bairro": 60, "situacao": 20, "local": 80}
+# situação da UC na base de clientes que fica fora do aviso por padrão (outro valor ou vazio: ativa, avisada)
+INATIVA = {"inativo", "inativa", "desligado", "desligada"}
 CASAS_PONTO = 7              # casas decimais de lat/lon no JSON (~1 cm), o mesmo em qualquer máquina
 
 
@@ -234,7 +241,7 @@ def _vital(v, avisos: list) -> bool | None:
 def _ponto(numero: int, valores: list, campos: dict, p: Parametros, endereco: bool) -> dict:
     cel = lambda c: valores[campos[c]] if c in campos else None
     pt = {"linha": numero, "uc": None, "lat": None, "lon": None, "equipamento_vital": None, "classe": None, "local": None,
-          "transformador": None, "circuito": None, "status": K.REJEITADA, "motivo": None, "correcao": None,
+          "transformador": None, "circuito": None, "conjunto": None, "bairro": None, "situacao": None, "status": K.REJEITADA, "motivo": None, "correcao": None,
           "original": None, "repete_linha": None, "avisos": []}
     pt["uc"], motivo_uc = _uc(cel("uc")) if not _longa(cel("uc")) else (None, Motivo.UC_INVALIDA)
     if any(_longa(v) for v in valores):
@@ -252,7 +259,7 @@ def _ponto(numero: int, valores: list, campos: dict, p: Parametros, endereco: bo
     avisos = list(c.avisos)
     # sem a coluna: "a confirmar"; com a coluna e a célula vazia: não (como no modelo da planilha)
     pt["equipamento_vital"] = _vital(cel("equipamento_vital"), avisos) if "equipamento_vital" in campos else None
-    for campo in ("classe", "transformador", "circuito"):
+    for campo in ("classe", "transformador", "circuito", "conjunto", "bairro", "situacao"):
         pt[campo] = _texto(cel(campo), LIMITES_TEXTO[campo], avisos)
     local = cel("local")
     if isinstance(local, str) and endereco:
@@ -336,11 +343,18 @@ def montar(campos: dict[str, int], cabecalho: list[str], linhas: list[tuple[int,
 
 
 # ---------- o que o resto do sistema consome ----------
+def inativa(situacao: str | None) -> bool:
+    """A situação da base de clientes diz que a UC está inativa (fica fora do aviso por padrão)."""
+    return situacao is not None and _chave(situacao) in INATIVA
+
+
 def validas(m: PlanilhaJSON) -> pd.DataFrame:
     """As linhas que entram (ok e corrigidas), do JSON validado: LINHA, UC, LAT, LON, VITAL, CLASSE, LOCAL..."""
     return pd.DataFrame([(pt.linha, pt.uc, pt.lat, pt.lon, pt.equipamento_vital, pt.classe or "", pt.local,
-                          pt.transformador, pt.circuito, pt.status) for pt in m.pontos if pt.status != K.REJEITADA],
-                        columns=["LINHA", "UC", "LAT", "LON", "VITAL", "CLASSE", "LOCAL", "TRANSFORMADOR", "CIRCUITO", "STATUS"])
+                          pt.transformador, pt.circuito, pt.conjunto, pt.bairro, pt.situacao, pt.status)
+                         for pt in m.pontos if pt.status != K.REJEITADA],
+                        columns=["LINHA", "UC", "LAT", "LON", "VITAL", "CLASSE", "LOCAL", "TRANSFORMADOR", "CIRCUITO", "CONJUNTO",
+                                 "BAIRRO", "SITUACAO", "STATUS"])
 
 
 def modelo_csv() -> str:

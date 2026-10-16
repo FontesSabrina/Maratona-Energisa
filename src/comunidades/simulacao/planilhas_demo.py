@@ -9,7 +9,9 @@ uma chave cujas UCs ficam todas dentro de Leopoldina, e mudam só o necessário 
                                 alerta vermelho e o aviso não sai;
 4_muitas_rejeicoes.xlsx         cerca de 8% das linhas rejeitadas (sem UC, sem coordenada, coordenada em
                                 texto): acima do limite de 2%, o aviso só sai com justificativa;
-5_maliciosa_macro.xlsx          um .xlsx com macro (vbaProject.bin): recusado na porta, nada é lido.
+5_maliciosa_macro.xlsx          um .xlsx com macro (vbaProject.bin): recusado na porta, nada é lido;
+6_base_clientes.xlsx            a base de clientes no formato da Energisa (simulacao/base_clientes_demo.py):
+                                o operador escolhe quem será desligado (mapa, filtros ou a planilha inteira).
 Reprodutível: a mesma semente dá os mesmos arquivos (as datas internas do .xlsx são fixas).
 Uso: uv run python -m comunidades.simulacao.planilhas_demo
 """
@@ -124,6 +126,9 @@ def gerar() -> dict[str, int]:
 
     _com_macro(PASTA / "1_correta.xlsx", PASTA / "5_maliciosa_macro.xlsx")
     feitos["5_maliciosa_macro.xlsx"] = len(t)
+
+    from . import base_clientes_demo   # aqui: ele usa PASTA e _fixo deste módulo
+    feitos[base_clientes_demo.NOME] = base_clientes_demo.gerar()
     print(f"Chave {chave} (fictícia): {len(t)} UCs")
     return feitos
 

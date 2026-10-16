@@ -1,4 +1,4 @@
-"""Esquema fechado do JSON padronizado da planilha (formato "farol-planilha", versão 2).
+"""Esquema fechado do JSON padronizado da planilha (formato "farol-planilha", versão 3).
 
 Todo JSON da planilha passa por PlanilhaJSON antes de qualquer uso: o que o tradutor acabou de gerar
 e o que volta da tela no segundo passo. Recusa campo a mais, tipo errado (sem conversão automática),
@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .motivos import Aviso, Correcao, Motivo
 
-FORMATO, VERSAO = "farol-planilha", 2
+FORMATO, VERSAO = "farol-planilha", 3   # 3: conjunto, bairro e situação (base de clientes)
 ENVELOPE = {"empresa", "gerado_em", "gerado_por"}
 _FECHADO = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False, frozen=True)
 
@@ -31,6 +31,9 @@ class Ponto(BaseModel):
     local: str | None = Field(default=None, max_length=80)
     transformador: str | None = Field(default=None, max_length=40)
     circuito: str | None = Field(default=None, max_length=40)
+    conjunto: str | None = Field(default=None, max_length=40)
+    bairro: str | None = Field(default=None, max_length=60)
+    situacao: str | None = Field(default=None, max_length=20)   # da base de clientes (ATIVO, INATIVO...)
     status: Literal["ok", "corrigida", "rejeitada"]
     motivo: Motivo | None = None
     correcao: Correcao | None = None
@@ -85,7 +88,7 @@ class Resumo(BaseModel):
 class PlanilhaJSON(BaseModel):
     model_config = _FECHADO
     formato: Literal["farol-planilha"]
-    versao: Literal[2]
+    versao: Literal[3]
     tradutor: str = Field(pattern=r"^\d+\.\d+\.\d+$")
     empresa: str = Field(max_length=120)
     gerado_em: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")

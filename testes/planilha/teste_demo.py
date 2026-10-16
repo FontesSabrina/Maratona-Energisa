@@ -97,7 +97,7 @@ from comunidades.simulacao import planilhas_demo  # noqa: E402
 
 planilhas_demo.gerar()
 de_novo = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(DEMO.glob("*.xlsx"))}
-conferir("gerar as planilhas de novo dá os mesmos arquivos (byte a byte)", hashes == de_novo and len(hashes) == 5,
+conferir("gerar as planilhas de novo dá os mesmos arquivos (byte a byte)", hashes == de_novo and len(hashes) == 6,
          str({k: (hashes.get(k, "")[:8], v[:8]) for k, v in de_novo.items()}))
 
 with conectar() as c:

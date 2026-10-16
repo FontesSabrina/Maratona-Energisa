@@ -33,7 +33,9 @@ NOMES_QUE_CONTAM = set(NOMES_UC + NOMES_VITAL) | {
     "local_aviso", "imovel", "nome_imovel", "endereco", "local", "transformador", "trafo", "cod_trafo", "codigo_trafo",
     "cod_transformador", "circuito", "alimentador", "cod_circuito", "codigo_circuito", "coordenada", "coordenadas",
     "lat_lon", "latlon", "lat_long", "latitude_longitude", "gps", "lat_gms", "latitude_gms", "long_gms", "lon_gms",
-    "longitude_gms", "coord_x", "utm_x", "x_utm", "easting", "coord_y", "utm_y", "y_utm", "northing"}
+    "longitude_gms", "coord_x", "utm_x", "x_utm", "easting", "coord_y", "utm_y", "y_utm", "northing",
+    "conjunto", "conjunto_eletrico", "cod_conjunto", "codigo_conjunto", "bairro", "nome_bairro",
+    "situacao", "situacao_uc", "status_uc", "situacao_cliente"}
 VITAL_SIM = {"sim", "s", "1", "true", "verdadeiro", "x", "yes", "y"}
 MAX_UC, MAX_CELULA = 40, 200
 

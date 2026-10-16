@@ -84,11 +84,12 @@ conferir("Postes: local vem da rua do ENDERECO; transformador e circuito mantido
          repr(jp.pontos[0]))
 conferir("Modelo: local URBANO/RURAL não vira local", all(p.local is None for p in jm.pontos))
 texto_json = E.texto(jp)
-vazou = [c for c in ("NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA", "BAIRRO") if c in texto_json]
+# o bairro é lido desde a escolha de quem será desligado (filtro por bairro, nucleo/selecao.py)
+vazou = [c for c in ("NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA") if c in texto_json]
 vazou += [v for r in lp for v in [r[cp.index("NOME")]] if str(v) in texto_json]
 conferir("JSON da aba Postes: nada de NOME, NUM_CASA, MEDIDOR, NUM_CONTA (nem os valores do NOME)", not vazou, str(vazou[:3]))
 conferir("colunas reconhecidas na aba Postes", jp.colunas == ("uc", "latitude", "longitude", "equipamento_vital", "classe",
-         "local", "transformador", "circuito", "lat_gms", "lon_gms", "coord_x", "coord_y"), str(jp.colunas))
+         "local", "transformador", "circuito", "conjunto", "bairro", "situacao", "lat_gms", "lon_gms", "coord_x", "coord_y"), str(jp.colunas))
 jc = montar(*aba("planilha_postes_certo.xlsx", "Postes"))
 conferir("planilha_postes_certo: NUMCDC como UC, vital a confirmar (sem a coluna)", jc.resumo.ok == 200
          and jc.resumo.equipamento_vital.a_confirmar == 200 and jc.pontos[0].uc == "872246", jc.resumo.model_dump_json())
@@ -139,7 +140,7 @@ adulterado("UC duas vezes", lambda d: d["pontos"][1].update(uc=d["pontos"][0]["u
 adulterado("linhas fora de ordem", lambda d: d["pontos"].reverse())
 adulterado("latitude fora dos limites", lambda d: d["pontos"][0].update(lat=95.0))
 adulterado("sha256 inválido", lambda d: d["arquivo"].update(sha256="xyz"))
-adulterado("versão do formato diferente", lambda d: d.update(versao=3))
+adulterado("versão do formato diferente", lambda d: d.update(versao=2))
 adulterado("data em formato livre", lambda d: d.update(gerado_em="ontem"))
 adulterado("texto que não é JSON", None, "<script>alert(1)</script>")
 

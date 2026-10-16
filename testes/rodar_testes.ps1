@@ -18,6 +18,7 @@ $testes = @(
     @{ Nome = "Dupla conferência";             Cmd = "uv run python -W ignore testes/planilha/teste_conferencia.py" },
     @{ Nome = "Travas e pacote assinado";      Cmd = "uv run python -W ignore testes/planilha/teste_travas.py" },
     @{ Nome = "Planilhas de demonstração";     Cmd = "uv run python -W ignore testes/planilha/teste_demo.py" },
+    @{ Nome = "Base de clientes (Energisa)";   Cmd = "uv run python -W ignore testes/planilha/teste_base_clientes.py" },
     @{ Nome = "Planilha (endereço, sinônimos)"; Cmd = "uv run python -W ignore testes/nucleo/teste_planilha.py" },
     @{ Nome = "Proxy (IP e https)";            Cmd = "uv run python -W ignore testes/api/teste_proxy.py" },
     @{ Nome = "Leitura segura (zip, macro)";   Cmd = "uv run python -W ignore testes/api/teste_leitura.py" },
