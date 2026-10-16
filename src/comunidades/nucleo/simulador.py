@@ -1,7 +1,7 @@
 """Simulador de economia com rádio (Relatórios). Puro, em Decimal, e nunca inventa número.
 
 - Redução do tempo no ar: a média real da empresa, dos avisos do período cuja planilha trouxe a coluna local
-  (aviso de hoje, fazenda a fazenda): (soma dos segundos do aviso de hoje - soma dos segundos do aviso do Farol)
+  (aviso de hoje, fazenda a fazenda): (soma dos segundos do aviso de hoje - soma dos segundos do aviso do Norte)
   / soma dos segundos do aviso de hoje. Sem esses avisos, a medição de validação (44 s -> 14 s, 68,2%), com o
   rótulo "medição de validação".
 - Economia mensal = gasto mensal com rádio x parte cobrada por tempo x redução; anual = mensal x 12. Para o
@@ -118,7 +118,7 @@ def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: di
         {"titulo": "Já economizado de fato", "tipo": "texto",
          "texto": f"{brl(ja['calculada'])} calculada + {brl(ja['informada'])} informada = {brl(ja['total'])}, em {ja['envios']} envio(s) do período."},
         {"titulo": "Tempo no ar usado na redução", "tipo": "texto",
-         "texto": f"Aviso tradicional: {r['segundos_hoje']} s; aviso do Farol: {r['segundos_farol']} s."},
+         "texto": f"Aviso tradicional: {r['segundos_hoje']} s; aviso do Norte: {r['segundos_farol']} s."},
     ]
     contas = [f"Conta ({c['faixa']}, {c['cenario']}): {brl(c['gasto'])} x {pct(c['pct'])} x {pct(red * 100)} = {brl(c['mensal'])} por mês; "
               f"x 12 = {brl(c['anual'])} por ano." for c in cs]
@@ -134,7 +134,7 @@ def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: di
     return {"tipo": "simulador", "titulo": "Simulador de economia com rádio", "resumo": resumo, "alertas": alertas, "secoes": secoes,
             "reducao": {k: (str(v) if isinstance(v, Decimal) else v) for k, v in r.items()}, "numeros": numeros,
             "como_calculamos": [
-                "Redução = (segundos do aviso tradicional estimado - segundos do aviso do Farol) / segundos do aviso tradicional, somando os "
+                "Redução = (segundos do aviso tradicional estimado - segundos do aviso do Norte) / segundos do aviso tradicional, somando os "
                 "avisos do período cuja planilha trouxe a coluna local (o aviso de hoje, fazenda a fazenda).",
                 "Sem esses avisos no período, vale a medição de validação (Leopoldina): 44 s -> 14 s, redução de 68,2%.",
                 "Economia mensal = gasto mensal com rádio x parte do gasto cobrada por tempo x redução. Economia anual = economia mensal x 12.",

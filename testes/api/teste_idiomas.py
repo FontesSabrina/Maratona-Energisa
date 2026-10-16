@@ -144,7 +144,7 @@ conferir("comprovante no idioma do aviso (inglês)", "Receipt of notice no." in 
          comp_en[:300])
 
 # e-mail e página de confirmação (o que o servidor manda à rádio), nos três idiomas
-mail = {i: email_radio.mensagem(remetente="Farol <a@farol.example>", destino="r@example.com", municipio="Leopoldina", uf="MG", data=d,
+mail = {i: email_radio.mensagem(remetente="Norte <a@farol.example>", destino="r@example.com", municipio="Leopoldina", uf="MG", data=d,
                                 horario=h, empresa="Energisa", texto="Texto", codigo="FRL-1", link_confirmar="https://x/confirmar/t",
                                 pdf=("a.pdf", b"%PDF"), mp3=None, aviso_ficticio="Demonstração.", idioma=i)
         for i, d, h in (("pt-BR", "20/11", "8h às 14h"), ("en", "November 20", "8:00 a.m. to 2:00 p.m."), ("es", "20/11", "8:00 a 14:00"))}

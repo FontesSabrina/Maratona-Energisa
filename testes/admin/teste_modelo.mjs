@@ -93,7 +93,7 @@ for (const u of D.demo.usuarios) {
 {
   const [e1, e2] = D.demo.empresas.map(e => e.id);
   const farol = { perfil: 'admin_farol', empresaId: null }, adm1 = { perfil: 'admin_empresa', empresaId: e1 };
-  for (const a of ['ver_empresas', 'criar_empresa', 'editar_empresa', 'suspender_empresa', 'ver_registro']) ok(M.pode(farol, a, e2), `Admin do Farol: ${a}`);
+  for (const a of ['ver_empresas', 'criar_empresa', 'editar_empresa', 'suspender_empresa', 'ver_registro']) ok(M.pode(farol, a, e2), `Admin do Norte: ${a}`);
   for (const a of ['ver_usuarios', 'editar_usuario', 'ver_configuracao', 'editar_configuracao', 'gerar_toml']) {
     ok(M.pode(adm1, a, e1), `Admin da empresa: ${a} na própria`);
     ok(!M.pode(adm1, a, e2), `Admin da empresa: ${a} em outra empresa (negado)`);
@@ -150,7 +150,7 @@ for (const u of D.demo.usuarios) {
   igual(M.alternarBloqueio(s, criado.id, agora).ok, false, 'agora o novo admin é o último');
 
   M.entrar(s, 'admin_farol', null, agora);
-  ok(M.alternarEmpresa(s, e1.id, agora).ok, 'Admin do Farol suspende empresa');
+  ok(M.alternarEmpresa(s, e1.id, agora).ok, 'Admin do Norte suspende empresa');
   ok(s.usuarios.filter(u => u.empresaId === e1.id).every(u => M.situacaoUsuario(u, e1).codigo === 'bloqueado'), 'empresa suspensa: todos bloqueados');
   ok(M.alternarEmpresa(s, e1.id, agora).ok, 'reativa empresa');
 }
@@ -166,7 +166,7 @@ for (const u of D.demo.usuarios) {
   const visivel = M.registroVisivel(s);
   ok(visivel.every(r => r.empresaId === e1), 'admin da empresa só vê o registro da própria empresa');
   M.entrar(s, 'admin_farol', null, agora);
-  ok(M.registroVisivel(s).some(r => r.acao === 'criou empresa' && r.alvo.includes('<img')), 'Admin do Farol vê tudo, com o alvo em texto');
+  ok(M.registroVisivel(s).some(r => r.acao === 'criou empresa' && r.alvo.includes('<img')), 'Admin do Norte vê tudo, com o alvo em texto');
   ok(M.registroTexto(M.registroVisivel(s)).includes('alterou configuração'), 'registro em texto');
 }
 

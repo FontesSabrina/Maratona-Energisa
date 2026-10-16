@@ -1,4 +1,4 @@
-// Mapa das empresas (Admin do Farol, desde 15/10/2026): áreas com cor e hachura, sigla no meio, legenda que liga e desliga,
+// Mapa das empresas (Admin do Norte, desde 15/10/2026): áreas com cor e hachura, sigla no meio, legenda que liga e desliga,
 // empresa sem área com o botão de cadastrar, editor da área (lista do estado, busca, resumo e confirmação), sobreposição,
 // ficha da empresa (só cadastro e contagens), nada operacional pedido ao servidor, celular e inglês; e os outros perfis
 // continuam com o mapa operacional.
@@ -21,7 +21,7 @@ async function entrar(p, email) {
   await espera(500);
 }
 
-// ---------- Admin do Farol ----------
+// ---------- Admin do Norte ----------
 {
   const pedidos = [];
   const p = await abrir(`${BASE}/`, { largura: 1280, altura: 800, antesDeNavegar: async pg => {
@@ -30,7 +30,7 @@ async function entrar(p, email) {
   } });
   await entrar(p, 'admin@farol.example');
   await ate(p, `estado.mapaEmpresas && document.querySelector('#listaLegendaEmpresas [data-empresa-mapa]')`);
-  conferir('o mapa do Admin do Farol é o das empresas (legenda das empresas; a operacional escondida)',
+  conferir('o mapa do Admin do Norte é o das empresas (legenda das empresas; a operacional escondida)',
     await p.avaliar(`!$('legendaEmpresas').hidden && $('legenda').hidden && $('mapa').getAttribute('aria-label').startsWith('Mapa das empresas')`));
   const emg = await p.avaliar(`(() => { const li = [...document.querySelectorAll('.legenda-empresa')].find(l => l.textContent.includes('EMG'));
     return li && li.textContent; })()`);

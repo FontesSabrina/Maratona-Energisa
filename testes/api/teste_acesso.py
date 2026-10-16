@@ -162,12 +162,12 @@ conferir("bloquear usuário encerra a sessão dele", r.status_code == 200 and no
 _, r = entrar("novo@emg.example", temp_novo)
 conferir("usuário bloqueado não entra (403)", r.status_code == 403, r.text[:100])
 
-# ---------- 6. Admin do Farol: empresas e isolamento ----------
+# ---------- 6. Admin do Norte: empresas e isolamento ----------
 far = clientes["admin_farol"]
 r = far.post("/api/empresas", json={"nome": "Cooperativa Teste", "sigla": "CTE", "dominio": "cte.example",
                                     "admin_nome": "Admin CTE", "admin_email": "admin@cte.example"})
 temp_cte = r.json().get("senha_temporaria", "")
-conferir("Admin do Farol cadastra empresa com o primeiro admin", r.status_code == 200 and temp_cte, r.text[:120])
+conferir("Admin do Norte cadastra empresa com o primeiro admin", r.status_code == 200 and temp_cte, r.text[:120])
 cte, _ = entrar("admin@cte.example", temp_cte)
 cte.post("/api/senha", json={"atual": temp_cte, "nova": NOVA})
 conferir("outra empresa não vê o histórico da EMG", cte.get("/api/historico").json()["avisos"] == [])
@@ -176,7 +176,7 @@ conferir("outra empresa não abre aviso da EMG (404)", cte.get(f"/api/historico/
 conferir("outra empresa: dashboard vazio (não vê os avisos da EMG)", cte.get("/api/painel").json()["totais"]["avisos"] == 0)
 reg_far = far.get("/api/registro").json()["registro"]
 reg_adm = adm.get("/api/registro").json()["registro"]
-conferir("registro: Admin do Farol vê tudo; Admin da empresa só a dele",
+conferir("registro: Admin do Norte vê tudo; Admin da empresa só a dele",
          any(x["empresa"] == "CTE" for x in reg_far) and all(x["empresa"] in ("EMG", None) for x in reg_adm) and any(x["acao"] == "gerou aviso" for x in reg_adm))
 
 # ---------- 7. Bloqueio, sessão e origem ----------

@@ -94,7 +94,7 @@ const idioma = (p, x) => p.avaliar(`trocarIdioma('${x}', false).then(() => 0)`);
 
 // ---------- cada perfil: todas as vistas × temas × idiomas (1280×800) ----------
 for (const email of PERFIS) {
-  const perfil = email.split('@')[0] + (email.includes('farol') ? ' (Farol)' : '');
+  const perfil = email.split('@')[0] + (email.includes('farol') ? ' (Norte)' : '');
   const p = await abrir(`${BASE}/`, { largura: 1280, altura: 800 });
   await entrar(p, email);
   const vistas = await vistasDe(p);

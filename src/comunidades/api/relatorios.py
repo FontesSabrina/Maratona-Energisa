@@ -3,7 +3,7 @@
 Cada relatório é um documento (nucleo/relatorios.py) que vira tela (JSON), PDF (apresentacao/pdf_relatorio.py)
 e CSV protegido contra fórmula. Regras de todos (H0):
 - Permissões: Admin da empresa e Operador geram, baixam e enviam; Consulta só gera e baixa; auditoria só o
-  Admin da empresa; acessos de todas as empresas só o Admin do Farol (sem envio: ele não tem domínio de empresa).
+  Admin da empresa; acessos de todas as empresas só o Admin do Norte (sem envio: ele não tem domínio de empresa).
 - Toda geração (tela, PDF, CSV), download de segunda via e envio vira linha da auditoria, com quem, o tipo, os
   filtros, os destinatários e o SHA-256 do PDF. O código de verificação (FRL-...) sai do hash da linha "gerou".
 - Segunda via: cada PDF fica guardado cifrado (AES-256-GCM, a mesma chave dos arquivos das rádios); baixar a via

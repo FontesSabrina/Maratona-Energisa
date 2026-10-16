@@ -36,7 +36,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[2]
 SMTP, WEB = 1126, 8126
 os.environ.update({"FAROL_ESQUEMA": "teste_relatorios_h", "FAROL_SMTP_HOST": "127.0.0.1", "FAROL_SMTP_PORTA": str(SMTP),
-                   "FAROL_SMTP_SEGURANCA": "nenhuma", "FAROL_SMTP_REMETENTE": "Farol <avisos@farol.example>",
+                   "FAROL_SMTP_SEGURANCA": "nenhuma", "FAROL_SMTP_REMETENTE": "Norte <avisos@farol.example>",
                    "FAROL_URL_PUBLICA": "http://farol.teste",
                    "FAROL_CHAVE_ARQUIVOS": base64.urlsafe_b64encode(os.urandom(32)).decode()})
 os.environ.pop("FAROL_EMAIL", None)
@@ -174,7 +174,7 @@ try:
     casos = [("mensal", op, "Operador da EMG (Operador)", f"mes={mes}"), ("custos", con, "Consulta da EMG (Consulta)", f"ano={hoje.year}"),
              ("comunidades", op, "Operador da EMG (Operador)", f"ano={hoje.year}"), ("prazos", adm, "Admin da EMG (Admin da empresa)", f"mes={mes}"),
              ("comunidade", con, "Consulta da EMG (Consulta)", q_com), ("auditoria", adm, "Admin da EMG (Admin da empresa)", f"mes={mes}"),
-             ("acessos", far, "Admin do Farol (Admin do Farol)", f"mes={mes}")]
+             ("acessos", far, "Admin do Norte (Admin do Norte)", f"mes={mes}")]
     pdfs, arquivos = {}, []
     for tipo, cl, quem, q in casos:
         j = cl.get(f"/api/relatorios/{tipo}?{q}")
@@ -220,7 +220,7 @@ try:
     via_aud = next(v for v in adm.get("/api/relatorios/vias").json()["vias"] if v["tipo"] == "auditoria")
     conferir("Consulta não vê nem baixa a via da auditoria (404)", all(v["tipo"] != "auditoria" for v in con.get("/api/relatorios/vias").json()["vias"])
              and con.get(f"/api/relatorios/vias/{via_aud['id']}.pdf").status_code == 404)
-    conferir("outra empresa não baixa a via (Admin do Farol: 404)", far.get(f"/api/relatorios/vias/{via['id']}.pdf").status_code == 404)
+    conferir("outra empresa não baixa a via (Admin do Norte: 404)", far.get(f"/api/relatorios/vias/{via['id']}.pdf").status_code == 404)
 
     # ---------- 5. Enviar ----------
     corpo = {"filtros": {"mes": mes}, "destinatarios": ["diretoria@emg.example", "Financeiro@EMG.example"]}

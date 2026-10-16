@@ -1,5 +1,5 @@
 'use strict';
-// Farol: tela do aviso de desligamento. Entrar, enviar a planilha, ver os municípios e as
+// Norte: tela do aviso de desligamento. Entrar, enviar a planilha, ver os municípios e as
 // comunidades no mapa, gerar o roteiro (PDF) para a rádio, consultar o histórico e administrar
 // usuários e empresas, conforme o perfil. Só fala com a própria API; quem decide o que cada perfil
 // pode é o servidor (a tela só esconde o que não serve ao perfil).
@@ -42,7 +42,7 @@ const estado = {
   territorios: {},         // codigo_ibge -> GeoJSON das comunidades
   audios: {},              // codigo_ibge -> { texto, url (blob local), segundos }: o MP3 do texto atual
   audiosHoje: {},          // codigo_ibge -> { url, segundos }: o MP3 do aviso de hoje (comparativo)
-  mapaEmpresas: null,      // Admin do Farol: empresas, áreas (códigos), contornos e sobreposição (só cadastro e contagens)
+  mapaEmpresas: null,      // Admin do Norte: empresas, áreas (códigos), contornos e sobreposição (só cadastro e contagens)
   empresasOcultas: new Set(), legendaEmpresasAberta: true, fichaEmpresa: null,
   area: null,              // editor da área de atuação: { empresaId, sigla, codigos: Set, uf, busca, resumo }
   municipiosIbge: null, ufGeo: null,
@@ -92,7 +92,7 @@ const menuAtual = v => vistasDoPerfil().some(([x]) => x === v) ? v : RELATORIOS.
 const AJUDA = {
   operador: [
     ['Novo aviso', 'Escolha a planilha das UCs afetadas (.xlsx ou .csv, até 10 MB) e, no passo 2, a data, o horário e o tipo do desligamento.'],
-    ['Conferir', 'O Farol lê a planilha, corrige o que é seguro corrigir (em roxo no mapa) e mostra os números. Vermelho bloqueia (equipamento vital com problema); amarelo pede atenção. Marque "Conferi os números e o mapa" e gere o aviso.'],
+    ['Conferir', 'O Norte lê a planilha, corrige o que é seguro corrigir (em roxo no mapa) e mostra os números. Vermelho bloqueia (equipamento vital com problema); amarelo pede atenção. Marque "Conferi os números e o mapa" e gere o aviso.'],
     ['Avisos', 'Ajuste a mensagem da rádio, ouça, baixe o PDF e envie à rádio da lista (e-mail com confirmação, WhatsApp ou cópia), informando o valor daquele envio. Se faltar a rádio, use "Pedir cadastro de rádio": o Admin da empresa cadastra.'],
     ['Histórico e relatórios', 'No histórico ficam os avisos, os envios e os comprovantes; mude a data ou cancele quando preciso. Os relatórios mostram custo, economia e prazo do mês.'],
   ],
@@ -115,12 +115,12 @@ AJUDA.admin_empresa = [...AJUDA.operador,
 const DICAS = {
   uc: 'UC (unidade consumidora): cada ligação de energia (uma casa, um sítio, um comércio). A planilha traz uma linha por UC; o número nunca aparece na tela.',
   vital: 'Equipamento vital: alguém na UC depende de aparelho elétrico para viver. O aviso precisa de 5 dias úteis de antecedência (REN 1.000/2021, art. 436), e qualquer problema nessas linhas bloqueia o aviso.',
-  corrigida: 'Corrigida: latitude e longitude vieram trocadas ou sem o sinal; o Farol corrigiu só porque o ponto corrigido cai na área de concessão. Fica em roxo no mapa.',
+  corrigida: 'Corrigida: latitude e longitude vieram trocadas ou sem o sinal; o Norte corrigiu só porque o ponto corrigido cai na área de concessão. Fica em roxo no mapa.',
   rejeitada: 'Rejeitada: a linha não entra no aviso (sem UC, sem coordenada, fora da concessão, UC repetida…). O motivo aparece pela linha, sem a UC.',
   limite: 'Limite de rejeição: se mais linhas que o limite da empresa (padrão 2%) forem rejeitadas, o aviso só sai com uma justificativa, que fica na auditoria.',
   vizinha: 'Localidade vizinha: um pedaço pequeno de outra comunidade ficou na área; o aviso cita "localidades vizinhas" em vez de nomear uma por uma.',
   codigo: 'Código de verificação (FRL-…): sai do registro da auditoria que guardou o aviso ou o relatório. Com ele, a empresa confere quem gerou e quando, e que nada foi mudado.',
-  economia: 'Economia calculada: pelo tempo no ar (aviso de hoje, fazenda a fazenda, menos a mensagem do Farol) vezes o valor por minuto. Informada: o custo antigo que quem enviou digitou. Sem um dos dois, o Farol não estima.',
+  economia: 'Economia calculada: pelo tempo no ar (aviso de hoje, fazenda a fazenda, menos a mensagem do Norte) vezes o valor por minuto. Informada: o custo antigo que quem enviou digitou. Sem um dos dois, o Norte não estima.',
 };
 
 // a mensagem pelo modelo (a mesma regra de nucleo/mensagem.py), para a prévia nas configurações
@@ -1043,7 +1043,7 @@ function desenharComparativo() {
       no('h3', { texto: titulo }), no('p', { classe: 'comp-numeros', texto: numeros }), corpo,
       acao && temAudio() && (acao === 'farol' || vozDoIdioma('pt-BR')) ? no('button', { type: 'button', 'data-comp': acao, 'data-codigo': cod, texto: t('Ouvir') }) : null,
       acao ? no('div', { id: `tocador-${acao}-${cod}`, classe: 'tocador' }) : null);
-    // o aviso de hoje é sempre em português; o do Farol, no idioma do aviso (lang para o leitor de tela)
+    // o aviso de hoje é sempre em português; o do Norte, no idioma do aviso (lang para o leitor de tela)
     const caixa = (txt, lang) => no('div', { classe: 'texto-longo', tabindex: '0', texto: txt, lang });
     const ladoHoje = hoje
       ? lado('hoje', t('Hoje: fazenda a fazenda'), t('{locais} locais · {palavras} palavras · cerca de {tempo} no ar',
@@ -1052,12 +1052,12 @@ function desenharComparativo() {
         hoje.texto ? 'hoje' : null)
       : lado('hoje', t('Hoje: fazenda a fazenda'), t('sem o aviso de hoje'),
         no('p', { classe: 'ajuda', texto: t('A planilha não trouxe a coluna local (o que o aviso de hoje cita para cada UC: o imóvel no rural, a rua no urbano). Sem ela não dá para montar o aviso de hoje.') }), null);
-    const ladoFarol = lado('farol', t('Farol: por comunidade'), t('{comunidades} comunidades · {palavras} palavras · cerca de {tempo} no ar',
+    const ladoFarol = lado('farol', t('Norte: por comunidade'), t('{comunidades} comunidades · {palavras} palavras · cerca de {tempo} no ar',
       { comunidades: fmt(m.comunidades.length), palavras: fmt(palavras(texto)), tempo: tempoNoAr(seg) }), caixa(texto, idiomaDoAviso()), 'farol');
-    const barras = hoje ? no('div', { classe: 'comp-barras', role: 'img', 'aria-label': t('Hoje {hoje}, Farol {farol}', { hoje: tempoNoAr(hoje.segundos), farol: tempoNoAr(seg) }) },
+    const barras = hoje ? no('div', { classe: 'comp-barras', role: 'img', 'aria-label': t('Hoje {hoje}, Norte {farol}', { hoje: tempoNoAr(hoje.segundos), farol: tempoNoAr(seg) }) },
       no('span', { classe: 'comp-rotulo', texto: t('Hoje') }), no('span', { classe: 'comp-barra hoje' }, no('span', { estilo: { width: '100%' } })),
       no('span', { classe: 'comp-tempo', texto: tempoNoAr(hoje.segundos) }),
-      no('span', { classe: 'comp-rotulo', texto: 'Farol' }),
+      no('span', { classe: 'comp-rotulo', texto: 'Norte' }),
       no('span', { classe: 'comp-barra farol' }, no('span', { estilo: { width: `${Math.max(1, Math.round(100 * seg / Math.max(1, hoje.segundos)))}%` } })),
       no('span', { classe: 'comp-tempo', texto: tempoNoAr(seg) })) : null;
     return no('article', { classe: 'cartao comp', 'data-codigo': cod },
@@ -1302,7 +1302,7 @@ function desenharEmpresas() {
     no('tbody', {}, linhas))));
 }
 
-// ---- Mapa das empresas e área de atuação (Admin do Farol; só cadastro, área e contagens) ----
+// ---- Mapa das empresas e área de atuação (Admin do Norte; só cadastro, área e contagens) ----
 // cada empresa: uma cor e uma hachura diferentes (nunca só a cor); a suspensa, cinza tracejado
 const COR_EMPRESA = ['#1663C7', '#B07800', '#1B7D4B', '#7A4FD1', '#C2410C', '#0E7490', '#BE185D', '#4D7C0F'];
 const HACHURA = ['diagonal', 'contra', 'horizontal', 'vertical', 'xadrez', 'pontos', 'cruz', 'larga'];
@@ -2978,7 +2978,7 @@ async function gerarAudio(codigo, m) {
   return estado.audios[codigo];
 }
 
-// áudio do comparativo: o do Farol é o mesmo de "Avisos"; o de hoje pede o limite maior (é bem mais longo)
+// áudio do comparativo: o do Norte é o mesmo de "Avisos"; o de hoje pede o limite maior (é bem mais longo)
 async function audioHoje(codigo, m) {
   if (estado.audiosHoje[codigo]) return estado.audiosHoje[codigo];
   avisar(t('Gerando o áudio do aviso de hoje de {nome} (é longo: pode levar um tempo)…', { nome: m.nome }));
@@ -2998,7 +2998,7 @@ async function acaoComparativo(evento) {
   try {
     const a = b.dataset.comp === 'hoje' ? await audioHoje(codigo, m) : await gerarAudio(codigo, m);
     const lugar = $(`tocador-${b.dataset.comp}-${codigo}`);
-    lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': t(b.dataset.comp === 'hoje' ? 'Áudio do aviso de hoje' : 'Áudio do aviso do Farol') }),
+    lugar.replaceChildren(no('audio', { controls: true, src: a.url, preload: 'auto', 'aria-label': t(b.dataset.comp === 'hoje' ? 'Áudio do aviso de hoje' : 'Áudio do aviso do Norte') }),
       no('span', { classe: 'ajuda', texto: t('{tempo} de áudio (voz sintetizada)', { tempo: tempoNoAr(Math.round(a.segundos)) }) }));
     lugar.querySelector('audio').play().catch(() => {});
   } catch (e) {
@@ -3232,7 +3232,7 @@ async function baixarVia(evento) {
   }
 }
 
-// auditoria: o relatório da empresa (Admin da empresa) ou o geral de acessos (Admin do Farol)
+// auditoria: o relatório da empresa (Admin da empresa) ou o geral de acessos (Admin do Norte)
 function prepararAuditoria() {
   const geral = pode('auditoria_geral');
   $('formAuditoria').hidden = !geral && !pode('relatorio_auditoria');
@@ -3648,7 +3648,7 @@ function aplicarTextos() {
   for (const [atributo, dado] of [['placeholder', 'tPlaceholder'], ['aria-label', 'tAriaLabel']])
     for (const e of document.querySelectorAll(`[data-t-${atributo}]`)) e.setAttribute(atributo, t(e.dataset[dado]));
   document.documentElement.lang = IDIOMA;
-  document.title = t('Farol · Aviso de desligamento');
+  document.title = t('Norte · Aviso de desligamento');
 }
 
 // os tipos de desligamento vêm do servidor no idioma da tela
@@ -3730,7 +3730,7 @@ const vozLocal = () => ('speechSynthesis' in window ? speechSynthesis.getVoices(
 function desenharVoz() {
   const tem = !!vozLocal();
   $('a11yLer').disabled = !tem;
-  $('a11yVoz').textContent = tem ? t('A leitura usa a voz do próprio aparelho: nada é enviado ao Farol.')
+  $('a11yVoz').textContent = tem ? t('A leitura usa a voz do próprio aparelho: nada é enviado ao Norte.')
     : t('Nenhuma voz instalada neste aparelho. Windows: Configurações > Hora e idioma > Fala > Adicionar vozes. Android: Configurações > Acessibilidade > Saída de texto em voz (baixe os dados de voz). iPhone e iPad: Ajustes > Acessibilidade > Conteúdo Falado > Vozes.');
 }
 function lerEmVozAlta() {
@@ -3752,7 +3752,7 @@ function abrirDeclaracao() {
   estado.painelA11y = false; desenharA11y();
   $('caixaDeclaracao').hidden = false;
   $('relatoEnviar').disabled = !estado.usuario;
-  mensagemEm('estadoRelato', estado.usuario ? '' : t('Entre no Farol para enviar um relato.'));
+  mensagemEm('estadoRelato', estado.usuario ? '' : t('Entre no Norte para enviar um relato.'));
   $('declTitulo').focus();
 }
 async function enviarRelato(evento) {

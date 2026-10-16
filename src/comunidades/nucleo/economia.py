@@ -1,12 +1,12 @@
 """Custo do envio à rádio e economia. Puro, em centavos (Decimal), e nunca inventa número.
 
-- Por minuto no ar: custo = segundos do aviso do Farol x valor por minuto / 60. Se há o aviso de hoje
+- Por minuto no ar: custo = segundos do aviso do Norte x valor por minuto / 60. Se há o aviso de hoje
   (fazenda a fazenda, da coluna local da planilha), a economia é CALCULADA:
-  (segundos do aviso de hoje - segundos do aviso do Farol) x valor por minuto / 60.
+  (segundos do aviso de hoje - segundos do aviso do Norte) x valor por minuto / 60.
   Sem o aviso de hoje, só se a pessoa informar quanto custaria do jeito antigo (economia INFORMADA).
 - Valor fechado pelo aviso: custo = o valor; economia só se a pessoa informar o custo antigo (INFORMADA).
 - O tempo de ar economizado (segundos) aparece sempre que há o aviso de hoje.
-- A economia pode sair negativa (o aviso do Farol mais longo): mostra como é, sem esconder.
+- A economia pode sair negativa (o aviso do Norte mais longo): mostra como é, sem esconder.
 """
 
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation

@@ -106,14 +106,14 @@ async function entrar(p, email) {
 
   // manifest e nenhum service worker
   const man = await p.avaliar(`fetch(document.querySelector('link[rel=manifest]').href).then(async r => ({ tipo: r.headers.get('content-type'), j: await r.json() }))`);
-  conferir('manifest do app instalável (nome, ícone, start_url)', /manifest\+json/.test(man.tipo) && man.j.short_name === 'Farol' && man.j.icons?.length && man.j.start_url === '/', JSON.stringify(man));
+  conferir('manifest do app instalável (nome, ícone, start_url)', /manifest\+json/.test(man.tipo) && man.j.short_name === 'Norte' && man.j.icons?.length && man.j.start_url === '/', JSON.stringify(man));
   conferir('nenhum service worker (nada da API guardado no aparelho)', await p.avaliar(`navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(r => r.length === 0) : true`));
   conferir('viewport com viewport-fit=cover (áreas seguras do celular)', await p.avaliar(`document.querySelector('meta[name=viewport]').content.includes('viewport-fit=cover')`));
   conferir('nenhuma exceção nem violação da CSP', !p.excecoes.length && !(await p.avaliar('window.__csp')).length, JSON.stringify(p.excecoes.slice(0, 3)));
   await p.fechar();
 }
 
-// ---------- 2. Admin do Farol: a tabela de empresas vira cartões no celular e rola com a 1ª coluna fixa no tablet ----------
+// ---------- 2. Admin do Norte: a tabela de empresas vira cartões no celular e rola com a 1ª coluna fixa no tablet ----------
 {
   const p = await abrir(`${BASE}/`, { largura: 360, altura: 640 });
   await tamanho(p, [360, 640]);
@@ -131,7 +131,7 @@ async function entrar(p, email) {
   await espera(200);
   conferir('tablet: tabela de verdade, com a primeira coluna fixa ao rolar', await p.avaliar(`(() => { const th = document.querySelector('#listaEmpresas tbody tr > :first-child');
     return getComputedStyle(th.closest('tr')).display === 'table-row' && getComputedStyle(th).position === 'sticky'; })()`));
-  conferir('nenhuma exceção (Admin do Farol)', !p.excecoes.length, JSON.stringify(p.excecoes.slice(0, 3)));
+  conferir('nenhuma exceção (Admin do Norte)', !p.excecoes.length, JSON.stringify(p.excecoes.slice(0, 3)));
   await p.fechar();
 }
 

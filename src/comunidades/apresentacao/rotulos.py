@@ -8,10 +8,10 @@ HTML_LANG = {"pt-BR": "pt-BR", "en": "en", "es": "es"}
 
 TEXTOS = {
     "pt-BR": {
-        "slogan": "Cada comunidade avisada pelo nome",
+        "slogan": "O aviso certo, para a comunidade certa",
         "aviso_ficticio": ("Rede elétrica e clientes fictícios nesta demonstração; território, endereços e "
                            "comunidades reais (IBGE, Censo 2022)."),
-        "roteiro_rodape": "Farol - roteiro para a rádio - página {pagina}",
+        "roteiro_rodape": "Norte - roteiro para a rádio - página {pagina}",
         "roteiro_titulo": "Roteiro para a rádio",
         "roteiro_pdf_titulo": "Roteiro para a rádio - {municipio}/{uf} - {data}",
         "roteiro_sub": "{municipio}/{uf} - desligamento programado em {data}, das {horario} - {empresa}",
@@ -41,10 +41,10 @@ TEXTOS = {
         "horas": "horas", "dias_uteis": "dias úteis",
     },
     "en": {
-        "slogan": "Every community warned by name",
+        "slogan": "The right notice, for the right community",
         "aviso_ficticio": ("Fictitious power grid and customers in this demonstration; real territory, addresses and "
                            "communities (IBGE, 2022 Census)."),
-        "roteiro_rodape": "Farol - script for the radio station - page {pagina}",
+        "roteiro_rodape": "Norte - script for the radio station - page {pagina}",
         "roteiro_titulo": "Radio script",
         "roteiro_pdf_titulo": "Radio script - {municipio}/{uf} - {data}",
         "roteiro_sub": "{municipio}/{uf} - scheduled power outage on {data}, from {horario} - {empresa}",
@@ -74,10 +74,10 @@ TEXTOS = {
         "horas": "hours", "dias_uteis": "business days",
     },
     "es": {
-        "slogan": "Cada comunidad avisada por su nombre",
+        "slogan": "El aviso correcto, para la comunidad correcta",
         "aviso_ficticio": ("Red eléctrica y clientes ficticios en esta demostración; territorio, direcciones y "
                            "comunidades reales (IBGE, Censo 2022)."),
-        "roteiro_rodape": "Farol - guion para la radio - página {pagina}",
+        "roteiro_rodape": "Norte - guion para la radio - página {pagina}",
         "roteiro_titulo": "Guion para la radio",
         "roteiro_pdf_titulo": "Guion para la radio - {municipio}/{uf} - {data}",
         "roteiro_sub": "{municipio}/{uf} - corte programado el {data}, de {horario} - {empresa}",
@@ -108,9 +108,9 @@ TEXTOS = {
     },
 }
 PERFIS = {
-    "pt-BR": {"admin_farol": "Admin do Farol", "admin_empresa": "Admin da empresa", "operador": "Operador", "consulta": "Consulta"},
-    "en": {"admin_farol": "Farol admin", "admin_empresa": "Company admin", "operador": "Operator", "consulta": "Viewer"},
-    "es": {"admin_farol": "Admin de Farol", "admin_empresa": "Admin de la empresa", "operador": "Operador", "consulta": "Consulta"},
+    "pt-BR": {"admin_farol": "Admin do Norte", "admin_empresa": "Admin da empresa", "operador": "Operador", "consulta": "Consulta"},
+    "en": {"admin_farol": "Norte admin", "admin_empresa": "Company admin", "operador": "Operator", "consulta": "Viewer"},
+    "es": {"admin_farol": "Admin de Norte", "admin_empresa": "Admin de la empresa", "operador": "Operador", "consulta": "Consulta"},
 }
 
 

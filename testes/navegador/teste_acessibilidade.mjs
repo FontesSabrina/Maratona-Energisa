@@ -1,5 +1,5 @@
 // Painel Acessibilidade e Declaração (Bloco D, 15/10/2026): botão no topo (também em Entrar), tamanho do texto até 200%
-// sem rolagem horizontal, alto contraste, fonte Atkinson Hyperlegible servida pelo Farol, espaçamento, reduzir movimento,
+// sem rolagem horizontal, alto contraste, fonte Atkinson Hyperlegible servida pelo Norte, espaçamento, reduzir movimento,
 // destacar links e foco, guia de leitura, modo simples, voltar ao padrão; antes de entrar só na sessão, depois no perfil
 // (e na auditoria); "Pular para o conteúdo"; Declaração com o relato que vai para a auditoria; em inglês.
 // Rode pelo executor: uv run python testes/navegador/rodar_teste_app.py teste_acessibilidade.mjs
@@ -53,7 +53,7 @@ await marcar('a11yContraste');
 conferir('alto contraste: texto preto puro no fundo branco', await p.avaliar(`document.documentElement.hasAttribute('data-contraste') && getComputedStyle(document.body).color === 'rgb(0, 0, 0)'`));
 await marcar('a11yDislexia');
 await p.avaliar(`document.fonts.ready.then(() => 0)`);
-conferir('fonte de leitura facilitada: Atkinson Hyperlegible, servida pelo próprio Farol', await p.avaliar(`getComputedStyle(document.body).fontFamily.startsWith('"Atkinson Hyperlegible"')
+conferir('fonte de leitura facilitada: Atkinson Hyperlegible, servida pelo próprio Norte', await p.avaliar(`getComputedStyle(document.body).fontFamily.startsWith('"Atkinson Hyperlegible"')
   && document.fonts.check('16px "Atkinson Hyperlegible"') && performance.getEntriesByType('resource').some(r => r.name.startsWith(location.origin + '/assets/vendor/atkinson/'))`));
 await marcar('a11yEspacamento');
 conferir('espaçamento (WCAG 1.4.12): letras 0,12 em e linhas 1,5', await p.avaliar(`(() => { const e = document.querySelector('.vista:not([hidden]) h1'), cs = getComputedStyle(e);

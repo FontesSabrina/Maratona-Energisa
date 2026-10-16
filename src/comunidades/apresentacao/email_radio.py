@@ -31,18 +31,18 @@ def mensagem(*, remetente: str, destino: str, municipio: str, uf: str, data: str
              f"{t(i, 'email_confirme')}\n{link_confirmar}\n\n{aviso_ficticio}\n")
     m.set_content(corpo)
     e = html.escape
-    m.add_alternative(f"""<!doctype html><html lang="{HTML_LANG[i]}"><body style="margin:0;background:#E9EEF3;font-family:Arial,sans-serif;color:#0E1620">
+    m.add_alternative(f"""<!doctype html><html lang="{HTML_LANG[i]}"><body style="margin:0;background:#E9EEF3;font-family:Arial,sans-serif;color:#0B1B2B">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:12px;overflow:hidden">
-<tr><td style="background:#0E1620;padding:18px 24px;color:#FFFFFF;font-size:20px;font-weight:bold">Farol
-<div style="color:#F5B83D;font-size:13px;font-weight:normal">{e(t(i, 'slogan'))}</div></td></tr>
+<tr><td style="background:#0B1B2B;padding:18px 24px;color:#FFFFFF;font-size:20px;font-weight:bold">Norte
+<div style="color:#2EC4B6;font-size:13px;font-weight:normal">{e(t(i, 'slogan'))}</div></td></tr>
 <tr><td style="padding:24px">
 <p style="margin:0 0 8px">{e(t(i, 'email_intro', empresa=empresa))}</p>
-<p style="margin:0 0 16px;color:#1C2A37"><b>{e(municipio)}/{e(uf)}</b> · {e(data)}, {e(t(i, 'email_das'))} {e(horario)} · {e(t(i, 'email_codigo'))} <b>{e(codigo)}</b></p>
+<p style="margin:0 0 16px;color:#13263A"><b>{e(municipio)}/{e(uf)}</b> · {e(data)}, {e(t(i, 'email_das'))} {e(horario)} · {e(t(i, 'email_codigo'))} <b>{e(codigo)}</b></p>
 <h2 style="margin:0 0 6px;font-size:16px">{e(t(i, 'texto_leitura'))}</h2>
-<p style="margin:0 0 20px;padding:14px;background:#FDF4DE;border:1px solid #F5B83D;border-radius:8px;font-size:16px;line-height:1.5">{e(texto)}</p>
+<p style="margin:0 0 20px;padding:14px;background:#FDF4DE;border:1px solid #2EC4B6;border-radius:8px;font-size:16px;line-height:1.5">{e(texto)}</p>
 <p style="margin:0 0 20px">{e(anexos)}</p>
-<p style="margin:0 0 20px"><a href="{e(link_confirmar, quote=True)}" style="display:inline-block;background:#F5B83D;color:#0E1620;font-weight:bold;text-decoration:none;padding:14px 22px;border-radius:8px">{e(t(i, 'email_botao'))}</a></p>
+<p style="margin:0 0 20px"><a href="{e(link_confirmar, quote=True)}" style="display:inline-block;background:#2EC4B6;color:#0B1B2B;font-weight:bold;text-decoration:none;padding:14px 22px;border-radius:8px">{e(t(i, 'email_botao'))}</a></p>
 <p style="margin:0;color:#4A5560;font-size:13px">{e(t(i, 'email_link_vale'))} {e(aviso_ficticio)}</p>
 </td></tr></table></td></tr></table></body></html>""", subtype="html")
     if pdf:

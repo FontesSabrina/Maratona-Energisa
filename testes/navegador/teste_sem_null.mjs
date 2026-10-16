@@ -127,7 +127,7 @@ for (const email of ['admin@farol.example', 'admin@emg.example', 'operador@emg.e
       }
     }
   }
-  conferir(`${email.split('@')[0]}${email.includes('farol') ? ' (Farol)' : ''}: todas as vistas x 3 idiomas, ${cliques} cliques: nenhum null/undefined/NaN/True/False/None`,
+  conferir(`${email.split('@')[0]}${email.includes('farol') ? ' (Norte)' : ''}: todas as vistas x 3 idiomas, ${cliques} cliques: nenhum null/undefined/NaN/True/False/None`,
     !Object.keys(ruins).length, J(Object.entries(ruins).slice(0, 4)));
   conferir(`${email.split('@')[0]}: nenhuma exceção`, !p.excecoes.length, J(p.excecoes.slice(0, 2)));
   await p.fechar();

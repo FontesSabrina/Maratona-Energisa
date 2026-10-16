@@ -64,7 +64,7 @@ if EMAIL:
             time.sleep(0.2)
     env.pop("FAROL_EMAIL")
     env.update({"FAROL_SMTP_HOST": "127.0.0.1", "FAROL_SMTP_PORTA": str(SMTP), "FAROL_SMTP_SEGURANCA": "nenhuma",
-                "FAROL_SMTP_USUARIO": "", "FAROL_SMTP_SENHA": "", "FAROL_SMTP_REMETENTE": "Farol <avisos@farol.example>",
+                "FAROL_SMTP_USUARIO": "", "FAROL_SMTP_SENHA": "", "FAROL_SMTP_REMETENTE": "Norte <avisos@farol.example>",
                 "FAROL_URL_PUBLICA": f"http://127.0.0.1:{PORTA}", "FAROL_MAILPIT": f"http://127.0.0.1:{WEB}",
                 "FAROL_CHAVE_ARQUIVOS": base64.urlsafe_b64encode(os.urandom(32)).decode()})
 api = subprocess.Popen([sys.executable, "-m", "uvicorn", "comunidades.api.app:app", "--host", "127.0.0.1", "--port", str(PORTA), "--no-proxy-headers"],

@@ -1,8 +1,8 @@
-# Farol: cada comunidade avisada pelo nome
+# Norte: cada comunidade avisada pelo nome
 
 Desafio 3 da Maratona TIVIT-RPV (Grupo Energisa): **"Fazenda por fazenda, ou uma comunidade só?"**
 
-Num desligamento programado, a distribuidora tem de avisar quem fica sem energia, e no rural o aviso vai pelo rádio. Hoje ele lista imóvel por imóvel ("Sítio Boa Vista, Fazenda Cruzeiro, ...") e fica longo, caro e difícil de entender. O Farol recebe a planilha das unidades consumidoras (UCs) afetadas, descobre **as comunidades** onde elas estão e monta um aviso curto ("moradores de Graminha, Boa Sorte e parte de Tomé Nogueira"). Ele confere a planilha com travas de segurança, gera o PDF e o áudio para a rádio, manda o aviso por e-mail com confirmação de recebimento e mostra custo, economia e prazo nos relatórios.
+Num desligamento programado, a distribuidora tem de avisar quem fica sem energia, e no rural o aviso vai pelo rádio. Hoje ele lista imóvel por imóvel ("Sítio Boa Vista, Fazenda Cruzeiro, ...") e fica longo, caro e difícil de entender. O Norte recebe a planilha das unidades consumidoras (UCs) afetadas, descobre **as comunidades** onde elas estão e monta um aviso curto ("moradores de Graminha, Boa Sorte e parte de Tomé Nogueira"). Ele confere a planilha com travas de segurança, gera o PDF e o áudio para a rádio, manda o aviso por e-mail com confirmação de recebimento e mostra custo, economia e prazo nos relatórios.
 
 > **Dados desta demonstração:** território, endereços e comunidades são **reais** (IBGE, Censo 2022). A rede elétrica, os clientes, as rádios e o histórico são **fictícios**. Nenhum dado de cliente real foi usado.
 
@@ -10,7 +10,7 @@ Num desligamento programado, a distribuidora tem de avisar quem fica sem energia
 
 Números impressos pelo pipeline (`uv run comunidades --so-algoritmo`), iguais aos do passo 12:
 
-| Métrica (Leopoldina/MG) | Só o cadastro digitado | Farol |
+| Métrica (Leopoldina/MG) | Só o cadastro digitado | Norte |
 |---|---|---|
 | Comunidade correta por UC, zona rural | 56,1% | **91,2%** |
 | Comunidade correta por UC, zona urbana | 85,2% | **95,6%** |
@@ -20,19 +20,19 @@ Números impressos pelo pipeline (`uv run comunidades --so-algoritmo`), iguais a
 
 Exemplo da tela (chave fictícia CF-0066, 758 UCs): o aviso de hoje cita 120 locais em 358 palavras, cerca de 2 min 23 s no ar.
 
-## O que o Farol faz
+## O que o Norte faz
 
 1. **Planilha → JSON validado.** A planilha (.xlsx ou .csv) passa por um portão contra arquivos maliciosos. Só as colunas do modelo são lidas (nome, número da casa e conta são descartados na hora). As coordenadas são corrigidas só quando é seguro, e cada linha sai como ok, corrigida ou rejeitada, com o motivo. Uma rotina independente relê o arquivo e confere os números.
 2. **Conferência humana.** Números, mapa com as corrigidas em roxo, alerta vermelho para equipamento vital com problema (bloqueia), amarelo para pontos suspeitos, justificativa quando as rejeições passam do limite e a caixa "Conferi os números e o mapa". Sem isso, nada é gerado.
 3. **Aviso por comunidade.** Algoritmo de comunidades sobre a base do IBGE. A mensagem sai pelo modelo editável da empresa, com o tipo de desligamento como motivo.
-4. **Rádio.** O Farol sugere as rádios pelas comunidades afetadas e avisa as que ficam "sem rádio cadastrada". O valor do envio fica gravado, junto com a economia, calculada (por minuto no ar) ou informada. O e-mail leva PDF e MP3 (voz sintetizada no próprio servidor) e o botão "Confirmar recebimento". Também há WhatsApp e cópia.
+4. **Rádio.** O Norte sugere as rádios pelas comunidades afetadas e avisa as que ficam "sem rádio cadastrada". O valor do envio fica gravado, junto com a economia, calculada (por minuto no ar) ou informada. O e-mail leva PDF e MP3 (voz sintetizada no próprio servidor) e o botão "Confirmar recebimento". Também há WhatsApp e cópia.
 5. **Auditoria e relatórios.** Toda ação fica registrada com o nome e o perfil de quem fez, numa corrente de hashes que não pode ser editada nem apagada. Há o relatório do período, o comprovante do aviso, a auditoria da empresa e a geral de acessos, em PDF e CSV com código de verificação.
 
 ## Perfis
 
 | Perfil | O que faz | Menu |
 |---|---|---|
-| Admin do Farol | Cadastra e suspende empresas; vê a auditoria geral de acessos de todas as empresas | Empresas, Auditoria geral |
+| Admin do Norte | Cadastra e suspende empresas; vê a auditoria geral de acessos de todas as empresas | Empresas, Auditoria geral |
 | Admin da empresa | Tudo do Operador, mais usuários da empresa, rádios (só ele cadastra, edita, desativa e define o valor padrão; atende ou recusa os pedidos de rádio), configurações (modelo da mensagem, limite de rejeição, fuso UTM, antecedência) e o relatório de auditoria | Novo aviso, Histórico, Relatórios, Usuários, Rádios, Configurações, Auditoria |
 | Operador | Importa e confere a planilha, gera o aviso, baixa PDF e MP3, envia à rádio escolhida da lista informando o valor daquele envio, baixa o JSON com UCs (registrado) e, se faltar rádio, pede o cadastro ao Admin da empresa | Novo aviso, Histórico, Relatórios |
 | Consulta | Vê o mapa, o histórico, os comprovantes e os relatórios; não gera nem envia | Mapa, Histórico, Relatórios |

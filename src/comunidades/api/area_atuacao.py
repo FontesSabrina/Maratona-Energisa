@@ -1,6 +1,6 @@
-"""Mapa das empresas e área de atuação (só o Admin do Farol; desde 15/10/2026).
+"""Mapa das empresas e área de atuação (só o Admin do Norte; desde 15/10/2026).
 
-O Admin do Farol vê o cadastro das empresas, a área de atuação de cada uma (os municípios do IBGE) e só CONTAGENS
+O Admin do Norte vê o cadastro das empresas, a área de atuação de cada uma (os municípios do IBGE) e só CONTAGENS
 (usuários, avisos no mês): nunca o conteúdo de avisos, histórico, comunidades afetadas ou pacotes. A área define onde
 a empresa pode criar avisos (api/app.py recusa a UC de município fora dela). Toda mudança vai para a auditoria com o
 antes e o depois; o arquivo KML/GeoJSON importado é lido em memória e descartado: só os códigos dos municípios ficam.

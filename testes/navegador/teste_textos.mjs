@@ -44,7 +44,7 @@ for (const c of ['SEM_CONEXAO', 'ERRO_SERVIDOR', 'CREDITO_REDE']) chaves.add(des
 for (const m of html.matchAll(/<(\w+)[^>]*\sdata-t(?:\s|>)[^>]*>([^<]*)</g)) chaves.add(m[2].trim().replace(/\s+/g, ' '));
 for (const m of html.matchAll(/data-t-(?:placeholder|aria-label)="([^"]*)"/g)) chaves.add(m[1]);
 chaves.delete('');
-for (const fixos of ['UC', 'Farol', 'WhatsApp', '{n} s', '{nome} ({kb} KB)']) chaves.add(fixos);
+for (const fixos of ['UC', 'Norte', 'WhatsApp', '{n} s', '{nome} ({kb} KB)']) chaves.add(fixos);
 
 const faltando = { en: [], es: [] };
 for (const k of chaves) for (const i of ['en', 'es']) if (!(k in TEXTOS[i])) faltando[i].push(k);

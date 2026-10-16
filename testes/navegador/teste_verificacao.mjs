@@ -616,8 +616,8 @@ await secao('Consulta', async ctx => {
   await semErros(p, 'Consulta');
 });
 
-// ======================= 5. Admin do Farol: empresas (criar, editar, suspender, reativar) e auditoria geral =======================
-await secao('Admin do Farol', async ctx => {
+// ======================= 5. Admin do Norte: empresas (criar, editar, suspender, reativar) e auditoria geral =======================
+await secao('Admin do Norte', async ctx => {
   const p = ctx.p = await pagina();
   await entrar(p, 'admin@farol.example', SENHAS['admin@farol.example']);
   await ate(p, `document.querySelectorAll('#listaEmpresas tbody tr').length`);
@@ -663,7 +663,7 @@ await secao('Admin do Farol', async ctx => {
   conferir('Empresas: o servidor recusa reativar o que já está ativo (409)', (await api(p, `/api/empresas/${id}`, 'PATCH', { status: 'ativa' })).status === 409);
   const regE = (await registro(p)).filter(r => /^(cadastrou|alterou|suspendeu|reativou) empresa/.test(r));
   conferir('Empresas: a auditoria registra cadastrar, alterar, suspender e reativar com o nome', regE.some(r => /^alterou empresa \| .*Cooperativa Verificada/.test(r))
-    && regE.some(r => /^suspendeu empresa/.test(r)) && regE.some(r => /^reativou empresa/.test(r)) && regE.every(r => /Admin do Farol/.test(r)), J(regE.slice(0, 5)));
+    && regE.some(r => /^suspendeu empresa/.test(r)) && regE.some(r => /^reativou empresa/.test(r)) && regE.every(r => /Admin do Norte/.test(r)), J(regE.slice(0, 5)));
   // auditoria geral
   await ir(p, 'registro', `document.querySelectorAll('#listaRegistro tbody tr').length`);
   await preencher(p, { audEmpresa: 'EMG' });
@@ -674,7 +674,7 @@ await secao('Admin do Farol', async ctx => {
   conferir('Auditoria geral: exportar CSV', csvF.bytes.length > 100, csvF.nome);
   await p.avaliar(`($('verificarAuditoria').click(), 0)`);
   conferir('Auditoria geral: Conferir a integridade', await ate(p, `/^Auditoria íntegra/.test($('estadoAuditoria').textContent)`));
-  await semErros(p, 'Admin do Farol');
+  await semErros(p, 'Admin do Norte');
 });
 
 for (const r of resultados) console.log(r[0], r[1], r[0] !== 'OK  ' && r[2] ? `→ ${r[2]}` : '');

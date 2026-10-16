@@ -28,7 +28,7 @@ CANAIS = {"email": "e-mail", "whatsapp": "WhatsApp", "copia": "cópia"}
 FORMULAS = {
     "custo": "Custo de um envio: o valor informado. Por minuto no ar: valor por minuto x segundos da mensagem / 60; valor fechado: o próprio valor.",
     "economia": "Economia calculada: só com cobrança por minuto e com o aviso de hoje (fazenda a fazenda): (segundos do aviso de hoje - segundos da "
-                "mensagem do Farol) x valor por minuto / 60. Economia informada: custo antigo digitado por quem enviou - custo. Sem um dos dois, "
+                "mensagem do Norte) x valor por minuto / 60. Economia informada: custo antigo digitado por quem enviou - custo. Sem um dos dois, "
                 "não há economia (não estimamos).",
     "projecao": "Projeção do ano: gasto acumulado até o mês do relatório + média dos meses já fechados x meses que faltam até dezembro. "
                 "Sem mês fechado, não há projeção.",
@@ -602,7 +602,7 @@ def prazos(avisos, envios, avisos_comp, envios_comp, inicio: date, fim: date, fi
     return {"tipo": "prazos", "titulo": "Prazos dos avisos", "resumo": resumo,
             "alertas": ([f"{len(fora)} aviso(s) fora do prazo."] if fora else []) + ([f"{len(risco)} envio(s) em risco."] if risco else []),
             "secoes": secoes, "como_calculamos": [FORMULAS[k] for k in ("prazo", "comparacao", "atribuicao")]
-            + ["Justificativa de atraso: o Farol ainda não pede; a coluna fica com \"—\"."]}
+            + ["Justificativa de atraso: o Norte ainda não pede; a coluna fica com \"—\"."]}
 
 
 # ---------- H5: auditoria ----------

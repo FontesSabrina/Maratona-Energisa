@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0E1620">
-<title>Farol · Aviso de desligamento</title>
+<title>Norte · Aviso de desligamento</title>
 <link rel="icon" type="image/svg+xml" href="/assets/marca/farol-pequeno.svg">
 <link rel="manifest" href="/assets/app/farol.webmanifest">
 <!-- Leaflet 1.9.4 e IBM Plex vêm do próprio projeto (vendor/): nenhuma CDN. A CSP vem do servidor.
@@ -21,7 +21,7 @@
 <header class="topo">
   <div class="marca">
     <img src="/assets/marca/farol.svg" alt="" width="40" height="40">
-    <div><p class="nome">Farol</p><p class="slogan" data-t>Cada comunidade avisada pelo nome</p></div>
+    <div><p class="nome">Norte</p><p class="slogan" data-t>O aviso certo, para a comunidade certa</p></div>
   </div>
   <p class="faixa" id="faixa" data-t>Demonstração: rede elétrica e clientes fictícios; território e comunidades reais (IBGE, Censo 2022).</p>
   <div class="topo-acoes">
@@ -45,8 +45,8 @@
 <!-- Entrar e trocar a senha temporária: telas inteiras, antes do app -->
 <main id="telaEntrar" class="tela-acesso" hidden>
   <form id="formEntrar" class="cartao acesso" novalidate>
-    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
-    <h1 data-t>Entrar no Farol</h1>
+    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Norte</p></div>
+    <h1 data-t>Entrar no Norte</h1>
     <label><span data-t>E-mail</span> <input type="email" id="email" autocomplete="username" required></label>
     <label><span data-t>Senha</span> <input type="password" id="senha" autocomplete="current-password" required></label>
     <button type="submit" class="prim" id="botaoEntrar" data-t>Entrar</button>
@@ -56,7 +56,7 @@
 
 <main id="telaSenha" class="tela-acesso" hidden>
   <form id="formSenha" class="cartao acesso" novalidate>
-    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Farol</p></div>
+    <div class="marca-acesso"><img src="/assets/marca/farol.svg" alt="" width="44" height="44"><p class="nome">Norte</p></div>
     <h1 data-t>Crie a sua senha</h1>
     <p class="ajuda" id="senhaMotivo" data-t>Você entrou com uma senha temporária. Crie a sua para continuar.</p>
     <label><span data-t>Senha atual (a temporária)</span> <input type="password" id="senhaAtual" autocomplete="current-password" required></label>
@@ -206,7 +206,7 @@
     <!-- Comparativo: o aviso de hoje (fazenda a fazenda) x o aviso por comunidade -->
     <section id="vista-comparativo" class="vista" hidden aria-labelledby="tituloComparativo">
       <h1 id="tituloComparativo" data-t>Comparativo do aviso</h1>
-      <p class="ajuda" data-t>O aviso como é hoje, imóvel por imóvel e rua por rua, ao lado do aviso por comunidade do Farol, para o aviso aberto (o último gerado ou um do histórico). O aviso de hoje sai da coluna local da planilha.</p>
+      <p class="ajuda" data-t>O aviso como é hoje, imóvel por imóvel e rua por rua, ao lado do aviso por comunidade do Norte, para o aviso aberto (o último gerado ou um do histórico). O aviso de hoje sai da coluna local da planilha.</p>
       <div id="comparativoTotal"></div>
       <div id="comparativo" class="lista"></div>
     </section>
@@ -261,7 +261,7 @@
       <h1 id="tituloUsuarios" data-t>Usuários da empresa</h1>
       <form id="formUsuario" class="cartao formulario" novalidate>
         <h2 data-t>Convidar usuário</h2>
-        <p class="ajuda" data-t>Sem senha: o Farol gera uma senha temporária, que aparece uma vez para você passar à pessoa; no primeiro acesso ela cria a própria. Só nome, e-mail da empresa, perfil e municípios: nada de CPF, endereço ou telefone pessoal.</p>
+        <p class="ajuda" data-t>Sem senha: o Norte gera uma senha temporária, que aparece uma vez para você passar à pessoa; no primeiro acesso ela cria a própria. Só nome, e-mail da empresa, perfil e municípios: nada de CPF, endereço ou telefone pessoal.</p>
         <label><span data-t>Nome (obrigatório)</span> <input id="novoNome" required maxlength="120" autocomplete="off"></label>
         <label><span data-t>E-mail da empresa (obrigatório)</span> <input type="email" id="novoEmail" required autocomplete="off"></label>
         <label><span data-t>Perfil</span> <select id="novoPerfil"></select></label>
@@ -275,7 +275,7 @@
     <!-- Rádios da empresa (Admin da empresa) -->
     <section id="vista-radios" class="vista" hidden aria-labelledby="tituloRadios">
       <h1 id="tituloRadios" data-t>Rádios</h1>
-      <p class="ajuda" data-t>As rádios que leem o aviso e o que cada uma alcança (municípios inteiros ou comunidades). O Farol sugere a rádio pelas comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
+      <p class="ajuda" data-t>As rádios que leem o aviso e o que cada uma alcança (municípios inteiros ou comunidades). O Norte sugere a rádio pelas comunidades afetadas. Contato da rádio (empresa), nunca de cliente.</p>
       <form id="formRadio" class="cartao formulario" novalidate>
         <h2 id="formRadioTitulo">Cadastrar rádio</h2>
         <label><span data-t>Nome da rádio (obrigatório)</span> <input id="radNome" maxlength="80" autocomplete="off" required></label>
@@ -339,7 +339,7 @@
       </form>
     </section>
 
-    <!-- Empresas (Admin do Farol) -->
+    <!-- Empresas (Admin do Norte) -->
     <section id="vista-empresas" class="vista" hidden aria-labelledby="tituloEmpresas">
       <h1 id="tituloEmpresas" data-t>Empresas</h1>
       <form id="formEmpresa" class="cartao formulario" novalidate>
@@ -441,7 +441,7 @@
         <span><span class="amostra uc fora"></span><span data-t>UC fora da concessão</span></span>
         <button type="button" id="botaoUcs" aria-pressed="true">Esconder UCs</button></li>
     </ul>
-    <!-- Mapa das empresas (Admin do Farol): cada empresa liga e desliga no mapa -->
+    <!-- Mapa das empresas (Admin do Norte): cada empresa liga e desliga no mapa -->
     <div class="legenda legenda-empresas" id="legendaEmpresas" hidden>
       <div class="legenda-topo"><button type="button" id="botaoLegendaEmpresas" aria-expanded="true" aria-controls="listaLegendaEmpresas">
         <span aria-hidden="true" class="seta">▾</span> <span data-t>Empresas no mapa</span></button></div>
@@ -477,7 +477,7 @@
   <label class="check"><input type="checkbox" id="a11yGuia"> <span data-t>Guia de leitura (faixa que acompanha o mouse)</span></label>
   <label class="check"><input type="checkbox" id="a11ySimples"> <span data-t>Modo simples (sem o mapa e as dicas)</span></label>
   <div class="acoes"><button type="button" id="a11yLer" aria-pressed="false" data-t>Ler esta tela em voz alta</button></div>
-  <p class="ajuda" id="a11yVoz" data-t>A leitura usa a voz do próprio aparelho: nada é enviado ao Farol.</p>
+  <p class="ajuda" id="a11yVoz" data-t>A leitura usa a voz do próprio aparelho: nada é enviado ao Norte.</p>
   <p class="ajuda" data-t>As escolhas ficam no seu perfil. Antes de entrar, valem só nesta sessão do navegador.</p>
   <p><button type="button" class="link" id="a11yDeclaracao" aria-haspopup="dialog" data-t>Declaração de acessibilidade e relatar um problema</button></p>
   <div class="acoes"><button type="button" id="a11yPadrao" data-t>Voltar ao padrão</button>
@@ -488,7 +488,7 @@
 <div id="caixaDeclaracao" class="caixa-senha" role="dialog" aria-modal="true" aria-labelledby="declTitulo" hidden>
   <div class="cartao ajuda-cartao declaracao">
     <h2 id="declTitulo" tabindex="-1" data-t>Declaração de acessibilidade</h2>
-    <p data-t>O Farol busca atender às WCAG 2.2 nível AA, à ABNT NBR 17225:2025 e ao art. 63 da Lei Brasileira de Inclusão (Lei 13.146/2015), que obriga sites e sistemas a serem acessíveis a pessoas com deficiência.</p>
+    <p data-t>O Norte busca atender às WCAG 2.2 nível AA, à ABNT NBR 17225:2025 e ao art. 63 da Lei Brasileira de Inclusão (Lei 13.146/2015), que obriga sites e sistemas a serem acessíveis a pessoas com deficiência.</p>
     <h3 data-t>O que já existe</h3>
     <ul>
       <li data-t>Botão Acessibilidade em todas as telas: tamanho do texto até 200%, alto contraste, fonte de leitura facilitada, mais espaço no texto, reduzir movimento, destacar links e foco, guia de leitura, modo simples e leitura em voz alta pela voz do aparelho.</li>

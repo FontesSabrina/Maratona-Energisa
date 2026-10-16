@@ -3,7 +3,7 @@
 Roda num esquema próprio (FAROL_ESQUEMA=teste_audio), apagado no fim. Confere:
 - a locução: "8h" vira "8 horas", "14h30" vira "14 horas e 30", "20/11" vira "20 de novembro";
 - o MP3: quadros MPEG válidos, mono, e a duração coerente com o tamanho do texto;
-- quem pode: Admin da empresa e Operador (quem gera o aviso); Consulta e Admin do Farol não; sem login, 401;
+- quem pode: Admin da empresa e Operador (quem gera o aviso); Consulta e Admin do Norte não; sem login, 401;
 - erros: idioma sem voz, texto vazio ou longo demais, campos longos demais (422); nome do arquivo só em ASCII;
 - o registro de atividade guarda que o áudio foi gerado (sem o texto).
 
@@ -103,7 +103,7 @@ consulta = cliente("consulta@emg.example")
 conferir("Consulta: não gera o áudio (403, só quem gera o aviso)", consulta.post("/api/audio", json=pedido).status_code == 403)
 conferir("Consulta: nem o do comparativo (403)", consulta.post("/api/audio", json={**pedido, "comparativo": True}).status_code == 403)
 conferir("Admin da empresa: pode", cliente("admin@emg.example").post("/api/audio", json=pedido).status_code == 200)
-conferir("Admin do Farol: não pode (403)", cliente("admin@farol.example").post("/api/audio", json=pedido).status_code == 403)
+conferir("Admin do Norte: não pode (403)", cliente("admin@farol.example").post("/api/audio", json=pedido).status_code == 403)
 ingles = op.post("/api/audio", json={**pedido, "idioma": "en", "texto": "Attention, listeners. On November 20, from 8 a.m. to 2 p.m., "
                                                                      "there will be a scheduled power outage in Graminha."})
 conferir("inglês (Fase K): MP3 com a voz en_US-ljspeech (domínio público)", ingles.status_code == 200 and ingles.headers.get("content-type") == "audio/mpeg"

@@ -1,4 +1,4 @@
-"""PDF dos relatórios (mensal, comprovante do aviso, auditoria), no visual do Farol (fpdf2, fontes Latin-1).
+"""PDF dos relatórios (mensal, comprovante do aviso, auditoria), no visual do Norte (fpdf2, fontes Latin-1).
 
 Recebe o título, quem gerou, o código de verificação (que aponta para a linha da auditoria que
 registrou o relatório) e as seções: parágrafos, números (rótulo e valor) e tabelas. Todo texto passa
@@ -38,7 +38,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.set_auto_page_break(True, 18)
     pdf.set_title(_l1(titulo))
     pdf.set_lang(idioma)
-    pdf.set_author("Farol")
+    pdf.set_author("Norte")
     pdf.add_page()
     pdf.set_fill_color(*NOITE)
     pdf.rect(0, 0, largura, 24, "F")
@@ -50,7 +50,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.set_xy(33, 5)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, "Farol")
+    pdf.cell(0, 8, "Norte")
     pdf.set_xy(33, 13)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)
@@ -67,7 +67,7 @@ def documento(titulo: str, subtitulo: str, gerado_por: str, codigo: str, secoes:
     pdf.multi_cell(0, 5, _l1(T("gerado_simples", quem=gerado_por, d=gerado_em, codigo=codigo)),
                    new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
-    cabeca = FontFace(emphasis="BOLD", fill_color=(233, 238, 243))
+    cabeca = FontFace(emphasis="BOLD", fill_color=(245, 248, 251))
     for s in secoes:
         tipo = s[0]
         if tipo == "titulo":
@@ -186,7 +186,7 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
     pdf.set_auto_page_break(True, 18)
     pdf.set_title(_l1(doc["titulo"]))
     pdf.set_lang(idioma)
-    pdf.set_author("Farol")
+    pdf.set_author("Norte")
     pdf.set_creation_date(gerado_em)
     pdf.add_page()
     pdf.set_fill_color(*NOITE)
@@ -199,7 +199,7 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
     pdf.set_xy(33, 5)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, "Farol")
+    pdf.cell(0, 8, "Norte")
     pdf.set_xy(33, 13)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)
@@ -234,7 +234,7 @@ def documento_completo(doc: dict, subtitulo: str, gerado_por: str, codigo: str, 
             r.cell(_l1(item["rotulo"]))
             r.cell(_l1(item["valor"]))
             r.cell(_l1(" · ".join(f"{c['texto']} vs {c['contra']}" for c in item.get("comparacoes") or [])))
-    cabeca = FontFace(emphasis="BOLD", fill_color=(233, 238, 243))
+    cabeca = FontFace(emphasis="BOLD", fill_color=(245, 248, 251))
     for s in doc["secoes"]:
         pdf.ln(2)
         pdf.set_font("Helvetica", "B", 11)

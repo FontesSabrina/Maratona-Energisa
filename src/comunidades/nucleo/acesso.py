@@ -1,4 +1,4 @@
-"""Regras de acesso do Farol: perfis, permissões, senha e último admin da empresa.
+"""Regras de acesso do Norte: perfis, permissões, senha e último admin da empresa.
 
 Puro: não lê banco nem sabe de cookies. Quem guarda usuários e sessões é banco/acesso.py, e quem
 confere cada requisição é api/acesso.py. Os perfis são os do protótipo da área administrativa.
@@ -7,8 +7,8 @@ confere cada requisição é api/acesso.py. Os perfis são os do protótipo da �
 import re
 from datetime import timedelta
 
-PERFIS = {"admin_farol": "Admin do Farol", "admin_empresa": "Admin da empresa", "operador": "Operador", "consulta": "Consulta"}
-PERFIS_EMPRESA = ("admin_empresa", "operador", "consulta")   # o Admin do Farol não pertence a empresa
+PERFIS = {"admin_farol": "Admin do Norte", "admin_empresa": "Admin da empresa", "operador": "Operador", "consulta": "Consulta"}
+PERFIS_EMPRESA = ("admin_empresa", "operador", "consulta")   # o Admin do Norte não pertence a empresa
 
 # ação -> perfis que podem. Ações "da empresa" valem só dentro da empresa do usuário (a API confere).
 PERMISSOES = {

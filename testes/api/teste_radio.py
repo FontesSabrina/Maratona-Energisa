@@ -33,7 +33,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[2]
 SMTP, WEB = 1125, 8125
 os.environ.update({"FAROL_ESQUEMA": "teste_radio", "FAROL_SMTP_HOST": "127.0.0.1", "FAROL_SMTP_PORTA": str(SMTP),
-                   "FAROL_SMTP_SEGURANCA": "nenhuma", "FAROL_SMTP_REMETENTE": "Farol <avisos@farol.example>",
+                   "FAROL_SMTP_SEGURANCA": "nenhuma", "FAROL_SMTP_REMETENTE": "Norte <avisos@farol.example>",
                    "FAROL_URL_PUBLICA": "http://farol.teste",
                    "FAROL_CHAVE_ARQUIVOS": base64.urlsafe_b64encode(os.urandom(32)).decode()})
 
@@ -282,7 +282,7 @@ try:
     env = ra.json().get("envio", {})
     seg_hoje = leo["hoje"]["segundos"]
     esperado = (Decimal(seg_hoje - env.get("segundos", 0)) * 150 / 60).quantize(Decimal("0.01"))
-    conferir("e-mail: entregue, com custo e economia calculada pelo tempo no ar (aviso de hoje x Farol)",
+    conferir("e-mail: entregue, com custo e economia calculada pelo tempo no ar (aviso de hoje x Norte)",
              ra.status_code == 200 and env["status"] == "entregue" and env["economia_tipo"] == "calculada"
              and env["economia"] == f"{esperado:.2f}" and env["tempo_economizado"] == seg_hoje - env["segundos"]
              and env["arquivos"] == ["mp3", "pdf"], ra.text[:300])

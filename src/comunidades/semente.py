@@ -19,7 +19,7 @@ from .nucleo.acesso import PERFIS
 
 EMPRESA = {"nome": "Distribuidora EMG (demonstração)", "sigla": "EMG", "dominio": "emg.example"}
 USUARIOS = [  # (perfil, e-mail, nome)
-    ("admin_farol", "admin@farol.example", "Admin do Farol"),
+    ("admin_farol", "admin@farol.example", "Admin do Norte"),
     ("admin_empresa", "admin@emg.example", "Admin da EMG"),
     ("operador", "operador@emg.example", "Operador da EMG"),
     ("consulta", "consulta@emg.example", "Consulta da EMG"),

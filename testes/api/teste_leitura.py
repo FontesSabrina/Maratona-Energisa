@@ -13,8 +13,8 @@ arquivo) ou lido sem efeito colateral:
 - aba oculta (e muito oculta) com dados nunca aparece; uma aba visível que serve é escolhida sozinha;
   com duas, a lista volta para a pessoa escolher; aba escolhida inexistente é recusada;
 - limites: mais de 60 colunas, mais de 50.000 linhas, tempo máximo;
-- minimização: da aba Postes do exemplo só saem as 12 colunas do modelo; NOME, NUM_CASA, MEDIDOR,
-  NUM_CONTA, BAIRRO... não saem da leitura (nem o nome da coluna, nem os valores);
+- minimização: da aba Postes do exemplo só saem as 15 colunas do modelo; NOME, NUM_CASA, MEDIDOR,
+  NUM_CONTA... não saem da leitura (nem o nome da coluna, nem os valores);
 - um .xlsx de 50.000 linhas passa.
 
 Uso (na raiz): uv run python -W ignore testes/api/teste_leitura.py
@@ -205,17 +205,17 @@ tm = leitura.ler_tabela(postes, "Modelo")
 tp = leitura.ler_tabela(postes, "Postes")
 conferir("aba Modelo: 200 linhas, as 6 colunas, nenhuma ignorada", len(tm.linhas) == 200 and tm.colunas_ignoradas == 0, repr(tm.cabecalho))
 mantidas = {"uc", "LAT", "LONG", "LAT_GMS", "LONG_GMS", "COORD_X", "COORD_Y", "equipamento_vital", "CLASSE", "ENDERECO",
-            "TRANSFORMADOR", "CIRCUITO"}
-conferir("aba Postes: só as 12 colunas do modelo; 29 ignoradas", set(tp.cabecalho) == mantidas and tp.colunas_ignoradas == 29,
+            "TRANSFORMADOR", "CIRCUITO", "CONJUNTO", "BAIRRO", "SITUACAO"}   # conjunto, bairro e situação: para escolher quem será desligado
+conferir("aba Postes: só as 15 colunas do modelo; 26 ignoradas", set(tp.cabecalho) == mantidas and tp.colunas_ignoradas == 26,
          f"{tp.cabecalho} ignoradas={tp.colunas_ignoradas}")
 wb = openpyxl.load_workbook(io.BytesIO(postes), read_only=True)
 todas = list(wb["Postes"].iter_rows(values_only=True))
 cab = todas[0]
 texto_saida = repr(tp.cabecalho) + repr(tp.linhas)
-sensiveis = ["NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA", "BAIRRO", "NUM_ROTA", "NUM_LIVRO"]
+sensiveis = ["NOME", "NUM_CASA", "MEDIDOR", "NUM_CONTA", "NUM_ROTA", "NUM_LIVRO"]
 vazou = [c for c in sensiveis if c in tp.cabecalho]
 vazou += [f"{c}={r[cab.index(c)]!r}" for c in ("NOME",) for r in todas[1:] if repr(r[cab.index(c)]) in texto_saida]
-conferir("aba Postes: nenhuma coluna nem valor de NOME, NUM_CASA, MEDIDOR, NUM_CONTA, BAIRRO... sai da leitura", not vazou, str(vazou[:5]))
+conferir("aba Postes: nenhuma coluna nem valor de NOME, NUM_CASA, MEDIDOR, NUM_CONTA... sai da leitura", not vazou, str(vazou[:5]))
 certo = leitura.ler_tabela((EXEMPLOS / "planilha_postes_certo.xlsx").read_bytes())
 conferir("planilha_postes_certo (só Postes, sem uc): NUMCDC vira a UC", certo.aba == "Postes"
          and certo.cabecalho[certo.campos["uc"]] == "NUMCDC" and len(certo.linhas) == 200, repr(certo.cabecalho))

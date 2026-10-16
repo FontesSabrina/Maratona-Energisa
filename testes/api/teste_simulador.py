@@ -4,7 +4,7 @@ Roda num esquema próprio do Postgres (apagado no fim), só com a semente de ace
 - as contas puras (nucleo/simulador.py): 160.000 x 100% x 68,2% = 109.090,91 por mês (1.309.090,91 no ano);
   cenário conservador (50%) = 54.545,45; sem avisos, a medição de validação (44 s -> 14 s); com avisos, a
   média real (cancelado e município sem o aviso de hoje ficam de fora); já economizado = calculada + informada;
-- perfis: os três da empresa veem; só o Admin da empresa altera; o Admin do Farol não vê; Operador e Consulta 403;
+- perfis: os três da empresa veem; só o Admin da empresa altera; o Admin do Norte não vê; Operador e Consulta 403;
 - a alteração vai para a auditoria com o antes e o depois; salvar o resto da configuração não apaga os valores;
 - PDF e CSV com o código FRL e o nome de quem gerou; a tela em inglês e em espanhol;
 - a origem dos valores (nota) e a semente de demonstração (EMG: 160.000 a 300.000, 100%, uma vez só, como da semente).
@@ -124,7 +124,7 @@ try:
     j = r.json() if r.status_code == 200 else {}
     conferir("Consulta vê o simulador (sem avisos: medição de validação) e não edita",
              r.status_code == 200 and j["documento"]["reducao"]["fonte"] == "validacao" and j["pode_editar"] is False, r.text[:200])
-    conferir("Admin do Farol não vê o simulador (403)", far.get(URL).status_code == 403)
+    conferir("Admin do Norte não vê o simulador (403)", far.get(URL).status_code == 403)
     corpo = {"gasto_min": "160000", "gasto_max": "300000", "pct_tempo": "100"}
     conferir("Operador e Consulta não alteram os valores (403)", op.put(PUT, json=corpo).status_code == 403 and con.put(PUT, json=corpo).status_code == 403)
     conferir("máximo menor que o mínimo: 422 no campo gasto_max",

@@ -210,7 +210,7 @@ class Relato(BaseModel):
 
 @rotas.post("/acessibilidade/relato")
 def relatar_acessibilidade(dados: Relato, u: dict = Depends(usuario_atual)) -> dict:
-    """Qualquer perfil relata um problema de acessibilidade; vai para a auditoria (o Admin do Farol vê na auditoria geral).
+    """Qualquer perfil relata um problema de acessibilidade; vai para a auditoria (o Admin do Norte vê na auditoria geral).
     Sem dado pessoal: texto com e-mail, telefone ou número longo é recusado."""
     texto = " ".join("".join(c if c.isprintable() else " " for c in dados.texto).split())
     if len(texto) < 10:
@@ -331,7 +331,7 @@ def nova_temporaria(id_: int, u: dict = Depends(exigir("gerenciar_usuarios"))) -
     return {"senha_temporaria": temporaria}
 
 
-# ---------- Empresas (Admin do Farol) e registro ----------
+# ---------- Empresas (Admin do Norte) e registro ----------
 class NovaEmpresa(BaseModel):
     nome: str
     sigla: str
@@ -427,7 +427,7 @@ def criar_empresa(dados: NovaEmpresa, u: dict = Depends(exigir("gerenciar_empres
 
 @rotas.get("/registro")
 def registro(u: dict = Depends(exigir("ver_registro"))) -> dict:
-    """A auditoria: o Admin do Farol vê a de todas as empresas; o Admin da empresa, só a dela.
+    """A auditoria: o Admin do Norte vê a de todas as empresas; o Admin da empresa, só a dela.
     Quem fez aparece com o nome e o perfil de quando fez (copiados na linha); o código sai do hash."""
     linhas = banco.registros(None if u["perfil"] == "admin_farol" else u["empresa_id"])
     return {"registro": [{"quando": r["quando"].isoformat(), "acao": r["acao"], "detalhe": r["detalhe"],
@@ -438,9 +438,9 @@ def registro(u: dict = Depends(exigir("ver_registro"))) -> dict:
 @rotas.get("/auditoria/verificar")
 def verificar_auditoria(u: dict = Depends(exigir("ver_registro"))) -> dict:
     """Refaz a conta da corrente inteira (nucleo/auditoria.verificar). O Admin da empresa vê só se está
-    íntegra; onde quebrou (o número da linha) só o Admin do Farol vê."""
+    íntegra; onde quebrou (o número da linha) só o Admin do Norte vê."""
     v = banco.verificar_registro()
     banco.registrar("conferiu a integridade da auditoria", "íntegra" if v["ok"] else "QUEBRADA", u["id"], u["empresa_id"])
     if u["perfil"] == "admin_farol":
         return {k: v[k] for k in ("ok", "linhas", "conferidas", "quebra_id", "motivo")}
-    return {"ok": v["ok"], "motivo": None if v["ok"] else "A auditoria não confere. Avise o Admin do Farol."}
+    return {"ok": v["ok"], "motivo": None if v["ok"] else "A auditoria não confere. Avise o Admin do Norte."}

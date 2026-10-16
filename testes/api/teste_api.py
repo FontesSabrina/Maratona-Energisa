@@ -178,7 +178,7 @@ hoje = m.get("hoje") or {}
 do_cadastro = D.aviso_antigo(cad.loc[t["uc"].iloc[nucleo[0].ucs.index]].reset_index(), "12/11", "8h às 14h", regras)  # as 2 bases, como a API
 conferir("comparativo: aviso de hoje de Leopoldina pela coluna local = o do cadastro (núcleo)", hoje.get("texto") == do_cadastro,
          f"\n  API:      {str(hoje.get('texto'))[:160]}\n  cadastro: {do_cadastro[:160]}")
-conferir("comparativo: locais, palavras e tempo no ar do aviso de hoje; o Farol bem mais curto",
+conferir("comparativo: locais, palavras e tempo no ar do aviso de hoje; o Norte bem mais curto",
          hoje.get("locais", 0) > 50 and hoje.get("palavras") == len(do_cadastro.split()) and hoje.get("segundos", 0) > 5 * m["segundos"],
          json.dumps({k: v for k, v in hoje.items() if k != "texto"}) + f" farol {m['segundos']} s")
 hist_um = cli.get(f"/api/historico/{j['id']}").json()["municipios"][0]
@@ -220,7 +220,7 @@ conferir("dashboard: 12 meses, este mês com todos os avisos, Leopoldina no topo
          and pn["por_municipio"][cod_leo] == sum(any(mm["codigo_ibge"] == cod_leo for mm in a["municipios"]) for a in hist),
          json.dumps([pn["por_mes"][-1], pn["municipios"][:2]], ensure_ascii=False))
 comp_hist = [mm for a in hist for mm in a["municipios"] if mm.get("hoje")]
-conferir("dashboard: comparativo com os municípios que têm o aviso de hoje, tempo de hoje x Farol",
+conferir("dashboard: comparativo com os municípios que têm o aviso de hoje, tempo de hoje x Norte",
          pn["comparativo"]["municipios"] == len(comp_hist) > 0
          and pn["comparativo"]["segundos_hoje"] == sum(mm["hoje"]["segundos"] for mm in comp_hist)
          and pn["comparativo"]["segundos_farol"] == sum(mm.get("segundos_mensagem") or mm["segundos"] for mm in comp_hist), json.dumps(pn["comparativo"]))

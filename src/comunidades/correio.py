@@ -30,7 +30,7 @@ def configuracao() -> dict | None:
     seg = (segredo("FAROL_SMTP_SEGURANCA") or "starttls").lower()
     return {"host": host, "porta": int(segredo("FAROL_SMTP_PORTA") or (465 if seg == "ssl" else 587)),
             "usuario": segredo("FAROL_SMTP_USUARIO"), "senha": segredo("FAROL_SMTP_SENHA"),
-            "remetente": segredo("FAROL_SMTP_REMETENTE") or "Farol <avisos@farol.example>", "seguranca": seg}
+            "remetente": segredo("FAROL_SMTP_REMETENTE") or "Norte <avisos@farol.example>", "seguranca": seg}
 
 
 def ligado() -> bool:
@@ -39,7 +39,7 @@ def ligado() -> bool:
 
 def remetente() -> str:
     c = configuracao()
-    return c["remetente"] if c else "Farol <avisos@farol.example>"
+    return c["remetente"] if c else "Norte <avisos@farol.example>"
 
 
 # domínios reservados para teste e documentação (RFC 2606 e 6761): na demonstração, só eles recebem

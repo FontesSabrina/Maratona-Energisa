@@ -1,4 +1,4 @@
-/* Farol: tela do aviso de desligamento. Visual único Farol: Âmbar #F5B83D, Noite #0E1620, Maré #1C2A37 e
+/* Norte: tela do aviso de desligamento. Visual único Norte: Âmbar #F5B83D, Noite #0E1620, Maré #1C2A37 e
    Névoa #E9EEF3, com tema claro e escuro (a escolha fica neste navegador; sem escolha, o do sistema). */
 @font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("/assets/vendor/ibm-plex/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap; src: url("/assets/vendor/ibm-plex/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
@@ -7,32 +7,36 @@
 
 :root {
   color-scheme: light;
-  --ambar: #F5B83D; --ambar-forte: #B07800; --noite: #0E1620; --mare: #1C2A37; --nevoa: #E9EEF3;
-  /* acento: o âmbar do farol (botões principais, aba atual, passo atual); texto sobre ele, sempre a Noite */
-  --acento: #F5B83D; --acento-texto: #0E1620; --acento-forte: #7A5200; --acento-claro: #FCEFD2; --acento-borda: #B07800;
-  --faixa: linear-gradient(110deg, #0E1620 0%, #1C2A37 100%);
-  --destaque: linear-gradient(110deg, #F5B83D 0%, #F0A928 100%);
-  --fundo: #E9EEF3; --sup: #FFFFFF; --sup2: #F3F6F9; --linha: #D3DCE5;
-  --texto: #0E1620; --texto2: #3B4A58; --apagado: #5B6B79; --foco: #1C2A37; --borda-campo: #6B7A88;
-  --erro: #B42318; --ok: #1B7D4B; --info: #1663C7;
-  --sombra: 0 1px 2px rgba(14, 22, 32, .06), 0 6px 20px rgba(14, 22, 32, .08);
+  /* Norte: principal (botões principais, aba atual, passo atual) e destaque; texto sobre o principal em --acento-texto */
+  --ambar: #8A6100; --ambar-forte: #8A6100; --noite: #0B1B2B; --mare: #13263A; --nevoa: #F5F8FB;
+  --acento: #0E7C74; --acento-texto: #FFFFFF; --acento-forte: #0A5C56; --acento-claro: #D5F1EE; --acento-borda: #0E7C74;
+  --faixa: linear-gradient(110deg, #0B1B2B 0%, #13263A 100%);
+  --destaque: linear-gradient(110deg, #0E7C74 0%, #0B6A63 100%);
+  --fundo: #F5F8FB; --sup: #FFFFFF; --sup2: #EEF3F7; --linha: #D3DCE5;
+  --texto: #0B1B2B; --texto2: #4A5D70; --apagado: #5B6B79; --foco: #0B1B2B; --borda-campo: #6B7A88;
+  --erro: #C0392B; --ok: #18794E; --info: #1663C7;
+  --sombra: 0 1px 2px rgba(11, 27, 43, .06), 0 6px 20px rgba(11, 27, 43, .08);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
     color-scheme: dark;
-    --acento-forte: #F5B83D; --acento-claro: #3A3020; --acento-borda: #F5B83D;
-    --fundo: #0E1620; --sup: #1C2A37; --sup2: #24364A; --linha: #33485C;
-    --texto: #E9EEF3; --texto2: #B9C5D0; --apagado: #93A3B2; --foco: #F5B83D; --borda-campo: #8297AB;
-    --erro: #FF8A80; --ok: #74D7A0; --info: #8AB8FF;
+    --ambar: #F2C14E; --ambar-forte: #F2C14E;
+    --acento: #2EC4B6; --acento-texto: #0B1B2B; --acento-forte: #2EC4B6; --acento-claro: #12383F; --acento-borda: #2EC4B6;
+    --destaque: linear-gradient(110deg, #2EC4B6 0%, #26A99D 100%);
+    --fundo: #0B1B2B; --sup: #13263A; --sup2: #1A3049; --linha: #2A4058;
+    --texto: #E8F1F8; --texto2: #9FB3C8; --apagado: #8DA2B8; --foco: #F2C14E; --borda-campo: #7E95AC;
+    --erro: #FF6B6B; --ok: #3DDC97; --info: #8AB8FF;
     --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .35);
   }
 }
 :root[data-tema="escuro"] {
   color-scheme: dark;
-  --acento-forte: #F5B83D; --acento-claro: #3A3020; --acento-borda: #F5B83D;
-  --fundo: #0E1620; --sup: #1C2A37; --sup2: #24364A; --linha: #33485C;
-  --texto: #E9EEF3; --texto2: #B9C5D0; --apagado: #93A3B2; --foco: #F5B83D; --borda-campo: #8297AB;
-  --erro: #FF8A80; --ok: #74D7A0; --info: #8AB8FF;
+  --ambar: #F2C14E; --ambar-forte: #F2C14E;
+  --acento: #2EC4B6; --acento-texto: #0B1B2B; --acento-forte: #2EC4B6; --acento-claro: #12383F; --acento-borda: #2EC4B6;
+  --destaque: linear-gradient(110deg, #2EC4B6 0%, #26A99D 100%);
+  --fundo: #0B1B2B; --sup: #13263A; --sup2: #1A3049; --linha: #2A4058;
+  --texto: #E8F1F8; --texto2: #9FB3C8; --apagado: #8DA2B8; --foco: #F2C14E; --borda-campo: #7E95AC;
+  --erro: #FF6B6B; --ok: #3DDC97; --info: #8AB8FF;
   --sombra: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .35);
 }
 * { box-sizing: border-box; }
@@ -324,7 +328,7 @@ input[type=search] { font: inherit; color: var(--texto); background: var(--sup);
   .ranking-barra { grid-column: 1 / -1; grid-row: 2; }
 }
 
-/* ---------- Comparativo: hoje (fazenda a fazenda) x Farol (por comunidade) ---------- */
+/* ---------- Comparativo: hoje (fazenda a fazenda) x Norte (por comunidade) ---------- */
 .comp { display: grid; gap: 14px; }
 .comp .mun-cab h2 { margin: 0; font-size: 1.1875rem; }
 .comp-economia { margin: 0; display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--destaque); color: var(--acento-texto);
@@ -600,7 +604,7 @@ img, video, canvas { max-width: 100%; }
   .texto-longo { max-height: none; overflow: visible; }
 }
 
-/* ---------- Mapa das empresas (Admin do Farol): área de cada empresa com cor e hachura, sigla no meio, legenda que liga e desliga ---------- */
+/* ---------- Mapa das empresas (Admin do Norte): área de cada empresa com cor e hachura, sigla no meio, legenda que liga e desliga ---------- */
 .legenda-empresas { max-height: calc(100% - 48px); overflow-y: auto; max-width: min(360px, calc(100% - 24px)); display: block; }
 .legenda-empresas ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
 .legenda-empresas .legenda-topo button { width: 100%; justify-content: flex-start; display: flex; align-items: center; gap: 6px; background: transparent;
@@ -700,8 +704,8 @@ button.link { background: none; border: 0; padding: 0; min-height: 44px; color: 
 /* ---------- Bloco D: painel Acessibilidade ---------- */
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-display: swap; src: url("/assets/vendor/atkinson/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-display: swap; src: url("/assets/vendor/atkinson/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); }
-.botao-a11y { display: inline-flex; align-items: center; gap: 6px; background: var(--ambar); color: var(--noite); border-color: var(--ambar); font-weight: 600; }
-.botao-a11y:hover:not(:disabled) { filter: none; background: #F0A928; }
+.botao-a11y { display: inline-flex; align-items: center; gap: 6px; background: #F2C14E; color: #0B1B2B; border-color: #F2C14E; font-weight: 600; }
+.botao-a11y:hover:not(:disabled) { filter: none; background: #E5B23C; }
 .topo .botao-a11y:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 .painel-a11y { position: fixed; z-index: 2500; top: 64px; right: 16px; width: min(380px, calc(100% - 32px)); max-height: calc(100% - 80px); overflow-y: auto;
   display: grid; gap: 10px; padding: 18px; }

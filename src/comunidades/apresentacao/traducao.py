@@ -121,7 +121,7 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Manutenção preventiva": ("Preventive maintenance", "Mantenimiento preventivo"), "Manutenção corretiva programada": ("Scheduled corrective maintenance", "Mantenimiento correctivo programado"),
     "Obra ou ampliação da rede": ("Grid work or expansion", "Obra o ampliación de la red"), "Poda de árvores": ("Tree trimming", "Poda de árboles"),
     "Troca de equipamento": ("Equipment replacement", "Cambio de equipos"), "Outro": ("Other", "Otro"),
-    "Admin do Farol": ("Farol admin", "Admin de Farol"), "Admin da empresa": ("Company admin", "Admin de la empresa"), "Operador": ("Operator", "Operador"),
+    "Admin do Norte": ("Norte admin", "Admin de Norte"), "Admin da empresa": ("Company admin", "Admin de la empresa"), "Operador": ("Operator", "Operador"),
     "Consulta": ("Viewer", "Consulta"),
     # subtítulo, filtros e comprovante
     "Todas as empresas": ("All companies", "Todas las empresas"), "últimos 12 meses": ("last 12 months", "últimos 12 meses"),
@@ -135,13 +135,13 @@ EXATOS: dict[str, tuple[str, str]] = {
         ("Cost of a sending: the price entered. Per minute on air: price per minute x seconds of the message / 60; flat price: the price itself.",
          "Costo de un envío: el valor informado. Por minuto al aire: valor por minuto x segundos del mensaje / 60; precio cerrado: el propio valor."),
     ("Economia calculada: só com cobrança por minuto e com o aviso de hoje (fazenda a fazenda): (segundos do aviso de hoje - segundos da "
-     "mensagem do Farol) x valor por minuto / 60. Economia informada: custo antigo digitado por quem enviou - custo. Sem um dos dois, "
+     "mensagem do Norte) x valor por minuto / 60. Economia informada: custo antigo digitado por quem enviou - custo. Sem um dos dois, "
      "não há economia (não estimamos)."):
         ("Calculated savings: only with per-minute billing and with today's notice (farm by farm): (seconds of today's notice - seconds of the "
-         "Farol message) x price per minute / 60. Reported savings: old cost typed by whoever sent it - cost. Without one of the two, there are "
+         "Norte message) x price per minute / 60. Reported savings: old cost typed by whoever sent it - cost. Without one of the two, there are "
          "no savings (we do not estimate).",
          "Ahorro calculado: solo con cobro por minuto y con el aviso actual (finca por finca): (segundos del aviso actual - segundos del "
-         "mensaje de Farol) x valor por minuto / 60. Ahorro informado: costo antiguo escrito por quien envió - costo. Sin uno de los dos, "
+         "mensaje de Norte) x valor por minuto / 60. Ahorro informado: costo antiguo escrito por quien envió - costo. Sin uno de los dos, "
          "no hay ahorro (no estimamos)."),
     ("Projeção do ano: gasto acumulado até o mês do relatório + média dos meses já fechados x meses que faltam até dezembro. "
      "Sem mês fechado, não há projeção."):
@@ -180,9 +180,9 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Sugestões: mesmo tipo de desligamento 2 ou mais vezes em 60 dias, ou repetição acima do limite da empresa.":
         ("Suggestions: same outage type 2 or more times in 60 days, or repetition above the company limit.",
          "Sugerencias: mismo tipo de corte 2 o más veces en 60 días, o repetición por encima del límite de la empresa."),
-    "Justificativa de atraso: o Farol ainda não pede; a coluna fica com \"—\".":
-        ("Justification for delays: Farol does not ask for it yet; the column shows \"—\".",
-         "Justificación de retraso: Farol aún no la pide; la columna queda con \"—\"."),
+    "Justificativa de atraso: o Norte ainda não pede; a coluna fica com \"—\".":
+        ("Justification for delays: Norte does not ask for it yet; the column shows \"—\".",
+         "Justificación de retraso: Norte aún no la pide; la columna queda con \"—\"."),
     "Cada linha da auditoria guarda o hash da anterior; a verificação refaz a conta da primeira à última.":
         ("Each audit row keeps the hash of the previous one; the check redoes the math from the first to the last.",
          "Cada fila de la auditoría guarda el hash de la anterior; la verificación rehace la cuenta de la primera a la última."),
@@ -241,9 +241,9 @@ EXATOS: dict[str, tuple[str, str]] = {
     "O modelo da mensagem não pode ficar vazio.": ("The message template cannot be empty.", "La plantilla del mensaje no puede quedar vacía."),
     "Nome da empresa na mensagem: de 2 a 120 caracteres.": ("Company name in the message: 2 to 120 characters.", "Nombre de la empresa en el mensaje: de 2 a 120 caracteres."),
     # área de atuação (mapa das empresas)
-    "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Farol.":
-        ("The company's service area is not registered: no notice can be created. Ask the Farol Admin.",
-         "El área de actuación de la empresa no está registrada: no se puede crear ningún aviso. Pida al Admin de Farol."),
+    "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Norte.":
+        ("The company's service area is not registered: no notice can be created. Ask the Norte Admin.",
+         "El área de actuación de la empresa no está registrada: no se puede crear ningún aviso. Pida al Admin de Norte."),
     "Município fora da área de atuação da empresa.": ("Municipality outside the company's service area.", "Municipio fuera del área de actuación de la empresa."),
     "Nada mudou na área de atuação.": ("Nothing changed in the service area.", "Nada cambió en el área de actuación."),
     "Envie a lista de municípios.": ("Send the list of municipalities.", "Envíe la lista de municipios."),
@@ -298,11 +298,11 @@ EXATOS: dict[str, tuple[str, str]] = {
     "conservador": ("conservative", "conservador"),
     "Já economizado de fato": ("Actually saved so far", "Ya ahorrado de hecho"),
     "Tempo no ar usado na redução": ("Airtime used for the reduction", "Tiempo al aire usado en la reducción"),
-    ("Redução = (segundos do aviso tradicional estimado - segundos do aviso do Farol) / segundos do aviso tradicional, somando os "
+    ("Redução = (segundos do aviso tradicional estimado - segundos do aviso do Norte) / segundos do aviso tradicional, somando os "
      "avisos do período cuja planilha trouxe a coluna local (o aviso de hoje, fazenda a fazenda)."):
-        ("Reduction = (seconds of the estimated traditional notice - seconds of the Farol notice) / seconds of the traditional notice, adding up "
+        ("Reduction = (seconds of the estimated traditional notice - seconds of the Norte notice) / seconds of the traditional notice, adding up "
          "the period's notices whose spreadsheet had the local column (today's notice, farm by farm).",
-         "Reducción = (segundos del aviso tradicional estimado - segundos del aviso del Farol) / segundos del aviso tradicional, sumando los "
+         "Reducción = (segundos del aviso tradicional estimado - segundos del aviso del Norte) / segundos del aviso tradicional, sumando los "
          "avisos del período cuya planilla trajo la columna local (el aviso de hoy, finca por finca)."),
     "Sem esses avisos no período, vale a medição de validação (Leopoldina): 44 s -> 14 s, redução de 68,2%.":
         ("Without such notices in the period, the validation measurement (Leopoldina) applies: 44 s -> 14 s, a 68.2% reduction.",
@@ -329,7 +329,7 @@ PADROES: list[tuple[str, str, str]] = [
     (r"(-?R\$ [\d.,]+) a (-?R\$ [\d.,]+)", "{1} to {2}", "{1} a {2}"),
     (r"(-?R\$ [\d.,]+) calculada \+ (-?R\$ [\d.,]+) informada = (-?R\$ [\d.,]+), em (\d+) envio\(s\) do período\.",
      "{1} calculated + {2} reported = {3}, in {4} sending(s) in the period.", "{1} calculado + {2} informado = {3}, en {4} envío(s) del período."),
-    (r"Aviso tradicional: (\d+) s; aviso do Farol: (\d+) s\.", "Traditional notice: {1} s; Farol notice: {2} s.", "Aviso tradicional: {1} s; aviso del Farol: {2} s."),
+    (r"Aviso tradicional: (\d+) s; aviso do Norte: (\d+) s\.", "Traditional notice: {1} s; Norte notice: {2} s.", "Aviso tradicional: {1} s; aviso del Norte: {2} s."),
     (r"Conta \((mínimo|máximo), (da empresa|conservador)\): (-?R\$ [\d.,]+) x ([\d,]+%) x (-?[\d,]+%) = (-?R\$ [\d.,]+) por mês; x 12 = (-?R\$ [\d.,]+) por ano\.",
      "Calculation ({1}, {2}): {3} x {4} x {5} = {6} per month; x 12 = {7} per year.",
      "Cálculo ({1}, {2}): {3} x {4} x {5} = {6} por mes; x 12 = {7} por año."),
@@ -494,28 +494,28 @@ def documento(doc: dict, idioma: str | None) -> dict:
 PDF = {
     "pt-BR": {"gerado": "Gerado por {quem} em {d:%d/%m/%Y} às {d:%H:%M} · Código {codigo}", "pagina_de": " · página {n} de ",
               "gerado_simples": "Gerado por {quem} em {d:%d/%m/%Y às %H:%M} - código de verificação {codigo}",
-              "rodape_doc": "Farol - {titulo} - código {codigo}", "pagina": " - página {n}", "como": "Como calculamos", "resumo": "Resumo",
-              "alerta": "Alerta: {a}", "nada": "Nada neste período.", "slogan": "Cada comunidade avisada pelo nome",
+              "rodape_doc": "Norte - {titulo} - código {codigo}", "pagina": " - página {n}", "como": "Como calculamos", "resumo": "Resumo",
+              "alerta": "Alerta: {a}", "nada": "Nada neste período.", "slogan": "O aviso certo, para a comunidade certa",
               "barras": "Barras tracejadas: projeção pela média dos meses fechados.",
               "nota": "Só números agregados e o que está gravado: nenhum nome de cliente, número de UC, endereço ou coordenada. ",
-              "nota_doc": "Confira o código de verificação na auditoria do Farol. ",
-              "nota_completo": "Confira o código de verificação no Farol (a segunda via fica guardada e tem o mesmo SHA-256). "},
+              "nota_doc": "Confira o código de verificação na auditoria do Norte. ",
+              "nota_completo": "Confira o código de verificação no Norte (a segunda via fica guardada e tem o mesmo SHA-256). "},
     "en": {"gerado": "Generated by {quem} on {d:%m/%d/%Y} at {d:%H:%M} · Code {codigo}", "pagina_de": " · page {n} of ",
            "gerado_simples": "Generated by {quem} on {d:%m/%d/%Y at %H:%M} - verification code {codigo}",
-           "rodape_doc": "Farol - {titulo} - code {codigo}", "pagina": " - page {n}", "como": "How we calculate", "resumo": "Summary",
-           "alerta": "Alert: {a}", "nada": "Nothing in this period.", "slogan": "Every community warned by name",
+           "rodape_doc": "Norte - {titulo} - code {codigo}", "pagina": " - page {n}", "como": "How we calculate", "resumo": "Summary",
+           "alerta": "Alert: {a}", "nada": "Nothing in this period.", "slogan": "The right notice, for the right community",
            "barras": "Dashed bars: projection by the average of the closed months.",
            "nota": "Only aggregated numbers and what is recorded: no customer name, UC number, address or coordinate. ",
-           "nota_doc": "Check the verification code in the Farol audit. ",
-           "nota_completo": "Check the verification code in Farol (the second copy is stored and has the same SHA-256). "},
+           "nota_doc": "Check the verification code in the Norte audit. ",
+           "nota_completo": "Check the verification code in Norte (the second copy is stored and has the same SHA-256). "},
     "es": {"gerado": "Generado por {quem} el {d:%d/%m/%Y} a las {d:%H:%M} · Código {codigo}", "pagina_de": " · página {n} de ",
            "gerado_simples": "Generado por {quem} el {d:%d/%m/%Y a las %H:%M} - código de verificación {codigo}",
-           "rodape_doc": "Farol - {titulo} - código {codigo}", "pagina": " - página {n}", "como": "Cómo calculamos", "resumo": "Resumen",
-           "alerta": "Alerta: {a}", "nada": "Nada en este período.", "slogan": "Cada comunidad avisada por su nombre",
+           "rodape_doc": "Norte - {titulo} - código {codigo}", "pagina": " - página {n}", "como": "Cómo calculamos", "resumo": "Resumen",
+           "alerta": "Alerta: {a}", "nada": "Nada en este período.", "slogan": "El aviso correcto, para la comunidad correcta",
            "barras": "Barras discontinuas: proyección por el promedio de los meses cerrados.",
            "nota": "Solo números agregados y lo que está registrado: ningún nombre de cliente, número de UC, dirección ni coordenada. ",
-           "nota_doc": "Verifique el código de verificación en la auditoría de Farol. ",
-           "nota_completo": "Verifique el código de verificación en Farol (la segunda copia queda guardada y tiene el mismo SHA-256). "},
+           "nota_doc": "Verifique el código de verificación en la auditoría de Norte. ",
+           "nota_completo": "Verifique el código de verificación en Norte (la segunda copia queda guardada y tiene el mismo SHA-256). "},
 }
 AVISO_FICTICIO = {"en": ("Fictitious power grid and customers in this demonstration; real territory, addresses and communities "
                          "(IBGE, 2022 Census)."),

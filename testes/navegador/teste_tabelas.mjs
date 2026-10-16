@@ -151,7 +151,7 @@ for (const [email, telas] of Object.entries(TELAS)) {
     await ir(p, 'registro');
     conferir('painel lateral do computador: as tabelas viram cartões (rótulo: valor)', await p.avaliar(`(() => { const td = document.querySelector('#listaRegistro tbody td[data-rotulo]');
       return td && getComputedStyle(td).display === 'grid' && getComputedStyle(td, '::before').content.includes(td.dataset.rotulo); })()`));
-    conferir('"Quem": o nome em cima e o perfil embaixo, menor (sem "Admin do Farol (Admin do Farol)")', await p.avaliar(`(() => {
+    conferir('"Quem": o nome em cima e o perfil embaixo, menor (sem "Admin do Norte (Admin do Norte)")', await p.avaliar(`(() => {
       const qs = [...document.querySelectorAll('#listaRegistro .quem')];
       return qs.length > 0 && qs.every(q => !q.textContent.includes('(')) && qs.some(q => q.querySelector('small')); })()`),
       await p.avaliar(`[...document.querySelectorAll('#listaRegistro .quem')].slice(0, 3).map(q => q.outerHTML).join(' ')`));

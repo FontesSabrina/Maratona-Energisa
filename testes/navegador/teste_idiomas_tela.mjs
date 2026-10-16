@@ -28,8 +28,8 @@ async function sobras(p, idioma) {
 const p = await abrir(`${BASE}/`, { largura: 1440, altura: 900 });
 await p.avaliar(`(() => { const s = $('idiomaTela'); s.value = 'en'; s.dispatchEvent(new Event('change')); return 0; })()`);
 await ate(p, `document.documentElement.lang === 'en'`);
-conferir('tela de entrar em inglês (antes do login, só na sessão)', await p.avaliar(`document.querySelector('#telaEntrar h1').textContent === 'Sign in to Farol'
-  && $('botaoEntrar').textContent === 'Sign in' && document.title.startsWith('Farol · Power')`), await p.avaliar(`document.querySelector('#telaEntrar h1').textContent`));
+conferir('tela de entrar em inglês (antes do login, só na sessão)', await p.avaliar(`document.querySelector('#telaEntrar h1').textContent === 'Sign in to Norte'
+  && $('botaoEntrar').textContent === 'Sign in' && document.title.startsWith('Norte · Power')`), await p.avaliar(`document.querySelector('#telaEntrar h1').textContent`));
 const sobraEntrar = await sobras(p, 'en');
 conferir('tela de entrar: nenhum texto em português sobrando', !sobraEntrar.length, JSON.stringify(sobraEntrar));
 await p.avaliar(`($('email').value = 'admin@emg.example', $('senha').value = ${JSON.stringify(SENHAS['admin@emg.example'])}, $('formEntrar').requestSubmit(), 0)`);

@@ -37,7 +37,7 @@ MATRIZ = {
     # dados públicos do território (IBGE) e configuração da tela: qualquer pessoa com login
     ("GET", "/api/config"): TODOS, ("GET", "/api/concessao"): TODOS, ("GET", "/api/modelo-planilha"): TODOS,
     # o mapa operacional (comunidades e rede fictícia): só os perfis da empresa, e só na área de atuação dela;
-    # o Admin do Farol tem o mapa das empresas (desde 15/10/2026)
+    # o Admin do Norte tem o mapa das empresas (desde 15/10/2026)
     ("GET", "/api/municipios/{codigo}/comunidades"): EMPRESA, ("GET", "/api/municipios/{codigo}/rede"): EMPRESA,
     ("GET", "/api/verificar/{codigo}"): TODOS,
     # importar, conferir, gerar, PDF, MP3, JSON com UCs: Admin da empresa e Operador
@@ -51,9 +51,9 @@ MATRIZ = {
     # usuários da empresa: Admin da empresa
     ("GET", "/api/usuarios"): {ADM}, ("POST", "/api/usuarios"): {ADM}, ("PATCH", "/api/usuarios/{id_}"): {ADM},
     ("POST", "/api/usuarios/{id_}/senha-temporaria"): {ADM},
-    # empresas: Admin do Farol; auditoria: Admin do Farol (todas) e Admin da empresa (a dela)
+    # empresas: Admin do Norte; auditoria: Admin do Norte (todas) e Admin da empresa (a dela)
     ("GET", "/api/empresas"): {FAROL}, ("POST", "/api/empresas"): {FAROL}, ("PATCH", "/api/empresas/{id_}"): {FAROL},
-    # mapa das empresas e área de atuação: só o Admin do Farol (cadastro, área e contagens; nada operacional)
+    # mapa das empresas e área de atuação: só o Admin do Norte (cadastro, área e contagens; nada operacional)
     ("GET", "/api/empresas/mapa"): {FAROL}, ("GET", "/api/empresas/{id_}/ficha"): {FAROL}, ("PUT", "/api/empresas/{id_}/area"): {FAROL},
     ("POST", "/api/empresas/{id_}/area/arquivo"): {FAROL}, ("GET", "/api/municipios-ibge"): {FAROL},
     ("GET", "/api/municipios-ibge/{uf}/mapa"): {FAROL},
@@ -68,10 +68,10 @@ MATRIZ = {
     # envios e os arquivos enviados (comprovantes): os três perfis da empresa
     ("GET", "/api/historico/{id_}/envios"): EMPRESA, ("GET", "/api/envios/{id_}/arquivos/{tipo}"): EMPRESA,
     # relatórios: o do período e o comprovante (os três perfis da empresa); auditoria da empresa (Admin da empresa);
-    # auditoria geral de acessos, de todas as empresas (Admin do Farol)
+    # auditoria geral de acessos, de todas as empresas (Admin do Norte)
     ("GET", "/api/historico/{id_}/comprovante"): EMPRESA, ("GET", "/api/historico/{id_}/comprovante.pdf"): EMPRESA,
     # Fase H: cada relatório gera (tela), baixa (PDF/CSV) e envia; Consulta só gera e baixa; auditoria só o Admin da empresa;
-    # acessos de todas as empresas só o Admin do Farol (sem envio)
+    # acessos de todas as empresas só o Admin do Norte (sem envio)
     **{("GET", f"/api/relatorios/{t}"): EMPRESA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},
     **{("GET", f"/api/relatorios/{t}.{{formato}}"): EMPRESA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},
     **{("POST", f"/api/relatorios/{t}/enviar"): GERA for t in ("mensal", "custos", "comunidades", "prazos", "comunidade")},

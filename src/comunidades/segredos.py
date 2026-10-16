@@ -1,4 +1,4 @@
-"""Segredos do Farol (endereço do banco, chaves, SMTP): só em variável de ambiente.
+"""Segredos do Norte (endereço do banco, chaves, SMTP): só em variável de ambiente.
 
 Ordem: a variável de ambiente; se não houver, a linha NOME=valor do arquivo .env na raiz do projeto
 (ignorado pelo git; FAROL_ENV escolhe outro, ex.: .env.producao). Nenhum segredo fica no código.

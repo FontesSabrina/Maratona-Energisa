@@ -15,7 +15,7 @@ from fpdf import FPDF
 from .rotulos import idioma_valido, t
 
 MARCA = Path(__file__).resolve().parent / "marca" / "farol.svg"
-NOITE, MARE, AMBAR, CINZA = (14, 22, 32), (28, 42, 55), (245, 184, 61), (90, 102, 112)
+NOITE, MARE, AMBAR, CINZA = (11, 27, 43), (19, 38, 58), (46, 196, 182), (90, 102, 112)   # Norte: #0B1B2B, #13263A, principal #2EC4B6
 _TROCAS = str.maketrans({"—": "-", "–": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "...", "•": "-", "→": "->",
                          " ": " ", " ": " ", "✓": "OK", "⇪": "", "↑": "+", "↓": "-"})
 
@@ -53,8 +53,8 @@ def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, t
     pdf.set_title(_l1(t(idioma, "roteiro_pdf_titulo", municipio=municipio, uf=uf, data=data)))
     pdf.set_lang(idioma)
     pdf.set_subject(_l1(t(idioma, "roteiro_titulo")))
-    pdf.set_author("Farol")
-    pdf.set_creator("Farol")
+    pdf.set_author("Norte")
+    pdf.set_creator("Norte")
     pdf.add_page()
     # faixa da marca
     pdf.set_fill_color(*NOITE)
@@ -66,7 +66,7 @@ def roteiro(*, municipio: str, uf: str, empresa: str, data: str, horario: str, t
     pdf.set_xy(38, 6)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 8, "Farol")
+    pdf.cell(0, 8, "Norte")
     pdf.set_xy(38, 14)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(*AMBAR)

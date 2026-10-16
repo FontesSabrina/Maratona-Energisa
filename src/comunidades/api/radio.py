@@ -416,7 +416,7 @@ def _limite_emails(usuario_id: int) -> None:
 
 
 def url_publica() -> str:
-    """O endereço público do Farol para o link do e-mail (FAROL_URL_PUBLICA); nunca o Host do pedido."""
+    """O endereço público do Norte para o link do e-mail (FAROL_URL_PUBLICA); nunca o Host do pedido."""
     return (segredo("FAROL_URL_PUBLICA") or "http://127.0.0.1:8000").rstrip("/")
 
 

@@ -8,7 +8,7 @@ Num esquema próprio (FAROL_ESQUEMA=teste_area, apagado no fim). Confere:
 - códigos inválidos e KML/GeoJSON inválidos são recusados (script, DTD/entidade, só pontos, fora do Brasil, grande
   demais, extensão errada); o KML da concessão da EMG dá os municípios dela; nada do arquivo é guardado;
 - aviso fora da área: a UC de município fora da área é rejeitada (nunca entra no aviso) e empresa sem área não gera;
-- o mapa e a ficha da empresa só têm cadastro e contagens; o Admin do Farol é recusado nas rotas operacionais;
+- o mapa e a ficha da empresa só têm cadastro e contagens; o Admin do Norte é recusado nas rotas operacionais;
 - o mapa operacional dos perfis da empresa mostra só a área dela.
 
 Uso (na raiz): uv run python -W ignore testes/api/teste_area_atuacao.py
@@ -92,7 +92,7 @@ s = farol.put(f"/api/empresas/{out}/area", json={"codigos": [LEOPOLDINA, SAO_PAU
 conferir("confirmado: área salva", s.status_code == 200 and s.json()["salvo"]
          and {r[0] for r in sql("SELECT codigo_ibge FROM empresa_municipio WHERE empresa_id = %s", (out,))} == {LEOPOLDINA, SAO_PAULO})
 ln = sql("SELECT usuario_nome, perfil, detalhe FROM registro WHERE acao = 'alterou área de atuação' ORDER BY id DESC LIMIT 1")
-conferir("auditoria: quem fez e o antes → depois com os municípios", bool(ln) and ln[0][0] == "Admin do Farol" and ln[0][1] == "admin_farol"
+conferir("auditoria: quem fez e o antes → depois com os municípios", bool(ln) and ln[0][0] == "Admin do Norte" and ln[0][1] == "admin_farol"
          and "0 → 2 municípios" in ln[0][2] and "Leopoldina/MG" in ln[0][2] and "São Paulo/SP" in ln[0][2], str(ln))
 conferir("a mesma área de novo: 409 (nada a salvar)", farol.put(f"/api/empresas/{out}/area", json={"codigos": [SAO_PAULO, LEOPOLDINA], "confirmar": True}).status_code == 409)
 m = farol.get("/api/empresas/mapa").json()
@@ -102,7 +102,7 @@ conferir("remover um município: o resumo mostra o removido", r.status_code == 2
 conferir("código que não é município: 422", farol.put(f"/api/empresas/{out}/area", json={"codigos": ["9999999"], "confirmar": True}).status_code == 422)
 conferir("código fora do formato: 422", farol.put(f"/api/empresas/{out}/area", json={"codigos": ["31384"], "confirmar": True}).status_code == 422)
 f = farol.get(f"/api/empresas/{out}/ficha").json()["empresa"]
-conferir("ficha: cadastro, contagens e municípios (nada de aviso)", f["sigla"] == "OUT" and f["criada_por"] == "Admin do Farol"
+conferir("ficha: cadastro, contagens e municípios (nada de aviso)", f["sigla"] == "OUT" and f["criada_por"] == "Admin do Norte"
          and [x["nome"] for x in f["municipios"]] == ["São Paulo"] and {"usuarios", "avisos_mes", "avisos_total"} <= set(f), json.dumps(f)[:300])
 
 
@@ -158,11 +158,11 @@ conferir("mapa operacional: Leopoldina sumiu do mapa da EMG (só a área da empr
 farol.put(f"/api/empresas/{emg}/area", json={"codigos": sorted(base), "confirmar": True})
 conferir("área restaurada: o aviso volta a citar Leopoldina", LEOPOLDINA in [x["codigo_ibge"] for x in envio().json()["municipios"]])
 
-# ---------- o Admin do Farol não vê nada operacional; os outros perfis não mexem na área ----------
+# ---------- o Admin do Norte não vê nada operacional; os outros perfis não mexem na área ----------
 st = {r: farol.get(r).status_code for r in ("/api/historico", "/api/painel", f"/api/municipios/{LEOPOLDINA}/comunidades",
                                             f"/api/municipios/{LEOPOLDINA}/rede", "/api/comunidades/calor", "/api/relatorios/mensal")}
 st["POST /api/planilha"] = farol.post("/api/planilha", files={"arquivo": ("p.csv", planilha)}, data={"data": "12/11", "horario": "8h"}).status_code
-conferir("Admin do Farol: 403 em histórico, painel, comunidades, rede, calor, relatórios operacionais e planilha", all(s == 403 for s in st.values()), str(st))
+conferir("Admin do Norte: 403 em histórico, painel, comunidades, rede, calor, relatórios operacionais e planilha", all(s == 403 for s in st.values()), str(st))
 conferir("Admin da empresa não mexe na área (403)", adm.put(f"/api/empresas/{emg}/area", json={"codigos": [LEOPOLDINA], "confirmar": True}).status_code == 403
          and adm.get("/api/empresas/mapa").status_code == 403)
 

@@ -5,7 +5,7 @@
 // - Operador: o funil (planilha, quando, conferir e avisos), o aviso na tela é idêntico ao da API, o mapa desenha as comunidades,
 //   a edição atualiza o tempo, o PDF sai com o texto editado e o texto final fica no histórico.
 // - Consulta: só o histórico, aviso só para ler. Admin da empresa: cadastra usuário e vê a senha
-//   temporária uma vez. Admin do Farol: só empresas e registro. Dashboard com os números do histórico e busca no histórico.
+//   temporária uma vez. Admin do Norte: só empresas e registro. Dashboard com os números do histórico e busca no histórico.
 // - Os pontos das UCs aparecem no mapa logo depois do envio (num canvas, sem o número da UC) e somem no
 //   histórico e ao sair. Nenhuma UC nem coordenada no HTML da página; só requisições ao próprio servidor e à Esri; nenhuma
 //   exceção nem violação da CSP; alvos de 44 px; celular sem rolagem horizontal.
@@ -449,7 +449,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await p.fechar();
 }
 
-// ---------- 2. Consulta, Admin da empresa e Admin do Farol ----------
+// ---------- 2. Consulta, Admin da empresa e Admin do Norte ----------
 {
   const p = await abrir(`${BASE}/`, { largura: 1440, altura: 900 });
   const c = await entrarNaTela(p, 'consulta@emg.example', SENHAS['consulta@emg.example']);
@@ -562,7 +562,7 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   conferir('Ajuda: fecha com Esc', await p.avaliar(`$('caixaAjuda').hidden`));
   await p.avaliar(`(document.querySelector('.legenda [data-dica=vizinha]').click(), 0)`);
   conferir('dica "?": explica o termo (localidade vizinha)', await p.avaliar(`!$('dica').hidden && /Localidade vizinha/.test($('dica').textContent)`));
-  // tema escuro em todas as telas: cores do Farol, fundo do mapa escuro, alvos de 44 px
+  // tema escuro em todas as telas: cores do Norte, fundo do mapa escuro, alvos de 44 px
   await p.avaliar(`(document.documentElement.dataset.tema = 'claro', desenharTema(), trocarFundoDoMapa(), 0)`);   // o navegador de teste prefere o escuro
   const antes = await p.avaliar(`document.documentElement.dataset.tema + '/' + temaAtual()`);
   await p.avaliar(`($('botaoTema').click(), 0)`);
@@ -584,9 +584,9 @@ const ucs = readFileSync(PLANILHA, 'utf-8').split(/\r?\n/).slice(1).filter(Boole
   await captura(p, '0b_entrar_farol.png');
 
   const f = await entrarNaTela(p, 'admin@farol.example', SENHAS['admin@farol.example']);
-  conferir('Admin do Farol: só Empresas e Auditoria geral', f.abas.join(',') === 'Empresas,Auditoria geral', JSON.stringify(f.abas));
+  conferir('Admin do Norte: só Empresas e Auditoria geral', f.abas.join(',') === 'Empresas,Auditoria geral', JSON.stringify(f.abas));
   await ate(p, `document.querySelectorAll('#listaEmpresas tbody tr').length`);
-  conferir('Admin do Farol: a empresa EMG na lista', /EMG/.test(await p.avaliar(`$('listaEmpresas').textContent`)));
+  conferir('Admin do Norte: a empresa EMG na lista', /EMG/.test(await p.avaliar(`$('listaEmpresas').textContent`)));
   await p.avaliar(`($('empNome').value = 'Cooperativa Teste', $('empCnpj').value = '12.ABC.345/01DE-35', $('empSigla').value = 'CTT',
     $('empDominio').value = 'ctt.example', $('empAdminNome').value = 'Admin CTT', $('empAdminEmail').value = 'admin@ctt.example', $('formEmpresa').requestSubmit(), 0)`);
   await ate(p, `!$('caixaSenha').hidden`);

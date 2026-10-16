@@ -19,13 +19,13 @@ from .travas import celula_segura
 
 TOP_COMUNIDADES = 15
 COMO_CALCULADO = [
-    "Custo: o valor informado no envio. Por minuto no ar: valor por minuto x segundos da mensagem do Farol / 60; "
+    "Custo: o valor informado no envio. Por minuto no ar: valor por minuto x segundos da mensagem do Norte / 60; "
     "valor fechado: o próprio valor.",
     "Economia calculada: só com cobrança por minuto e com o aviso de hoje (fazenda a fazenda, da coluna local da planilha): "
-    "(segundos do aviso de hoje - segundos da mensagem do Farol) x valor por minuto / 60.",
+    "(segundos do aviso de hoje - segundos da mensagem do Norte) x valor por minuto / 60.",
     "Economia informada: quando a pessoa que enviou digitou quanto custaria o aviso do jeito antigo: custo antigo - custo.",
     "Sem o aviso de hoje e sem o custo antigo, não há economia: o relatório não estima.",
-    "Tempo economizado: segundos do aviso de hoje - segundos da mensagem do Farol, quando há o aviso de hoje.",
+    "Tempo economizado: segundos do aviso de hoje - segundos da mensagem do Norte, quando há o aviso de hoje.",
     "No prazo: o primeiro envio à rádio saiu pelo menos 72 horas antes do início (5 dias úteis com equipamento vital; "
     "feriados não entram). Aviso sem envio registrado fica fora dessa conta.",
 ]

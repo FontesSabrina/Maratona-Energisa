@@ -8,7 +8,7 @@ Roda num esquema próprio do Postgres (apagado no fim), com a semente de acesso 
 - PDF e CSV: cada exportação na auditoria com quem gerou, código FRL que /api/verificar acha, CSV protegido
   contra fórmula; nenhum número de UC nos relatórios;
 - comprovante do aviso (JSON e PDF), só da própria empresa;
-- relatório de auditoria (só Admin da empresa) e auditoria geral de acessos (só Admin do Farol, filtro por empresa);
+- relatório de auditoria (só Admin da empresa) e auditoria geral de acessos (só Admin do Norte, filtro por empresa);
 - painel do mês (gasto, economizado, avisos, % no prazo) igual ao relatório do mês;
 - a semente de demonstração não duplica ao rodar de novo.
 
@@ -191,7 +191,7 @@ conferir("comprovante em PDF com o código do aviso e o do comprovante", cpdf.co
 ra = adm.get(f"/api/relatorios/auditoria?mes={mes}")
 conferir("relatório de auditoria (Admin da empresa): linhas com quem e perfil", ra.status_code == 200 and ra.json()["total"] > 5
          and any(x["acao"] == "semente de demonstração" for x in ra.json()["linhas"]), ra.text[:160])
-conferir("relatório de auditoria: Operador, Consulta e Admin do Farol não (403)", all(c_.get(f"/api/relatorios/auditoria?mes={mes}").status_code == 403
+conferir("relatório de auditoria: Operador, Consulta e Admin do Norte não (403)", all(c_.get(f"/api/relatorios/auditoria?mes={mes}").status_code == 403
                                                                                      for c_ in (op, con, far)))
 so = adm.get(f"/api/relatorios/auditoria?mes={mes}&so_acessos=true").json()
 conferir("relatório de auditoria: só acessos", so["total"] > 0 and {x["acao"] for x in so["linhas"]} <= set(__import__("comunidades.api.relatorios", fromlist=["x"]).ACESSOS))
@@ -204,7 +204,7 @@ r = far.post("/api/empresas", json={"nome": "Outra", "sigla": "OUT", "dominio": 
                                     "admin_email": "admin@out.example"})
 outra = pronto("admin@out.example", r.json()["senha_temporaria"])
 ac = far.get(f"/api/relatorios/acessos?mes={mes}").json()
-conferir("acessos (Admin do Farol): de todas as empresas", {"EMG", "OUT"} <= {x["empresa"] for x in ac["linhas"]}, str({x["empresa"] for x in ac["linhas"]}))
+conferir("acessos (Admin do Norte): de todas as empresas", {"EMG", "OUT"} <= {x["empresa"] for x in ac["linhas"]}, str({x["empresa"] for x in ac["linhas"]}))
 conferir("acessos: filtro por empresa", {x["empresa"] for x in far.get(f"/api/relatorios/acessos?mes={mes}&empresa=OUT").json()["linhas"]} == {"OUT"})
 conferir("acessos: Admin da empresa não (403)", adm.get(f"/api/relatorios/acessos?mes={mes}").status_code == 403
          and far.get(f"/api/relatorios/acessos.pdf?mes={mes}").content[:5] == b"%PDF-")

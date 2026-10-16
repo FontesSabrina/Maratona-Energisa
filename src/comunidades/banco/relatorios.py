@@ -47,7 +47,7 @@ VIA = "v.id, v.empresa_id, v.usuario_nome, v.tipo, v.titulo, v.filtros, v.codigo
 
 
 def vias(empresa_id: int | None, tipos: tuple[str, ...], limite: int = 200) -> list[dict]:
-    """As vias da empresa (ou as sem empresa, do Admin do Farol), dos tipos que o perfil pode ver."""
+    """As vias da empresa (ou as sem empresa, do Admin do Norte), dos tipos que o perfil pode ver."""
     filtro = "v.empresa_id = %s" if empresa_id is not None else "v.empresa_id IS NULL"
     args = (empresa_id,) if empresa_id is not None else ()
     return _todos(f"SELECT {VIA} FROM relatorio_via v WHERE {filtro} AND v.tipo = ANY(%s) ORDER BY v.id DESC LIMIT %s",

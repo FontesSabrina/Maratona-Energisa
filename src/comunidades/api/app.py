@@ -1,4 +1,4 @@
-"""API do Farol (FastAPI): recebe a planilha de UCs afetadas e devolve municípios, comunidades e aviso.
+"""API do Norte (FastAPI): recebe a planilha de UCs afetadas e devolve municípios, comunidades e aviso.
 
 Controller: lê o arquivo (api/leitura.py), traduz as linhas para o JSON validado (nucleo/planilha.py),
 confere de novo por uma rotina independente (api/conferencia.py), busca no banco a base territorial
@@ -92,7 +92,7 @@ async def _ao_subir(app):
 
 
 # em produção, sem a documentação interativa (é a única parte sem CSP: carrega o Swagger de fora)
-app = FastAPI(title="Farol", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
+app = FastAPI(title="Norte", version="0.1.0", docs_url=None if PRODUCAO else "/api/docs",
               openapi_url=None if PRODUCAO else "/api/openapi.json", redoc_url=None, lifespan=_ao_subir)
 app.include_router(rotas)
 app.include_router(area_rotas)
@@ -203,7 +203,7 @@ def config(request: Request, u: dict = Depends(usuario_atual)) -> dict:
 
 
 def _na_area(u: dict, codigo: str) -> None:
-    """O mapa operacional: só os perfis da empresa e só os municípios da área de atuação dela. O Admin do Farol não
+    """O mapa operacional: só os perfis da empresa e só os municípios da área de atuação dela. O Admin do Norte não
     vê o mapa operacional (o dele é o mapa das empresas)."""
     if u["perfil"] == "admin_farol":
         raise HTTPException(403, "Seu perfil não tem acesso a isto.")
@@ -585,7 +585,7 @@ def _area_da_empresa(u: dict) -> set[str]:
     """A área de atuação da empresa de quem gera o aviso; sem área cadastrada, nenhum aviso (o servidor recusa)."""
     area = banco_acesso.area(u["empresa_id"])
     if not area:
-        raise HTTPException(422, "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Farol.")
+        raise HTTPException(422, "A área de atuação da empresa não está cadastrada: nenhum aviso pode ser criado. Peça ao Admin do Norte.")
     return area
 
 
@@ -930,7 +930,7 @@ def linha_do_tempo(id_: int, u: dict = Depends(exigir("ver_historico"))) -> dict
 @app.get("/api/verificar/{codigo}")
 def verificar_codigo(codigo: str, u: dict = Depends(usuario_atual)) -> dict:
     """Confere um código de verificação (FRL-XXXX-XXXX-XXXX): a linha da auditoria que ele aponta, da
-    própria empresa (o Admin do Farol vê de todas), e se a corrente da auditoria está íntegra."""
+    própria empresa (o Admin do Norte vê de todas), e se a corrente da auditoria está íntegra."""
     h = "".join(ch for ch in codigo.upper().removeprefix("FRL") if ch.isalnum())
     if len(h) != 12 or any(ch not in "0123456789ABCDEF" for ch in h):
         raise HTTPException(422, "Código de verificação: use o formato FRL-XXXX-XXXX-XXXX.")

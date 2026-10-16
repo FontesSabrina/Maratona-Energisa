@@ -184,7 +184,7 @@ cte = TestClient(app, base_url="http://farol.teste")
 cte.post("/api/entrar", json={"email": "admin@cte.example", "senha": r.json()["senha_temporaria"]})
 cte.post("/api/senha", json={"atual": r.json()["senha_temporaria"], "nova": NOVA})
 conferir("outra empresa: o código da EMG não é achado (404)", cte.get(f"/api/verificar/{j['codigo']}").status_code == 404)
-conferir("Admin do Farol acha o código de qualquer empresa", far.get(f"/api/verificar/{j['codigo']}").status_code == 200)
+conferir("Admin do Norte acha o código de qualquer empresa", far.get(f"/api/verificar/{j['codigo']}").status_code == 200)
 
 # renomear o usuário depois não muda o passado
 sql("UPDATE usuario SET nome = 'Operador Renomeado' WHERE email = 'operador@emg.example'")
@@ -243,7 +243,7 @@ alvo = sql("SELECT id FROM registro WHERE acao = 'cancelou o aviso'")[0][0]
 sql("ALTER TABLE registro DISABLE TRIGGER USER")       # só o dono da tabela consegue (simula quem tem acesso ao banco)
 sql("UPDATE registro SET detalhe = 'aviso 1: motivo trocado' WHERE id = %s", (alvo,))
 vf = far.get("/api/auditoria/verificar").json()
-conferir("adulteração no banco: detectada na linha alterada (Admin do Farol vê onde)", vf["ok"] is False and vf["quebra_id"] == alvo
+conferir("adulteração no banco: detectada na linha alterada (Admin do Norte vê onde)", vf["ok"] is False and vf["quebra_id"] == alvo
          and vf["motivo"] == "conteúdo alterado", json.dumps(vf))
 conferir("adulteração: o Admin da empresa vê que não confere", adm.get("/api/auditoria/verificar").json()["ok"] is False)
 meio = sql("SELECT id FROM registro ORDER BY id LIMIT 1 OFFSET 5")[0][0]
