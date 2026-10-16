@@ -25,6 +25,7 @@ $testes = @(
     @{ Nome = "Leitura segura (zip, macro)";   Cmd = "uv run python -W ignore testes/api/teste_leitura.py" },
     @{ Nome = "Senhas (Argon2id)";             Cmd = "uv run python -W ignore testes/api/teste_senhas.py" },
     @{ Nome = "API";                           Cmd = "uv run python -W ignore testes/api/teste_api.py" },
+    @{ Nome = "Escolha pela API (área, filtro)"; Cmd = "uv run python -W ignore testes/api/teste_escolha.py" },
     @{ Nome = "Acesso (login, perfis)";        Cmd = "uv run python -W ignore testes/api/teste_acesso.py" },
     @{ Nome = "Banco já existente (4 perfis)"; Cmd = "uv run python -W ignore testes/api/teste_migracao.py" },
     @{ Nome = "Área de atuação (empresas)";    Cmd = "uv run python -W ignore testes/api/teste_area_atuacao.py" },

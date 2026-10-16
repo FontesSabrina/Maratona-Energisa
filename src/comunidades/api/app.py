@@ -10,6 +10,10 @@ quem enviou; eles não entram no histórico.
 
 Dois passos: /api/planilha (Conferir) devolve a conferência, as travas (nucleo/travas.py) e o pacote
 assinado (api/pacote.py); /api/avisos (Gerar) só aceita esse pacote, com a confirmação humana, e grava.
+Entre os dois, a escolha de quem será desligado (nucleo/selecao.py): a planilha pode ser a base de clientes.
+/api/planilha devolve também o pacote "base" e o que a tela precisa para escolher (linha a linha, sem a UC);
+/api/planilha/escolha recebe o critério e devolve a conferência só das escolhidas, com o pacote "escolha"
+(o critério assinado junto). O pacote de /api/planilha já vale como "a planilha inteira" (inativas fora).
 
 Toda rota, menos /api/saude e /api/entrar, exige login (api/acesso.py), e a permissão é conferida
 no servidor. Cada planilha processada fica no histórico da empresa só como agregado.
@@ -23,7 +27,7 @@ import logging
 import secrets
 import time
 import traceback
-from collections import Counter, defaultdict, deque
+from collections import Counter, OrderedDict, defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -49,9 +53,9 @@ from ..banco import radios as banco_radios
 from ..banco import relatorios as banco_relatorios
 from ..fontes.base_territorial import CRS_BASE
 from .. import correio
-from ..nucleo import agrupamento, auditoria, esquema_planilha, idiomas, mensagem, painel, travas
+from ..nucleo import agrupamento, auditoria, esquema_planilha, idiomas, mensagem, painel, selecao, travas
 from ..nucleo import tipos_desligamento as tipos
-from ..nucleo.afetados import BaseMunicipio, afetados, municipio_de
+from ..nucleo.afetados import BaseMunicipio, afetados, localizar, municipio_de
 from ..nucleo.desligamento import PALAVRAS_POR_SEGUNDO, aviso_antigo_de_locais, locais_de
 from ..nucleo import planilha
 from ..nucleo.acesso import PERFIS
@@ -424,8 +428,9 @@ async def _ler_e_traduzir(arquivo: UploadFile, aba: str | None, u: dict):
         del conteudo
 
 
-def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict, area: set[str] | None = None) -> dict:
-    """Do JSON validado (nunca da planilha bruta): municípios, comunidades, avisos, pontos e as travas."""
+def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict, area: set[str] | None = None, lido=None) -> dict:
+    """Do JSON validado (nunca da planilha bruta): municípios, comunidades, avisos, pontos e as travas.
+    lido: o JSON do arquivo inteiro, para a tradução (modelo pode ser só as linhas escolhidas)."""
     v = planilha.validas(modelo)
     rejeitadas = [pt for pt in modelo.pontos if pt.status == "rejeitada"]
     fora_planilha = [pt for pt in rejeitadas if pt.motivo == Motivo.FORA_DA_CONCESSAO]
@@ -434,7 +439,7 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict, area: se
                              "problemas_por_motivo": dict(Counter(TEXTOS[pt.motivo] for pt in rejeitadas)),
                              "problemas": [{"linha": pt.linha, "codigo": pt.motivo.value, "motivo": TEXTOS[pt.motivo]}
                                            for pt in rejeitadas[:MAX_PROBLEMAS]]},
-                "traducao": _traducao(modelo),
+                "traducao": _traducao(lido or modelo),
                 "fora_da_concessao": {"ucs": len(fora_planilha), "linhas": [pt.linha for pt in fora_planilha[:MAX_PROBLEMAS]]},
                 "municipios": [], "prazo": _prazo(Counter(), cfg),
                 "pontos_fora": [[round(pt.lat, CASAS_PONTO), round(pt.lon, CASAS_PONTO)] for pt in fora_planilha],
@@ -505,6 +510,77 @@ def _resultado(modelo, data: str, horario: str, idioma: str, cfg: dict, area: se
     return resposta
 
 
+MAX_LOCALIZACOES = 8
+_localizacoes: OrderedDict = OrderedDict()
+
+
+def _localizacao(modelo, area: set[str]) -> tuple[dict[int, tuple[str, str]], dict[tuple[str, str], str]]:
+    """Linha -> (código IBGE, comunidade) de cada linha válida localizada (a mesma regra do aviso, nucleo/afetados.localizar)
+    e o distrito de cada comunidade. Fica num cache pequeno do processo, pela posição das linhas e pela área: só números de
+    linha e nomes de comunidade, nunca UC nem coordenada."""
+    v = planilha.validas(modelo)
+    chave = hashlib.sha256(repr((tuple(zip(v["LINHA"].tolist(), v["LAT"].tolist(), v["LON"].tolist())),
+                                 sorted(area))).encode()).hexdigest()
+    if chave in _localizacoes:
+        _localizacoes.move_to_end(chave)
+        return _localizacoes[chave]
+    comunidade, distritos = {}, {}
+    if not v.empty:
+        x, y = GEO_PARA_BASE.transform(v["LON"].to_numpy(), v["LAT"].to_numpy())
+        xy = np.c_[x, y]
+        bases, fora_area = _bases(xy, area)
+        if bases:
+            loc = localizar(xy[~fora_area], bases)
+            for linha, q, nome, distrito in zip(v["LINHA"].to_numpy()[~fora_area], loc["MUNICIPIO"], loc["COMUNIDADE_PREVISTA"],
+                                                loc["DISTRITO"]):
+                if q >= 0 and nome is not None:
+                    comunidade[int(linha)] = (bases[q].codigo, nome)
+                    distritos.setdefault((bases[q].codigo, nome), distrito)
+    _localizacoes[chave] = (comunidade, distritos)
+    while len(_localizacoes) > MAX_LOCALIZACOES:
+        _localizacoes.popitem(last=False)
+    return comunidade, distritos
+
+
+def _base_escolha(modelo, comunidade: dict, distritos: dict) -> dict:
+    """O que a tela precisa para escolher quem será desligado (só na memória do navegador, como os pontos do mapa):
+    linha a linha, a posição (5 casas, ou null), a comunidade e o circuito, o conjunto, o transformador e o bairro como
+    índices nas listas de valores, se está inativa e, só nas linhas sem posição, se tem equipamento vital (a regra de
+    nucleo/selecao.py). Nunca o número da UC nem o endereço."""
+    valores = {f: sorted({getattr(p, f) for p in modelo.pontos if getattr(p, f)}) for f in selecao.FILTROS}
+    posicao = {f: {x: i for i, x in enumerate(vs)} for f, vs in valores.items()}
+    nomes = {c: (n, uf) for c, n, uf, _ in banco.contornos(CRS_BASE)}
+    municipios = sorted({c for c, _ in comunidade.values()})
+    comunidades = sorted(set(comunidade.values()))
+    i_mun, i_com = {c: i for i, c in enumerate(municipios)}, {c: i for i, c in enumerate(comunidades)}
+    linhas = {"lat": [], "lon": [], "com": [], **{f: [] for f in selecao.FILTROS}, "inativa": [], "vital_sem_posicao": []}
+    for p in modelo.pontos:
+        tem = p.lat is not None
+        linhas["lat"].append(round(p.lat, CASAS_PONTO) if tem else None)
+        linhas["lon"].append(round(p.lon, CASAS_PONTO) if tem else None)
+        linhas["com"].append(i_com.get(comunidade.get(p.linha), -1))
+        for f in selecao.FILTROS:
+            linhas[f].append(posicao[f].get(getattr(p, f), -1))
+        linhas["inativa"].append(int(planilha.inativa(p.situacao)))
+        linhas["vital_sem_posicao"].append(int(not tem and p.equipamento_vital is True))
+    return {"lidas": modelo.resumo.total, "valores": valores, "linhas": linhas,
+            "municipios": [{"codigo_ibge": c, "nome": nomes.get(c, (c, ""))[0], "uf": nomes.get(c, ("", ""))[1]} for c in municipios],
+            "comunidades": [{"municipio": i_mun[c], "nome": n, "distrito": distritos.get((c, n))} for c, n in comunidades],
+            "colunas": [f for f in selecao.FILTROS if f in modelo.colunas] + (["situacao"] if "situacao" in modelo.colunas else [])}
+
+
+def _conferir_escolha(modelo, criterio, comunidade: dict, data: str, horario: str, idioma: str, cfg: dict, area: set[str]) -> dict:
+    """A conferência só das linhas escolhidas: as travas (vital, suspeitos, limite de rejeição, fora da área) valem sobre
+    elas. Devolve também a escolha: o critério, a conta fechada (lidas, inativas fora, não escolhidas, escolhidas) e as
+    inativas contadas por bairro e por circuito."""
+    e = selecao.aplicar(modelo, criterio, comunidade)
+    resposta = _resultado(e.modelo, data, horario, idioma, cfg, area, lido=modelo)
+    n = resposta["conferencia"]["numeros"]
+    resposta["escolha"] = {**selecao.resumo(criterio, e.conta, n["comunidades"]), "inativas": e.inativas}
+    resposta["conferencia"]["conta"] = e.conta
+    return resposta
+
+
 def _area_da_empresa(u: dict) -> set[str]:
     """A área de atuação da empresa de quem gera o aviso; sem área cadastrada, nenhum aviso (o servidor recusa)."""
     area = banco_acesso.area(u["empresa_id"])
@@ -523,16 +599,66 @@ async def conferir_planilha(arquivo: UploadFile = File(...), data: str = Form(..
     data, horario, idioma = _formulario(data, horario, idioma)
     tipo, motivo = _motivo(tipo, tipo_outro, idioma)
     modelo = await _ler_e_traduzir(arquivo, aba, u)
-    cfg = config_empresa(u["empresa_id"])
-    resposta = _resultado(modelo, data, horario, idioma, cfg, _area_da_empresa(u))
+    cfg, area = config_empresa(u["empresa_id"]), _area_da_empresa(u)
+    comunidade, distritos = _localizacao(modelo, area)
+    planilha_inteira = selecao.Criterio(modo="planilha")
+    resposta = _conferir_escolha(modelo, planilha_inteira, comunidade, data, horario, idioma, cfg, area)
+    resposta["base"] = _base_escolha(modelo, comunidade, distritos)
     resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     _alerta_repeticao(resposta, u, cfg)
-    resposta["pacote"], vence = pacote_.assinar(travas.ucs_opacas(modelo), u["id"], u["empresa_id"])
+    opaco = travas.ucs_opacas(modelo)
+    # o pacote "base" serve para escolher quem será desligado; o "escolha" já é a planilha inteira (sem as inativas)
+    resposta["pacote_base"], _ = pacote_.assinar(opaco, u["id"], u["empresa_id"], fase="base")
+    resposta["pacote"], vence = pacote_.assinar(opaco, u["id"], u["empresa_id"], criterio=planilha_inteira)
     resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
     r = modelo.resumo
     banco_acesso.registrar("importou planilha", f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256}): {r.total} linhas, "
                            f"{r.ok} ok, {r.corrigidas} corrigidas, {r.rejeitadas} rejeitadas", u["id"], u["empresa_id"])
+    return JSONResponse(resposta)
+
+
+class PedidoEscolha(BaseModel):
+    """Entre os dois passos: o pacote "base" da planilha lida, o critério de quem será desligado e o formulário."""
+    pacote: str = Field(max_length=pacote_.MAX_PACOTE)
+    criterio: selecao.Criterio
+    data: str = Field(max_length=200)
+    horario: str = Field(max_length=200)
+    idioma: str = Field(idiomas.PADRAO, max_length=10)
+    tipo: str = Field(tipos.PADRAO, max_length=40)
+    tipo_outro: str | None = Field(None, max_length=1000)
+
+
+LIMITE_ESCOLHAS = 120         # conferências de escolha por usuário por hora (cada uma roda o algoritmo)
+_escolhas: dict[int, deque] = defaultdict(deque)
+
+
+@app.post("/api/planilha/escolha")
+def conferir_escolha(dados: PedidoEscolha, u: dict = Depends(exigir("gerar_aviso"))) -> JSONResponse:
+    """Escolher quem será desligado (nucleo/selecao.py): com o pacote "base" e o critério, a conferência só das escolhidas
+    e o pacote "escolha" (o critério assinado junto), que o 2º passo usa para gerar o aviso. Nada vai para o histórico."""
+    data, horario, idioma = _formulario(dados.data, dados.horario, dados.idioma)
+    tipo, motivo = _motivo(dados.tipo, dados.tipo_outro, idioma)
+    agora, fila = time.monotonic(), _escolhas[u["id"]]
+    while fila and agora - fila[0] > JANELA_ENVIOS:
+        fila.popleft()
+    if len(fila) >= LIMITE_ESCOLHAS:
+        raise HTTPException(429, f"Limite de {LIMITE_ESCOLHAS} conferências por hora atingido. Tente de novo mais tarde.")
+    fila.append(agora)
+    try:
+        modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"], fase="base")
+    except pacote_.PacoteRecusado as e:
+        raise HTTPException(422, str(e)) from None
+    cfg, area = config_empresa(u["empresa_id"]), _area_da_empresa(u)
+    criterio = selecao.canonico(dados.criterio)
+    resposta = _conferir_escolha(modelo, criterio, _localizacao(modelo, area)[0], data, horario, idioma, cfg, area)
+    resposta["desligamento"] = {"tipo": tipo, "rotulo": tipos.ROTULOS[tipo], "motivo": motivo}
+    _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
+    _alerta_repeticao(resposta, u, cfg)
+    resposta["pacote"], vence = pacote_.assinar(modelo, u["id"], u["empresa_id"], criterio=criterio)
+    resposta["pacote_vence"] = datetime.fromtimestamp(vence, BRASILIA).isoformat(timespec="seconds")
+    banco_acesso.registrar("conferiu a escolha de quem será desligado", f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256}): "
+                           f"{resposta['escolha']['texto']}"[:500], u["id"], u["empresa_id"])
     return JSONResponse(resposta)
 
 
@@ -546,11 +672,12 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
     if (ja := banco_acesso.aviso_do_pacote(u["empresa_id"], pacote_hash)):   # clique duplo ou reenvio: um aviso só
         raise HTTPException(409, f"Este aviso já foi gerado com esta conferência (aviso nº {ja}). Para outro aviso, confira a planilha de novo.")
     try:
-        modelo = pacote_.abrir(dados.pacote, u["id"], u["empresa_id"])
+        modelo, criterio = pacote_.abrir_escolha(dados.pacote, u["id"], u["empresa_id"])
     except pacote_.PacoteRecusado as e:
         raise HTTPException(422, str(e)) from None
-    cfg = config_empresa(u["empresa_id"])
-    resposta = _resultado(modelo, data, horario, idioma, cfg, _area_da_empresa(u))
+    cfg, area = config_empresa(u["empresa_id"]), _area_da_empresa(u)
+    # a mesma escolha que foi conferida (o critério veio assinado): as travas valem sobre as escolhidas
+    resposta = _conferir_escolha(modelo, criterio, _localizacao(modelo, area)[0], data, horario, idioma, cfg, area)
     _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo)
     rep = _alerta_repeticao(resposta, u, cfg)
     c, arq = resposta["conferencia"], f"{modelo.arquivo.nome} (sha256 {modelo.arquivo.sha256})"
@@ -562,6 +689,7 @@ def gerar_aviso(dados: PedidoAviso, u: dict = Depends(exigir("gerar_aviso"))) ->
         raise HTTPException(422, problema)
     if rep:
         banco_acesso.registrar("alerta de repetição", f"{arq}: {rep}"[:500], u["id"], u["empresa_id"])
+    banco_acesso.registrar("escolheu quem será desligado", f"{arq}: {resposta['escolha']['texto']}"[:700], u["id"], u["empresa_id"])
     banco_acesso.registrar("conferiu os números e o mapa", f"{arq}: {c['numeros']['clientes']} clientes, "
                            f"{c['numeros']['comunidades']} comunidades", u["id"], u["empresa_id"])
     if c["rejeicao"]["acima"]:
@@ -644,6 +772,8 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
     resumo = {"linhas": p["linhas"], "validas": p["validas"], "problemas": p["total_problemas"],
               "fora_da_concessao": resposta["fora_da_concessao"]["ucs"], "prazo": resposta["prazo"],
               "corrigidas": resposta["conferencia"]["numeros"]["corrigidas"], "arquivo_sha256": resposta["conferencia"]["sha256"]}
+    if resposta.get("escolha"):   # o critério de quem foi desligado e a conta (nunca as UCs)
+        resumo["escolha"] = {k: v for k, v in resposta["escolha"].items() if k != "inativas"}
     # do aviso de hoje, só as contagens (o texto lista imóveis e ruas e não precisa ficar guardado)
     municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital",
                                          "mensagem", "segundos_mensagem")},

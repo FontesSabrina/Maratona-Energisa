@@ -279,6 +279,7 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Economia anual no cenário conservador": ("Annual savings in the conservative scenario", "Ahorro anual en el escenario conservador"),
     "Já economizado (envios registrados)": ("Already saved (recorded sendings)", "Ya ahorrado (envíos registrados)"),
     "não informado": ("not provided", "no informado"),
+    "Quem será desligado": ("Who will lose power", "Quiénes quedarán sin energía"),
     "medição de validação (Leopoldina)": ("validation measurement (Leopoldina)", "medición de validación (Leopoldina)"),
     "média real de 1 aviso da empresa": ("real average of 1 company notice", "promedio real de 1 aviso de la empresa"),
     "Origem dos valores": ("Source of the values", "Origen de los valores"),

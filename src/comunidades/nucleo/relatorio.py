@@ -177,6 +177,8 @@ def comprovante(a: dict, envios: list[dict], horas: int = 72, dias_uteis: int = 
                         "comunidades": [f"{c['nome'].split(' (')[0]} ({'Sede' if c.get('distrito') == m['nome'] else c.get('distrito')})"
                                         for c in m["comunidades"]]} for m in a["municipios"]],
         "ucs": sum(int(m.get("ucs", 0)) for m in a["municipios"]), "equipamento_vital": _vital(a),
+        # o critério de quem foi desligado (nucleo/selecao.resumo), nunca as UCs; aviso de antes da escolha: None
+        "escolha": (a.get("resumo") or {}).get("escolha"),
         "prazo": {"regra": p["regra"], "no_prazo": p["no_prazo"], "atraso_horas": p["atraso_horas"],
                   "limite": p["limite"].isoformat() if p["limite"] else None},
         "envios": [{"radio": e["radio_nome"], "canal": e["canal"], "status": e["status"], "quando": e["criado_em"].isoformat(),

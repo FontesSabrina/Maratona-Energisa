@@ -31,6 +31,7 @@ from ..banco import radios as banco_radios
 from ..banco import relatorios as banco
 from ..nucleo import relatorio as R
 from ..nucleo import relatorios as RH
+from ..nucleo import selecao
 from ..nucleo import simulador as SIM
 from ..nucleo.acesso import PERFIS, pode, problema_email
 from ..nucleo.auditoria import codigo_verificacao
@@ -451,6 +452,7 @@ def comprovante_pdf(id_: int, u: dict = Depends(exigir("ver_historico"))) -> Res
         ("Aviso", f"nº {c['aviso']} - código {c['codigo'] or '-'}"), ("Situação", c["status"]),
         ("Solicitado por", f"{c['por']} ({PERFIS.get(c['perfil'], '')})"), ("Quando", f"{criado:%d/%m/%Y às %H:%M}"),
         ("Desligamento", f"{c['data']}, {c['horario']}"), ("Tipo", f"{c['tipo']} ({c['motivo']})"),
+        ("Quem será desligado", selecao.descrever_resumo(c["escolha"], idioma) if c.get("escolha") else "-"),
         ("UCs no aviso", str(c["ucs"])), ("Com equipamento vital (só a contagem)", str(c["equipamento_vital"])),
         ("Prazo", f"{p['regra']}: " + ("sem envio registrado" if p["no_prazo"] is None else "no prazo" if p["no_prazo"] else f"fora do prazo ({p['atraso_horas']} h)")),
         ("Custo", _brl(c["custo"])), ("Economia calculada", _brl(c["economia_calculada"])), ("Economia informada", _brl(c["economia_informada"]))])]

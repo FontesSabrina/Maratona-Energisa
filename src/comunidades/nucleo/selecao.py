@@ -174,37 +174,56 @@ def aplicar(m: PlanilhaJSON, c: Criterio, comunidade: dict[int, tuple[str, str]]
 
 
 # ---------- o que fica registrado (auditoria, histórico e PDF): o critério, nunca as UCs ----------
+# as palavras da descrição em cada idioma (o PDF do comprovante sai no idioma do aviso); singular e plural
+PALAVRAS = {
+    "pt-BR": {"planilha": "a planilha inteira (lista do desligamento)", "area": ("área desenhada", "polígono", "polígonos", "vértices"),
+              "comunidade": ("comunidade", "comunidades"), "circuito": ("circuito", "circuitos"), "conjunto": ("conjunto", "conjuntos"),
+              "transformador": ("transformador", "transformadores"), "bairro": ("bairro", "bairros"), "uc": ("UC", "UCs"),
+              "e": " e ", "inativas": " (inativas incluídas)"},
+    "en": {"planilha": "the whole spreadsheet (outage list)", "area": ("drawn area", "polygon", "polygons", "vertices"),
+           "comunidade": ("community", "communities"), "circuito": ("circuit", "circuits"), "conjunto": ("set", "sets"),
+           "transformador": ("transformer", "transformers"), "bairro": ("neighborhood", "neighborhoods"), "uc": ("UC", "UCs"),
+           "e": " and ", "inativas": " (inactive included)"},
+    "es": {"planilha": "toda la planilla (lista del corte)", "area": ("área dibujada", "polígono", "polígonos", "vértices"),
+           "comunidade": ("comunidad", "comunidades"), "circuito": ("circuito", "circuitos"), "conjunto": ("conjunto", "conjuntos"),
+           "transformador": ("transformador", "transformadores"), "bairro": ("barrio", "barrios"), "uc": ("UC", "UC"),
+           "e": " y ", "inativas": " (inactivas incluidas)"},
+}
+
+
 def _lista(valores, citados: int = MAX_CITADOS) -> str:
     v = list(valores)
     return ", ".join(v[:citados]) + (f" (+{len(v) - citados})" if len(v) > citados else "")
 
 
-def descrever(c: Criterio, ucs: int, comunidades: int) -> str:
-    """'área desenhada (1 polígono, 5 vértices), 42 UCs, 3 comunidades' ou 'circuitos CIR147, CIR771, 96 UCs, 2 comunidades'."""
-    c = canonico(c)
-    partes = []
-    if c.modo == "planilha":
-        partes.append("a planilha inteira (lista do desligamento)")
-    if c.poligonos:
-        n, v = len(c.poligonos), area_.n_vertices(c.poligonos_lista())
-        partes.append(f"área desenhada ({n} {'polígono' if n == 1 else 'polígonos'}, {v} vértices)")
-    if c.comunidades:
-        n = len(c.comunidades)
-        partes.append(f"{'comunidade' if n == 1 else 'comunidades'} {_lista(x.nome for x in c.comunidades)}")
+def descrever_resumo(r: dict, idioma: str = "pt-BR") -> str:
+    """A descrição a partir do que o histórico guarda (resumo()), no idioma pedido (sem ele, em português)."""
+    w = PALAVRAS.get(idioma, PALAVRAS["pt-BR"])
+    um = lambda par, n: par[0] if n == 1 else par[1]
+    partes = [w["planilha"]] if r["modo"] == "planilha" else []
+    if r["poligonos"]:
+        a = w["area"]
+        partes.append(f"{a[0]} ({r['poligonos']} {a[1] if r['poligonos'] == 1 else a[2]}, {r['vertices']} {a[3]})")
+    if r["comunidades"]:
+        partes.append(f"{um(w['comunidade'], len(r['comunidades']))} {_lista(r['comunidades'])}")
     for f in FILTROS:
-        v = getattr(c, f)
-        if v:
-            partes.append(f"{NOMES_FILTRO[f][len(v) > 1]} {_lista(v)}")
-    texto = " e ".join(partes) + f", {ucs} {'UC' if ucs == 1 else 'UCs'}, {comunidades} {'comunidade' if comunidades == 1 else 'comunidades'}"
-    if c.incluir_inativas:
-        texto += " (inativas incluídas)"
-    return texto[:600]
+        if r[f]:
+            partes.append(f"{um(w[f], len(r[f]))} {_lista(r[f])}")
+    ucs, com = r["conta"]["escolhidas"], r["comunidades_no_aviso"]
+    texto = w["e"].join(partes) + f", {ucs} {um(w['uc'], ucs)}, {com} {um(w['comunidade'], com)}"
+    return (texto + (w["inativas"] if r["incluir_inativas"] else ""))[:600]
 
 
 def resumo(c: Criterio, conta: dict, comunidades: int) -> dict:
-    """O que o histórico guarda da escolha: o critério em forma curta (contagens e códigos), a conta e o texto."""
+    """O que o histórico guarda da escolha: o critério (contagens da área e os valores marcados, nunca as UCs), a conta,
+    o sha256 do critério canônico e o texto (em português, como vai para a auditoria)."""
     c = canonico(c)
-    return {"modo": c.modo, "texto": descrever(c, conta["escolhidas"], comunidades), "sha256": sha256(c),
-            "poligonos": len(c.poligonos), "vertices": area_.n_vertices(c.poligonos_lista()),
-            "comunidades": [x.nome for x in c.comunidades][:50], **{f: list(getattr(c, f))[:50] for f in FILTROS},
-            "incluir_inativas": c.incluir_inativas, "conta": dict(conta), "comunidades_no_aviso": comunidades}
+    r = {"modo": c.modo, "sha256": sha256(c), "poligonos": len(c.poligonos), "vertices": area_.n_vertices(c.poligonos_lista()),
+         "comunidades": [x.nome for x in c.comunidades], **{f: list(getattr(c, f)) for f in FILTROS},
+         "incluir_inativas": c.incluir_inativas, "conta": dict(conta), "comunidades_no_aviso": comunidades}
+    return {**r, "texto": descrever_resumo(r)}
+
+
+def descrever(c: Criterio, ucs: int, comunidades: int, idioma: str = "pt-BR") -> str:
+    """'área desenhada (1 polígono, 5 vértices), 42 UCs, 3 comunidades' ou 'circuitos CIR147, CIR771, 96 UCs, 2 comunidades'."""
+    return descrever_resumo(resumo(c, {"escolhidas": ucs}, comunidades), idioma)

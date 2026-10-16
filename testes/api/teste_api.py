@@ -291,8 +291,11 @@ r = enviar(POSTES, "planilha_postes.xlsx")
 conferir("duas abas servem: 409 com a lista para escolher", r.status_code == 409 and r.json().get("abas") == ["Modelo", "Postes"],
          f"{r.status_code} {r.text[:160]}")
 rm, rp = enviar(POSTES, "planilha_postes.xlsx", aba="Modelo"), enviar(POSTES, "planilha_postes.xlsx", aba="Postes")
-conferir("aba escolhida (Modelo e Postes): 200, as mesmas 200 UCs", rm.status_code == rp.status_code == 200
-         and rm.json()["planilha"]["validas"] == rp.json()["planilha"]["validas"] == 200, f"{rm.status_code} {rp.status_code} {rp.text[:160]}")
+# a aba Postes tem a SITUACAO da base de clientes: as inativas ficam fora da planilha inteira (nucleo/selecao.py)
+conferir("aba escolhida (Modelo e Postes): 200 lidas; no Postes, as inativas fora", rm.status_code == rp.status_code == 200
+         and rm.json()["escolha"]["conta"]["lidas"] == rp.json()["escolha"]["conta"]["lidas"] == 200 and rm.json()["planilha"]["validas"] == 200
+         and rp.json()["planilha"]["validas"] == 200 - rp.json()["escolha"]["conta"]["inativas_fora"]
+         and rp.json()["escolha"]["conta"]["inativas_fora"] > 0, f"{rm.status_code} {rp.status_code} {rp.text[:160]}")
 r = enviar(POSTES, "planilha_postes.xlsx", aba="Notas")
 conferir("aba que não serve: 422", r.status_code == 422, f"{r.status_code} {r.text[:120]}")
 saida = rp.text
@@ -393,10 +396,10 @@ adm.post("/api/entrar", json={"email": "admin@emg.example", "senha": _temps["adm
 adm.post("/api/senha", json={"atual": _temps["admin@emg.example"], "nova": "Lanterna-do-Farol-2026"})
 ro = gerar(ji, c=adm)
 conferir("pacote de outro usuário (mesma empresa): 422 'outro usuário'", ro.status_code == 422 and "outro usuário" in ro.json()["detail"], ro.text[:120])
-falso = json.dumps({"u": uid, "e": eid, "vence": int(time.time()) + 600,
+falso = json.dumps({"u": uid, "e": eid, "vence": int(time.time()) + 600, "f": "escolha", "c": None,
                     "m": json.dumps({**json.loads(modelo_ok.model_dump_json()), "campo_extra": 1})})
 corpo_falso = base64.urlsafe_b64encode(gzip.compress(falso.encode(), mtime=0)).decode().rstrip("=")
-rf = gerar({"pacote": f"v1.{corpo_falso}.{pacote_._assinatura(corpo_falso)}"})
+rf = gerar({"pacote": f"{pacote_.VERSAO}.{corpo_falso}.{pacote_._assinatura(corpo_falso)}"})
 conferir("pacote assinado mas fora do esquema (campo extra): 422 'esquema'", rf.status_code == 422 and "esquema" in rf.json()["detail"], rf.text[:120])
 rg = gerar(ji)
 conferir("com 'Conferi' marcado: 200, entra no histórico, conferência na auditoria com o sha256",

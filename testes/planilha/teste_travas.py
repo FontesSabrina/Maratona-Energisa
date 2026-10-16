@@ -121,21 +121,45 @@ recusa("vencido (16 minutos depois)", pac, agora=time.time() + 16 * 60, trecho="
 recusa("de outro usuário", pac, u=8, trecho="outro usuário")
 recusa("de outra empresa", pac, e=4, trecho="outro usuário")
 recusa("texto qualquer", "nada-a-ver", trecho="alterado")
-recusa("grande demais", "v1." + "A" * (PC.MAX_PACOTE + 1) + ".x", trecho="inválido")
+recusa("grande demais", f"{PC.VERSAO}." + "A" * (PC.MAX_PACOTE + 1) + ".x", trecho="inválido")
 
 
 def assinado(dados: bytes) -> str:
     c = base64.urlsafe_b64encode(gzip.compress(dados, mtime=0)).decode().rstrip("=")
-    return f"v1.{c}.{PC._assinatura(c)}"
+    return f"{PC.VERSAO}.{c}.{PC._assinatura(c)}"
 
 
-envelope = lambda mm: json.dumps({"u": 7, "e": 3, "vence": int(time.time()) + 600, "m": mm}).encode()
+envelope = lambda mm: json.dumps({"u": 7, "e": 3, "vence": int(time.time()) + 600, "f": "escolha", "c": None, "m": mm}).encode()
 base = json.loads(op.model_dump_json())
 recusa("assinado, mas com campo a mais", assinado(envelope(json.dumps({**base, "extra": 1}))), trecho="esquema")
 recusa("assinado, mas com a conta que não fecha", assinado(envelope(json.dumps({**base, "resumo": {**base["resumo"], "ok": 99}}))), trecho="esquema")
 recusa("assinado, mas com NaN na coordenada", assinado(envelope(json.dumps(base).replace("-21.530443", "NaN", 1))), trecho="esquema")
 recusa("assinado, mas bomba de descompressão (100 MB de espaços)", assinado(b" " * 100_000_000), trecho="grande demais")
 recusa("assinado, mas não é JSON", assinado(b"\xff\xfe nada"), trecho="ilegível")
+
+# ---------- fase e critério da escolha (nucleo/selecao.py) ----------
+from comunidades.nucleo import selecao as SEL  # noqa: E402
+
+crit = SEL.Criterio(modo="escolha", circuito=("CIR2", "CIR1", "CIR1"))
+pe, _ = PC.assinar(op, 7, 3, criterio=crit)
+m_, c_ = PC.abrir_escolha(pe, 7, 3)
+conferir("pacote da escolha: o critério volta canônico (o mesmo que foi conferido)",
+         c_ == SEL.canonico(crit) and m_.model_dump_json() == op.model_dump_json(), str(c_))
+pb, _ = PC.assinar(op, 7, 3, fase="base")
+try:
+    PC.abrir_escolha(pb, 7, 3)
+    conferir("pacote da base (só a planilha lida) não gera aviso", False)
+except PC.PacoteRecusado as erro:
+    conferir("pacote da base (só a planilha lida) não gera aviso", "Escolha quem será desligado" in str(erro), str(erro))
+conferir("pacote da base abre na fase base", PC.abrir(pb, 7, 3, fase="base").resumo == op.resumo)
+try:
+    PC.abrir(pe, 7, 3, fase="base")
+    conferir("pacote da escolha recusado onde se pede o da base", False)
+except PC.PacoteRecusado:
+    conferir("pacote da escolha recusado onde se pede o da base", True)
+recusa("assinado, mas com critério fora do esquema", assinado(json.dumps({"u": 7, "e": 3, "vence": int(time.time()) + 600, "f": "escolha",
+       "c": json.dumps({"modo": "escolha", "ucs": ["1"]}), "m": op.model_dump_json()}).encode()), trecho="esquema")
+conferir("sem critério, o pacote da escolha é a planilha inteira", PC.abrir_escolha(pac, 7, 3)[1] == SEL.Criterio(modo="planilha"))
 
 # ---------- relatório CSV ----------
 perigo = montar([("1", *P0, "talvez"), ("2", P0[1], P0[0], ""), ("3", "", "", "")], nome="=cmd|' /C calc'!A0.csv")

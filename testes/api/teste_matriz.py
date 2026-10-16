@@ -42,6 +42,7 @@ MATRIZ = {
     ("GET", "/api/verificar/{codigo}"): TODOS,
     # importar, conferir, gerar, PDF, MP3, JSON com UCs: Admin da empresa e Operador
     ("POST", "/api/planilha"): GERA, ("POST", "/api/avisos"): GERA, ("POST", "/api/planilha/json"): GERA,
+    ("POST", "/api/planilha/escolha"): GERA,   # escolher quem será desligado (nucleo/selecao.py)
     ("POST", "/api/planilha/relatorio"): GERA, ("POST", "/api/audio"): GERA,
     ("PUT", "/api/historico/{id_}/municipios/{codigo}/texto"): GERA, ("POST", "/api/historico/{id_}/cancelar"): GERA,
     ("POST", "/api/historico/{id_}/data"): GERA, ("POST", "/api/historico/{id_}/municipios/{codigo}/pdf"): GERA,
