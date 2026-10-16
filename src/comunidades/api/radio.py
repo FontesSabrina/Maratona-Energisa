@@ -107,6 +107,28 @@ def salvar_configuracao(dados: Configuracao, u: dict = Depends(exigir("configura
     return ver_configuracao(u)
 
 
+class Simulador(BaseModel):
+    gasto_min: Decimal = Field(ge=0, le=1_000_000_000)                  # gasto mensal com rádio (R$), ou o mínimo da faixa
+    gasto_max: Decimal | None = Field(None, ge=0, le=1_000_000_000)     # o máximo da faixa (opcional)
+    pct_tempo: Decimal = Field(Decimal("100"), ge=0, le=100)            # % do gasto cobrado por tempo no ar
+
+
+@rotas.put("/api/empresa/configuracao/simulador")
+def salvar_simulador(dados: Simulador, u: dict = Depends(exigir("configurar_empresa"))) -> dict:
+    """Os valores do simulador de economia (Relatórios): só o Admin da empresa; o antes e o depois vão para a auditoria."""
+    gmin = dados.gasto_min.quantize(Decimal("0.01"))
+    gmax = dados.gasto_max.quantize(Decimal("0.01")) if dados.gasto_max is not None else None
+    if gmax is not None and gmax < gmin:
+        raise erro(422, "Gasto máximo: igual ou maior que o mínimo.", "gasto_max")
+    antes = config_empresa(u["empresa_id"])["simulador"]
+    novo = {"gasto_min": gmin, "gasto_max": gmax, "pct_tempo": dados.pct_tempo.quantize(Decimal("0.01"))}
+    banco.salvar_simulador(u["empresa_id"], u["id"], novo["gasto_min"], novo["gasto_max"], novo["pct_tempo"])
+    banco_acesso.registrar("alterou o simulador de economia", diferencas(
+        {k: _dinheiro(v) if v is not None else None for k, v in antes.items()}, {k: _dinheiro(v) if v is not None else None for k, v in novo.items()},
+        {"gasto_min": "gasto mensal (mínimo)", "gasto_max": "gasto mensal (máximo)", "pct_tempo": "% cobrado por tempo"}), u["id"], u["empresa_id"])
+    return {"simulador": {k: _dinheiro(v) for k, v in config_empresa(u["empresa_id"])["simulador"].items()}}
+
+
 # ---------- Rádios ----------
 class DadosRadio(BaseModel):
     nome: str = Field(max_length=200)

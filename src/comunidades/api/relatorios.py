@@ -31,6 +31,7 @@ from ..banco import radios as banco_radios
 from ..banco import relatorios as banco
 from ..nucleo import relatorio as R
 from ..nucleo import relatorios as RH
+from ..nucleo import simulador as SIM
 from ..nucleo.acesso import PERFIS, pode, problema_email
 from ..nucleo.auditoria import codigo_verificacao
 from ..nucleo.radios import alcanca
@@ -52,6 +53,7 @@ TIPOS = {   # tipo -> (ação exigida, nome, pode enviar)
     "comunidade": ("ver_historico", "ficha da comunidade", True),
     "auditoria": ("relatorio_auditoria", "relatório de auditoria", True),
     "acessos": ("auditoria_geral", "auditoria geral de acessos", False),
+    "simulador": ("ver_historico", "simulador de economia", False),   # só o Admin da empresa altera os valores (api/radio.py)
 }
 MAX_DESTINATARIOS, LIMITE_ENVIOS_REL, JANELA = 5, 10, 3600
 _envios: dict[int, deque] = defaultdict(deque)
@@ -254,6 +256,14 @@ def construir(u: dict, tipo: str, f: dict, idioma: str = "pt-BR") -> tuple[dict,
         extra["ficha"] = fic
         modo = "intervalo"
         i, fim = hoje - timedelta(days=365), hoje
+    elif tipo == "simulador":
+        i, fim, modo, _ = periodo(f, "ano")
+        av = banco.avisos(emp, i, fim)
+        en = banco.envios(emp, [a["id"] for a in av])
+        valores = cfg.get("simulador") or {}
+        doc = SIM.documento(valores, av, en, filtros_avisos)
+        extra = {"valores": {k: None if v is None else str(v) for k, v in valores.items()}, "pode_editar": pode(u["perfil"], "configurar_empresa"),
+                 "opcoes": _opcoes(av, en)}
     else:
         raise HTTPException(404, "Relatório desconhecido.")
     T = lambda x: traducao.texto(x, idioma)

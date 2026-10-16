@@ -122,6 +122,10 @@ CREATE TABLE IF NOT EXISTS pedido_radio (
 -- Fase K: o modelo da mensagem em inglês e em espanhol e o idioma padrão do aviso da empresa
 ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS modelo_mensagem_en text, ADD COLUMN IF NOT EXISTS modelo_mensagem_es text,
     ADD COLUMN IF NOT EXISTS idioma_padrao text CHECK (idioma_padrao IN ('pt-BR', 'en', 'es'));
+-- Simulador de economia (Relatórios): gasto mensal com rádio (faixa mín-máx) e % do gasto cobrado por tempo
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS simulador_gasto_min numeric(14, 2) CHECK (simulador_gasto_min >= 0),
+    ADD COLUMN IF NOT EXISTS simulador_gasto_max numeric(14, 2) CHECK (simulador_gasto_max >= 0),
+    ADD COLUMN IF NOT EXISTS simulador_pct_tempo numeric(5, 2) CHECK (simulador_pct_tempo BETWEEN 0 AND 100);
 CREATE INDEX IF NOT EXISTS pedido_radio_empresa ON pedido_radio (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS relatorio_via_empresa ON relatorio_via (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS radio_empresa ON radio (empresa_id);
@@ -163,6 +167,15 @@ def salvar_config(empresa_id: int, usuario_id: int, dados: dict) -> None:
         + ", ".join(["%s"] * len(campos)) + ") ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por,"
         " atualizado_em = now(), " + ", ".join(f"{c} = EXCLUDED.{c}" for c in campos),
         (empresa_id, usuario_id, *(dados.get(c) for c in campos)))
+
+
+
+def salvar_simulador(empresa_id: int, usuario_id: int, gasto_min, gasto_max, pct_tempo) -> None:
+    """Só os valores do simulador de economia (o resto da configuração fica como está)."""
+    _um("INSERT INTO empresa_config (empresa_id, atualizado_por, simulador_gasto_min, simulador_gasto_max, simulador_pct_tempo)"
+        " VALUES (%s, %s, %s, %s, %s) ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por, atualizado_em = now(),"
+        " simulador_gasto_min = EXCLUDED.simulador_gasto_min, simulador_gasto_max = EXCLUDED.simulador_gasto_max,"
+        " simulador_pct_tempo = EXCLUDED.simulador_pct_tempo", (empresa_id, usuario_id, gasto_min, gasto_max, pct_tempo))
 
 
 # ---------- Rádios ----------

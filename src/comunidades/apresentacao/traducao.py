@@ -268,10 +268,67 @@ EXATOS: dict[str, tuple[str, str]] = {
     "fora da área de atuação da empresa": ("outside the company's service area", "fuera del área de actuación de la empresa"),
     "Descreva o problema (pelo menos 10 caracteres).": ("Describe the problem (at least 10 characters).", "Describa el problema (al menos 10 caracteres)."),
     "Sem dado pessoal: tire e-mail, telefone, número longo e endereço de site.": ("No personal data: remove e-mail, phone, long numbers and website addresses.", "Sin datos personales: quite correo, teléfono, números largos y direcciones de sitios."),
+    # simulador de economia
+    "Simulador de economia com rádio": ("Radio savings simulator", "Simulador de ahorro con radio"),
+    "Redução do tempo no ar": ("Reduction in airtime", "Reducción del tiempo al aire"),
+    "De onde vem a redução": ("Where the reduction comes from", "De dónde viene la reducción"),
+    "Gasto mensal com rádio": ("Monthly radio spending", "Gasto mensual con radio"),
+    "Parte do gasto cobrada por tempo": ("Share of spending billed by time", "Parte del gasto cobrada por tiempo"),
+    "Economia mensal estimada": ("Estimated monthly savings", "Ahorro mensual estimado"),
+    "Economia anual estimada": ("Estimated annual savings", "Ahorro anual estimado"),
+    "Economia anual no cenário conservador": ("Annual savings in the conservative scenario", "Ahorro anual en el escenario conservador"),
+    "Já economizado (envios registrados)": ("Already saved (recorded sendings)", "Ya ahorrado (envíos registrados)"),
+    "não informado": ("not provided", "no informado"),
+    "medição de validação (44 s -> 14 s)": ("validation measurement (44 s -> 14 s)", "medición de validación (44 s -> 14 s)"),
+    "Ainda não há avisos com o aviso de hoje no período: a redução usada é a da medição de validação (44 s -> 14 s).":
+        ("There are no notices with today's notice in the period yet: the reduction used is the validation measurement (44 s -> 14 s).",
+         "Aún no hay avisos con el aviso de hoy en el período: la reducción usada es la de la medición de validación (44 s -> 14 s)."),
+    "O gasto mensal com rádio ainda não foi informado: o Admin da empresa preenche no simulador.":
+        ("Monthly radio spending has not been provided yet: the company Admin fills it in on the simulator.",
+         "El gasto mensual con radio aún no fue informado: el Admin de la empresa lo completa en el simulador."),
+    "Cenários": ("Scenarios", "Escenarios"), "Faixa": ("Range", "Rango"), "Cenário": ("Scenario", "Escenario"),
+    "Gasto mensal": ("Monthly spending", "Gasto mensual"), "Cobrado por tempo": ("Billed by time", "Cobrado por tiempo"),
+    "Economia mensal": ("Monthly savings", "Ahorro mensual"), "Economia anual": ("Annual savings", "Ahorro anual"),
+    "mínimo": ("minimum", "mínimo"), "máximo": ("maximum", "máximo"), "da empresa": ("company setting", "de la empresa"),
+    "conservador": ("conservative", "conservador"),
+    "Já economizado de fato": ("Actually saved so far", "Ya ahorrado de hecho"),
+    "Tempo no ar usado na redução": ("Airtime used for the reduction", "Tiempo al aire usado en la reducción"),
+    ("Redução = (segundos do aviso tradicional estimado - segundos do aviso do Farol) / segundos do aviso tradicional, somando os "
+     "avisos do período cuja planilha trouxe a coluna local (o aviso de hoje, fazenda a fazenda)."):
+        ("Reduction = (seconds of the estimated traditional notice - seconds of the Farol notice) / seconds of the traditional notice, adding up "
+         "the period's notices whose spreadsheet had the local column (today's notice, farm by farm).",
+         "Reducción = (segundos del aviso tradicional estimado - segundos del aviso del Farol) / segundos del aviso tradicional, sumando los "
+         "avisos del período cuya planilla trajo la columna local (el aviso de hoy, finca por finca)."),
+    "Sem esses avisos no período, vale a medição de validação: 44 s -> 14 s, redução de 68,2%.":
+        ("Without such notices in the period, the validation measurement applies: 44 s -> 14 s, a 68.2% reduction.",
+         "Sin esos avisos en el período, vale la medición de validación: 44 s -> 14 s, reducción del 68,2%."),
+    "Economia mensal = gasto mensal com rádio x parte do gasto cobrada por tempo x redução. Economia anual = economia mensal x 12.":
+        ("Monthly savings = monthly radio spending x share of spending billed by time x reduction. Annual savings = monthly savings x 12.",
+         "Ahorro mensual = gasto mensual con radio x parte del gasto cobrada por tiempo x reducción. Ahorro anual = ahorro mensual x 12."),
+    "Cenário conservador: só 50% do gasto é cobrado por tempo (o resto não muda com o tamanho do aviso).":
+        ("Conservative scenario: only 50% of spending is billed by time (the rest does not change with the length of the notice).",
+         "Escenario conservador: solo el 50% del gasto se cobra por tiempo (el resto no cambia con el largo del aviso)."),
+    "Já economizado = economia calculada + economia informada dos envios registrados no período (envio de aviso cancelado também conta).":
+        ("Already saved = calculated savings + reported savings of the sendings recorded in the period (a sending of a cancelled notice also counts).",
+         "Ya ahorrado = ahorro calculado + ahorro informado de los envíos registrados en el período (el envío de un aviso cancelado también cuenta)."),
+    "É uma simulação: o gasto mensal e a parte cobrada por tempo são informados pelo Admin da empresa; a redução vem dos avisos.":
+        ("This is a simulation: monthly spending and the share billed by time are provided by the company Admin; the reduction comes from the notices.",
+         "Es una simulación: el gasto mensual y la parte cobrada por tiempo los informa el Admin de la empresa; la reducción viene de los avisos."),
+    "Gasto máximo: igual ou maior que o mínimo.": ("Maximum spending: equal to or greater than the minimum.", "Gasto máximo: igual o mayor que el mínimo."),
 }
 
 # padrões: (expressão em português, inglês, espanhol); {1}, {2}... são os grupos; {mes1} é o grupo 1 como mês por extenso
 PADROES: list[tuple[str, str, str]] = [
+    # simulador de economia
+    (r"média real da empresa \((\d+) aviso\(s\) por município com o aviso de hoje\)", "company's real average ({1} notice(s) per municipality with today's notice)",
+     "promedio real de la empresa ({1} aviso(s) por municipio con el aviso de hoy)"),
+    (r"(-?R\$ [\d.,]+) a (-?R\$ [\d.,]+)", "{1} to {2}", "{1} a {2}"),
+    (r"(-?R\$ [\d.,]+) calculada \+ (-?R\$ [\d.,]+) informada = (-?R\$ [\d.,]+), em (\d+) envio\(s\) do período\.",
+     "{1} calculated + {2} reported = {3}, in {4} sending(s) in the period.", "{1} calculado + {2} informado = {3}, en {4} envío(s) del período."),
+    (r"Aviso tradicional: (\d+) s; aviso do Farol: (\d+) s\.", "Traditional notice: {1} s; Farol notice: {2} s.", "Aviso tradicional: {1} s; aviso del Farol: {2} s."),
+    (r"Conta \((mínimo|máximo), (da empresa|conservador)\): (-?R\$ [\d.,]+) x ([\d,]+%) x (-?[\d,]+%) = (-?R\$ [\d.,]+) por mês; x 12 = (-?R\$ [\d.,]+) por ano\.",
+     "Calculation ({1}, {2}): {3} x {4} x {5} = {6} per month; x 12 = {7} per year.",
+     "Cálculo ({1}, {2}): {3} x {4} x {5} = {6} por mes; x 12 = {7} por año."),
     (r'Nenhum acesso no período\. Há (\d+) ação\(ões\) de outro tipo; desmarque "Só acessos" para vê-las\.',
      'No sign-ins in the period. There are {1} action(s) of another type; uncheck "Sign-ins only" to see them.',
      'Ningún acceso en el período. Hay {1} acción(es) de otro tipo; desmarque "Solo accesos" para verlas.'),

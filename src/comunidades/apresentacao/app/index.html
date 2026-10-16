@@ -199,6 +199,33 @@
       <div id="comparativo" class="lista"></div>
     </section>
 
+    <!-- Simulador de economia: gasto mensal com rádio x parte cobrada por tempo x redução do tempo no ar (só o Admin da empresa altera os valores) -->
+    <section id="vista-simulador" class="vista" hidden aria-labelledby="tituloSimulador">
+      <h1 id="tituloSimulador" data-t>Simulador de economia</h1>
+      <p class="ajuda" data-t>Quanto a empresa economiza com rádio usando o aviso por comunidade: gasto mensal com rádio x parte cobrada por tempo x redução do tempo no ar (a média real dos avisos da empresa ou, sem avisos, a medição de validação). Só números agregados.</p>
+      <form id="formSimulador" class="cartao formulario" novalidate hidden>
+        <h2 data-t>Valores da empresa</h2>
+        <p class="ajuda" id="simAjuda" data-t>Só o Admin da empresa altera estes valores; a mudança fica na auditoria com o antes e o depois. Operador e Consulta veem o resultado.</p>
+        <label><span data-t>Gasto mensal com rádio, em R$ (ou o mínimo da faixa)</span> <input type="number" id="simGastoMin" min="0" step="0.01" inputmode="decimal" required aria-describedby="simAjuda"></label>
+        <label><span data-t>Máximo da faixa, em R$ (opcional)</span> <input type="number" id="simGastoMax" min="0" step="0.01" inputmode="decimal"></label>
+        <label><span data-t>Parte do gasto cobrada por tempo no ar (%)</span> <input type="number" id="simPct" min="0" max="100" step="1" inputmode="decimal" required></label>
+        <div class="acoes">
+          <button type="button" id="simConservador" data-t>Cenário conservador (50%)</button>
+          <button type="submit" class="prim" data-t>Salvar</button>
+        </div>
+        <p id="estadoSimulador" class="estado" role="status" aria-live="polite"></p>
+      </form>
+      <form id="formSimPeriodo" class="cartao filtros-relatorio" novalidate>
+        <label><span data-t>Avisos do período</span> <select id="simPeriodo"></select></label>
+        <div class="acoes">
+          <button type="submit" class="prim" data-t>Ver o simulador</button>
+          <button type="button" data-sim="pdf" data-t>Baixar PDF</button>
+          <button type="button" data-sim="csv" data-t>Baixar CSV</button>
+        </div>
+      </form>
+      <div id="simulador" class="relatorio"></div>
+    </section>
+
     <!-- Resultado (de um aviso novo ou do histórico): a tela o põe no lugar da vista de onde veio -->
     <section id="resultado" class="resultado" hidden aria-labelledby="tituloResultado">
       <h2 id="tituloResultado" class="subtitulo"></h2>

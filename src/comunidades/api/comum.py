@@ -3,6 +3,7 @@ efetiva de cada empresa (a do banco, com os padrões da distribuidora no que fal
 
 import os
 from datetime import timedelta, timezone
+from decimal import Decimal
 
 from fastapi import HTTPException
 
@@ -59,5 +60,8 @@ def config_empresa(empresa_id: int | None) -> dict:
         "modelos": {"pt-BR": escolher("modelo_mensagem", mensagem.PADRAO), "en": escolher("modelo_mensagem_en", mensagem.PADROES["en"]),
                     "es": escolher("modelo_mensagem_es", mensagem.PADROES["es"])},
         "idioma_padrao": escolher("idioma_padrao", DIST.idioma_padrao),
+        # simulador de economia: gasto mensal com rádio (faixa) e % do gasto cobrado por tempo (padrão 100%)
+        "simulador": {"gasto_min": c.get("simulador_gasto_min"), "gasto_max": c.get("simulador_gasto_max"),
+                      "pct_tempo": escolher("simulador_pct_tempo", Decimal("100"))},
         "padroes": not c,
     }

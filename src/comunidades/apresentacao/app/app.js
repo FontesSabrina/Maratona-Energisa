@@ -58,6 +58,7 @@ const estado = {
   alcanceComunidades: [],  // comunidades escolhidas no formulário da rádio: { municipio, nome, distrito }
   configuracao: null,      // /api/empresa/configuracao
   relatorio: null,         // /api/relatorios/{tipo}: o documento do relatório (o mesmo do PDF) com os filtros
+  simulador: null,         // /api/relatorios/simulador: o documento do simulador de economia, os valores e se pode editar
   opcoesRelatorio: null,   // municípios, tipos, rádios e pessoas do ano (do relatório mensal), para os filtros
   vias: [],                // segundas vias dos relatórios em PDF (só título, quem, quando e código)
   ficha: null,             // ficha da comunidade clicada no mapa (só contagens)
@@ -76,8 +77,8 @@ const MENUS = {
   operador: [['aviso', 'Novo aviso'], ['historico', 'Histórico'], ['relatorios', 'Relatórios']],
   consulta: [['painel', 'Mapa'], ['historico', 'Histórico'], ['relatorios', 'Relatórios']],
 };
-const RELATORIOS = [['painel', 'Painel do mês'], ['relatorios', 'Do período'], ['comparativo', 'Comparativo']];
-const VISTAS = ['aviso', 'historico', 'painel', 'relatorios', 'comparativo', 'usuarios', 'radios', 'configuracoes', 'empresas', 'registro'];
+const RELATORIOS = [['painel', 'Painel do mês'], ['relatorios', 'Do período'], ['comparativo', 'Comparativo'], ['simulador', 'Simulador de economia']];
+const VISTAS = ['aviso', 'historico', 'painel', 'relatorios', 'comparativo', 'simulador', 'usuarios', 'radios', 'configuracoes', 'empresas', 'registro'];
 const pode = acao => !!estado.usuario?.acoes.includes(acao);
 const vistasDoPerfil = () => MENUS[estado.usuario?.perfil] || [];
 const menuAtual = v => vistasDoPerfil().some(([x]) => x === v) ? v : RELATORIOS.some(([x]) => x === v) ? 'relatorios' : v;
@@ -903,6 +904,23 @@ function desenharVias() {
       no('td', { texto: dataHora(v.criado_em) }), no('td', { texto: v.codigo }),
       no('td', {}, no('button', { type: 'button', 'data-via': String(v.id), 'aria-label': `${t('Baixar a via')}: ${v.titulo}`, texto: t('Baixar a via') })))))))
     : no('p', { classe: 'ajuda', texto: t('Nenhum relatório em PDF ainda. Cada PDF gerado ganha uma segunda via guardada, igual (mesmo SHA-256).') }));
+}
+
+// ---- Simulador de economia (Relatórios): o documento do servidor; o formulário só para quem altera (Admin da empresa) ----
+function desenharSimulador() {
+  if (!$('simPeriodo').options.length) {
+    const ano = new Date().getFullYear();
+    $('simPeriodo').replaceChildren(...[ano, ano - 1].map(a => no('option', { value: `ano:${a}`, texto: t('Ano de {ano}', { ano: a }) })),
+      ...ultimosMeses().map(([v, rot]) => no('option', { value: `mes:${v}`, texto: rot })));
+  }
+  const s = estado.simulador;
+  $('formSimulador').hidden = !s?.pode_editar;
+  if (s?.pode_editar && !$('formSimulador').contains(document.activeElement)) {
+    $('simGastoMin').value = s.valores.gasto_min ?? '';
+    $('simGastoMax').value = s.valores.gasto_max ?? '';
+    $('simPct').value = s.valores.pct_tempo != null ? Number(s.valores.pct_tempo) : 100;
+  }
+  $('simulador').replaceChildren(...(s ? documentoNaTela(s.documento, s.subtitulo) : []));
 }
 
 // ---- Dashboard: só números do histórico da empresa ----
@@ -2082,10 +2100,10 @@ function limparTela() {
     historico: [], usuarios: [], perfis: {}, empresas: [], registro: [], mensagem: '', erro: false,
     passo: 1, painel: null, filtroHistorico: { busca: '', periodo: '' } });
   Object.assign(estado, { radios: [], sugestao: {}, envios: [], escolha: {}, relatorio: null, opcoesRelatorio: null, vias: [], ficha: null,
-    calor: null });
+    calor: null, simulador: null });
   for (const id of ['abas', 'resumo', 'municipios', 'problemasCorpo', 'listaHistorico', 'listaUsuarios', 'listaEmpresas', 'listaRegistro',
     'painelDash', 'contagemHistorico', 'conferencia', 'aba', 'solicitado', 'acoesAviso', 'estadoAuditoria', 'relatorio', 'relMes', 'audMes',
-    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo', 'listaPedidos'])
+    'listaRadios', 'radComunidades', 'ajudaCorpo', 'subabas', 'docAuditoria', 'listaVias', 'relAno', 'linhaTempo', 'listaPedidos', 'simulador', 'simPeriodo'])
     $(id).replaceChildren();
   Object.assign(estado, { radiosAdmin: [], radioEditando: null, alcanceComunidades: [], configuracao: null, pedidos: [], meusPedidos: [],
     pedidoAtendendo: null, empresaEditando: null });
@@ -2098,7 +2116,8 @@ function limparTela() {
   if (estado.lendo) speechSynthesis.cancel();
   Object.assign(estado, { a11y: { ...A11Y_PADRAO }, painelA11y: false, lendo: false, painelAmplo: false });
   desenharA11y(); desenharPainelAmplo();
-  for (const f of ['formEntrar', 'formSenha', 'formUsuario', 'formRadio', 'formConfig', 'formEmpresa', 'form']) limparErros($(f));
+  for (const f of ['formEntrar', 'formSenha', 'formUsuario', 'formRadio', 'formConfig', 'formEmpresa', 'formSimulador', 'form']) limparErros($(f));
+  $('formSimulador').hidden = true; mensagemEm('estadoSimulador', '');
   // as mensagens de status também (ex.: "Fulana: alterações salvas"): quem entra depois não vê nada do anterior
   for (const id of ['estadoUsuario', 'estadoRadio', 'estadoConfig', 'estadoEmpresa', 'estadoAuditoria', 'estadoSenha']) mensagemEm(id, '');
   $('caixaAjuda').hidden = true;
@@ -2144,6 +2163,7 @@ async function irPara(vista) {
     }
     if (vista === 'empresas') desenharFormEmpresa();
     if (vista === 'configuracoes') { estado.configuracao = await api('/api/empresa/configuracao'); desenharConfig(); }
+    if (vista === 'simulador') await carregarSimulador();
     if (vista === 'comparativo') { desenharComparativo(); estado.painel = await api('/api/painel'); desenharComparativo(); }
     if (vista === 'usuarios') { const j = await api('/api/usuarios'); estado.usuarios = j.usuarios; estado.perfis = j.perfis; desenharUsuarios(); }
     if (vista === 'empresas') {
@@ -2587,6 +2607,62 @@ async function exportarRelatorio(evento) {
       if (e.status === 401) return;
       avisar(e.message, true);
       erroDoServidor($('relEnviar'), e, { destinatarios: 'relDestinos' });
+    }
+  });
+}
+
+// simulador: o período dos avisos (de onde saem a redução real e o já economizado)
+const filtrosSimulador = () => { const [modo, v] = ($('simPeriodo').value || `ano:${new Date().getFullYear()}`).split(':'); return { [modo]: v }; };
+
+async function carregarSimulador(evento) {
+  evento?.preventDefault();
+  desenharSimulador();
+  try {
+    estado.simulador = await api(`/api/relatorios/simulador?${consulta(filtrosSimulador())}`);
+    desenharSimulador();
+  } catch (e) {
+    if (e.status !== 401) avisar(e.message, true);
+  }
+}
+
+function errosSimulador() {
+  const num = id => $(id).value.trim() === '' ? NaN : Number($(id).value);
+  const erros = [];
+  if (!(num('simGastoMin') >= 0)) erros.push(['simGastoMin', t('Gasto mensal: um valor em R$.')]);
+  if ($('simGastoMax').value.trim() && !(num('simGastoMax') >= num('simGastoMin'))) erros.push(['simGastoMax', t('Gasto máximo: igual ou maior que o mínimo.')]);
+  if (!(num('simPct') >= 0 && num('simPct') <= 100)) erros.push(['simPct', t('Parte cobrada por tempo: de 0 a 100%.')]);
+  return erros;
+}
+
+async function salvarSimulador(evento) {
+  evento.preventDefault();
+  const form = $('formSimulador'), erros = errosSimulador();
+  if (erros.length) { mostrarErros(form, erros); return mensagemEm('estadoSimulador', erros[0][1], true); }
+  limparErros(form);
+  await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
+    try {
+      await api('/api/empresa/configuracao/simulador', { method: 'PUT', json: { gasto_min: $('simGastoMin').value,
+        gasto_max: $('simGastoMax').value.trim() === '' ? null : $('simGastoMax').value, pct_tempo: $('simPct').value } });
+      estado.simulador = await api(`/api/relatorios/simulador?${consulta(filtrosSimulador())}`);
+      desenharSimulador();
+      mensagemEm('estadoSimulador', t('Valores do simulador salvos nas configurações (registrado na auditoria).'));
+    } catch (e) {
+      if (e.status === 401) return;
+      mensagemEm('estadoSimulador', e.message, true);
+      erroDoServidor(form, e, { gasto_min: 'simGastoMin', gasto_max: 'simGastoMax', pct_tempo: 'simPct' });
+    }
+  });
+}
+
+async function exportarSimulador(evento) {
+  const b = evento.target.closest('button[data-sim]');
+  if (!b) return;
+  await ocupado(b, 'Gerando…', async () => {
+    try {
+      await baixarDaApi(`/api/relatorios/simulador.${b.dataset.sim}?${consulta(filtrosSimulador())}`, { method: 'GET' }, `farol-simulador.${b.dataset.sim}`);
+      avisar(t('Relatório baixado em {formato}, com o seu nome e o código de verificação (registrado na auditoria).', { formato: b.dataset.sim.toUpperCase() }));
+    } catch (e) {
+      if (e.status !== 401) avisar(e.message, true);
     }
   });
 }
@@ -3052,7 +3128,7 @@ async function trocarIdioma(novo, salvar = true) {
   desenharTipos(); desenharIdiomaAviso(); desenharRede(); desenharUcs(); desenharIrPara();
   $('botaoCalor').textContent = estado.calor ? t('Esconder mapa de calor') : t('Mapa de calor (12 meses)');
   atribuicao?.setPrefix(t('Concessão e comunidades: IBGE · Leaflet'));
-  for (const id of ['relMes', 'audMes']) $(id).replaceChildren();   // os meses no formato do idioma
+  for (const id of ['relMes', 'audMes', 'simPeriodo']) $(id).replaceChildren();   // os meses no formato do idioma
   if (estado.resultado) desenharResultado();
   if (ehFarol()) { desenharLegendaEmpresas(); desenharSobreposicao(); }
   await irPara(estado.vista);
@@ -3303,6 +3379,12 @@ async function abrir() {
   $('radMunCom').addEventListener('change', escolherMunicipioRadio);
   $('radComunidades').addEventListener('change', marcarComunidade);
   $('formConfig').addEventListener('submit', salvarConfig);
+  $('formSimulador').addEventListener('submit', salvarSimulador);
+  $('simConservador').addEventListener('click', () => { $('simPct').value = '50'; $('simPct').focus();
+    mensagemEm('estadoSimulador', t('Cenário conservador: 50% do gasto cobrado por tempo. Salve para guardar.')); });
+  $('formSimPeriodo').addEventListener('submit', carregarSimulador);
+  $('simPeriodo').addEventListener('change', () => carregarSimulador());
+  $('formSimPeriodo').addEventListener('click', exportarSimulador);
   $('formConfig').addEventListener('input', desenharPreviaConfig);
   $('cfgPadrao').addEventListener('click', () => {
     const p = estado.configuracao.modelos_padrao || {};

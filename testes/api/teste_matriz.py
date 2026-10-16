@@ -77,6 +77,9 @@ MATRIZ = {
     ("GET", "/api/relatorios/auditoria"): {ADM}, ("GET", "/api/relatorios/auditoria.{formato}"): {ADM},
     ("POST", "/api/relatorios/auditoria/enviar"): {ADM},
     ("GET", "/api/relatorios/acessos"): {FAROL}, ("GET", "/api/relatorios/acessos.{formato}"): {FAROL},
+    # simulador de economia: os três perfis da empresa veem (tela, PDF, CSV); só o Admin da empresa altera os valores
+    ("GET", "/api/relatorios/simulador"): EMPRESA, ("GET", "/api/relatorios/simulador.{formato}"): EMPRESA,
+    ("PUT", "/api/empresa/configuracao/simulador"): {ADM},
     ("GET", "/api/relatorios/vias"): TODOS, ("GET", "/api/relatorios/vias/{id_}.pdf"): TODOS,
     ("GET", "/api/historico/{id_}/linha-do-tempo"): EMPRESA,
     ("GET", "/api/comunidades/ficha"): EMPRESA, ("GET", "/api/comunidades/calor"): EMPRESA,

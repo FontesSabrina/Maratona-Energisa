@@ -33,6 +33,7 @@ $testes = @(
     @{ Nome = "Rádio, envio e cofre (Mailpit)"; Cmd = "uv run python -W ignore testes/api/teste_radio.py" },
     @{ Nome = "Relatórios e prazo";            Cmd = "uv run python -W ignore testes/api/teste_relatorios.py" },
     @{ Nome = "Relatórios completos (Fase H)"; Cmd = "uv run python -W ignore testes/api/teste_relatorios_h.py" },
+    @{ Nome = "Simulador de economia";         Cmd = "uv run python -W ignore testes/api/teste_simulador.py" },
     @{ Nome = "Registro total (rotas)";        Cmd = "uv run python -W ignore testes/api/teste_registro_total.py" },
     @{ Nome = "Áudio (MP3)";                   Cmd = "uv run python -W ignore testes/api/teste_audio.py" },
     @{ Nome = "Idiomas (aviso, PDF, e-mail)";  Cmd = "uv run python -W ignore testes/api/teste_idiomas.py" },
