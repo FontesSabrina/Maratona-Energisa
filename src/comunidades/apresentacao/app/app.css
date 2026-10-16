@@ -732,3 +732,21 @@ button.link { background: none; border: 0; padding: 0; min-height: 44px; color: 
 .envio-radio .campos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
 .envio-radio .campos label:first-child { grid-column: auto; }
 .envio-radio select { min-width: 0; text-overflow: clip; }
+
+/* Simulador de economia: cartões só para números (rótulo pequeno, número numa linha que encolhe para caber, legenda curta),
+   em grade de mesma altura; 4 cartões nunca ficam 3 + 1 (o painel médio mostra 2 + 2) */
+.sim-grupo { container: simgrupo / inline-size; display: grid; gap: 8px; margin-block: 12px; }
+.sim-titulo { margin: 0; font-size: 0.8125rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--texto2); }
+.sim-gasto { margin: 0; font-size: 0.8125rem; color: var(--texto2); }
+.sim-cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr)); grid-auto-rows: 1fr; gap: 0.75rem; }
+@container simgrupo (min-width: 39rem) and (max-width: 52.24rem) { .sim-cartoes.quatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sim-cartao { container-type: inline-size; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border-radius: 16px;
+  background: var(--sup); border: 1px solid var(--linha); box-shadow: var(--sombra); overflow-wrap: normal; }
+.sim-cartao.destaque { border-left: 5px solid var(--ambar); }
+.sim-rotulo { font-size: 0.7812rem; color: var(--texto2); }
+.sim-numero { font-size: clamp(1.125rem, 11cqi, 1.75rem); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.sim-legenda { margin-top: auto; font-size: 0.75rem; color: var(--texto2); }
+.sim-destaque { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: color-mix(in srgb, var(--ambar) 16%, var(--sup));
+  border: 1.5px solid var(--ambar-forte); }
+.sim-destaque-texto { margin: 0; font-weight: 600; }
+.sim-destaque .formulario { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }

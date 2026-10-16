@@ -913,14 +913,59 @@ function desenharSimulador() {
     $('simPeriodo').replaceChildren(...[ano, ano - 1].map(a => no('option', { value: `ano:${a}`, texto: t('Ano de {ano}', { ano: a }) })),
       ...ultimosMeses().map(([v, rot]) => no('option', { value: `mes:${v}`, texto: rot })));
   }
-  const s = estado.simulador;
-  $('formSimulador').hidden = !s?.pode_editar;
-  if (s?.pode_editar && !$('formSimulador').contains(document.activeElement)) {
+  const s = estado.simulador, form = $('formSimulador');
+  $('vista-simulador').append(form);   // o formulário volta para fora antes de redesenhar (ele muda de lugar)
+  form.hidden = !s?.pode_editar;
+  if (s?.pode_editar && !form.contains(document.activeElement)) {
     $('simGastoMin').value = s.valores.gasto_min ?? '';
     $('simGastoMax').value = s.valores.gasto_max ?? '';
     $('simPct').value = s.valores.pct_tempo != null ? Number(s.valores.pct_tempo) : 100;
+    $('simNota').value = s.valores.nota ?? '';
   }
-  $('simulador').replaceChildren(...(s ? documentoNaTela(s.documento, s.subtitulo) : []));
+  if (!s) return $('simulador').replaceChildren();
+  const n = s.documento.numeros, est = n.estimativa, real = n.realizado;
+  // cartão: rótulo pequeno, número grande numa linha (o completo no title e para o leitor de tela) e uma legenda curta
+  const cartao = (rotulo, curto, completo, legenda, classe = '') => no('div', { classe: `sim-cartao ${classe}` },
+    no('span', { classe: 'sim-rotulo', texto: rotulo }),
+    no('strong', { classe: 'sim-numero', title: completo }, no('span', { 'aria-hidden': 'true', texto: curto }), no('span', { classe: 'visualmente-oculto', texto: completo })),
+    legenda ? no('span', { classe: 'sim-legenda', texto: legenda }) : null);
+  const valor = ([a, b]) => { a = Number(a); b = Number(b);
+    return a === b ? [a < 1e6 ? dinheiro(a) : moedaCurta(a), dinheiro(a)] : [moedaCurta(a, b), t('{a} a {b}', { a: dinheiro(a), b: dinheiro(b) })]; };
+  const pct = Number(n.reducao_pct).toLocaleString(IDIOMA, { maximumFractionDigits: 1 }) + '%';
+  const fonte = n.fonte !== 'empresa' ? t('medição de validação (Leopoldina)')
+    : n.avisos === 1 ? t('média real de 1 aviso da empresa') : t('média real de {n} avisos da empresa', { n: fmt(n.avisos) });
+  const pctTempo = Number(n.pct_tempo).toLocaleString(IDIOMA, { maximumFractionDigits: 2 });
+  const grupo = (titulo, ...filhos) => no('section', { classe: 'sim-grupo', 'aria-label': titulo }, no('h2', { classe: 'sim-titulo', texto: titulo }), ...filhos);
+  const reducao = cartao(t('Redução do tempo no ar'), pct, pct, fonte, 'destaque');
+  const estimativa = est
+    ? grupo(t('Estimativa'),
+      no('p', { classe: 'sim-gasto', texto: t('Gasto mensal informado: {gasto}', { gasto: valor([n.gasto_min, n.gasto_max ?? n.gasto_min])[1] }) + (n.nota ? ` · ${n.nota}` : '') }),
+      no('div', { classe: 'sim-cartoes quatro' }, reducao,
+        cartao(t('Economia mensal estimada'), ...valor(est.mensal), t('{pct}% do gasto cobrado por tempo', { pct: pctTempo })),
+        cartao(t('Economia anual estimada'), ...valor(est.anual), t('economia mensal × 12')),
+        cartao(t('Anual, cenário conservador'), ...valor(est.conservador_anual), t('50% do gasto cobrado por tempo'))))
+    : grupo(t('Estimativa'), no('div', { classe: 'sim-cartoes' }, reducao),
+      no('div', { classe: 'sim-destaque', id: 'simDestaque' }, no('p', { classe: 'sim-destaque-texto', texto: t('Informe o gasto mensal com rádio para ver a economia estimada') }),
+        s.pode_editar ? null : no('p', { classe: 'ajuda', texto: t('O Admin da empresa informa o gasto mensal com rádio aqui no simulador.') })));
+  const realizado = grupo(t('Realizado'), no('div', { classe: 'sim-cartoes' },
+    cartao(t('Já economizado'), ...valor([real.total, real.total]), t('calculada + informada')),
+    cartao(t('Envios registrados'), fmt(real.envios), fmt(real.envios), t('no período'))));
+  const como = no('section', { classe: 'cartao dash-bloco' }, no('h2', { texto: t('Como calculamos') }),
+    no('ul', { classe: 'como' }, s.documento.como_calculamos.map(x => no('li', { texto: x }))));
+  $('simulador').replaceChildren(no('p', { classe: 'ajuda', texto: s.subtitulo }), estimativa, realizado, como);
+  // sem o gasto, os campos ficam no bloco de destaque (botão Calcular); com o gasto, o formulário vai para depois dos cartões
+  const vazio = !est, titulo = $('simFormTitulo'), botao = $('simSalvar');
+  titulo.hidden = vazio;
+  botao.dataset.t = vazio ? 'Calcular' : 'Salvar'; botao.textContent = t(botao.dataset.t);
+  if (s.pode_editar) vazio ? $('simDestaque').append(form) : realizado.after(form);
+}
+
+// moeda curta para os cartões ("R$ 1,31 mi", "R$ 109–205 mil"); o valor completo vai no title e no texto do leitor de tela
+function moedaCurta(a, b = a) {
+  const max = Math.max(Math.abs(a), Math.abs(b));
+  const [div, sufixo, casas] = max >= 1e6 ? [1e6, t('mi'), 2] : max >= 1e4 ? [1e3, t('mil'), 0] : [1, '', 2];
+  const n = v => (v / div).toLocaleString(IDIOMA, { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  return `R$ ${a === b ? n(a) : `${n(a)}–${n(b)}`}${sufixo ? ` ${sufixo}` : ''}`;
 }
 
 // ---- Dashboard: só números do histórico da empresa ----
@@ -2642,14 +2687,15 @@ async function salvarSimulador(evento) {
   await ocupado(botaoDoEnvio(evento), 'Salvando…', async () => {
     try {
       await api('/api/empresa/configuracao/simulador', { method: 'PUT', json: { gasto_min: $('simGastoMin').value,
-        gasto_max: $('simGastoMax').value.trim() === '' ? null : $('simGastoMax').value, pct_tempo: $('simPct').value } });
+        gasto_max: $('simGastoMax').value.trim() === '' ? null : $('simGastoMax').value, pct_tempo: $('simPct').value,
+        nota: $('simNota').value.trim() || null } });
       estado.simulador = await api(`/api/relatorios/simulador?${consulta(filtrosSimulador())}`);
       desenharSimulador();
       mensagemEm('estadoSimulador', t('Valores do simulador salvos nas configurações (registrado na auditoria).'));
     } catch (e) {
       if (e.status === 401) return;
       mensagemEm('estadoSimulador', e.message, true);
-      erroDoServidor(form, e, { gasto_min: 'simGastoMin', gasto_max: 'simGastoMax', pct_tempo: 'simPct' });
+      erroDoServidor(form, e, { gasto_min: 'simGastoMin', gasto_max: 'simGastoMax', pct_tempo: 'simPct', nota: 'simNota' });
     }
   });
 }

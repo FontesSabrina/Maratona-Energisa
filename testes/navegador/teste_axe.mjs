@@ -111,6 +111,16 @@ for (const email of PERFIS) {
       if (tt[0] < 1024) { await p.avaliar(`(alternarMenu(true), 0)`); await axe(p, `${perfil}: menu aberto`, `claro pt-BR ${tt.join('×')}`); await p.avaliar(`(alternarMenu(false), 0)`); }
     }
     await tamanho(p, [1280, 800]);
+    // o simulador preenchido (cartões de estimativa): temas x idiomas e 3 tamanhos; depois, Operador e Consulta já o veem assim
+    await p.avaliar(`fetch('/api/empresa/configuracao/simulador', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gasto_min: '160000', gasto_max: '300000', pct_tempo: '100' }) }).then(r => r.status)`);
+    for (const tm of TEMAS) for (const id of IDIOMAS) {
+      await tema(p, tm); await idioma(p, id); await ir(p, 'simulador');
+      await axe(p, `${perfil}: simulador preenchido`, `${tm} ${id} 1280`);
+    }
+    await tema(p, 'claro'); await idioma(p, 'pt-BR');
+    for (const tt of [[320, 640], [768, 1024], [1920, 1080]]) { await tamanho(p, tt); await ir(p, 'simulador'); await axe(p, `${perfil}: simulador preenchido`, `claro pt-BR ${tt.join('×')}`); }
+    await tamanho(p, [1280, 800]);
   }
   if (email === 'operador@emg.example' && existsSync(PLANILHA)) {
     // o funil com a planilha: passo 3 (conferir) e passo 4 (avisos, com o envio à rádio), nos dois temas

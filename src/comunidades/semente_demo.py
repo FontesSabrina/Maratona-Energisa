@@ -15,6 +15,9 @@ preço fora da curva (alerta de preço), a mesma comunidade 3 vezes em 30 dias (
 fora do prazo, alguns envios não confirmados e um orçamento anual de rádio na configuração. Marca própria na
 auditoria ("semente de demonstração (ano)"): rodar de novo não duplica.
 
+semear_simulador() preenche o simulador de economia da EMG (R$ 160.000 a R$ 300.000, 100% cobrado por tempo, "valores
+informados pela Energisa"), uma vez só e só se o Admin da empresa ainda não preencheu; a auditoria registra como da semente.
+
 Uso (depois de uv run python -m comunidades.semente): uv run python -m comunidades.semente_demo (as duas)
 """
 
@@ -38,6 +41,9 @@ from .simulacao import planilhas_teste
 MARCA = "semente de demonstração"
 MARCA_ANO = "semente de demonstração (ano)"
 CARA = "Rádio Serra Alta FM (demonstração)"       # a rádio cara do ano (valor fechado alto)
+MARCA_SIMULADOR = "semente de demonstração (simulador de economia)"
+SIMULADOR_DEMO = {"gasto_min": Decimal("160000.00"), "gasto_max": Decimal("300000.00"), "pct_tempo": Decimal("100.00"),
+                  "nota": "valores informados pela Energisa"}
 ORCAMENTO_DEMO = 15000.0                            # orçamento anual de rádio da demonstração (R$), se não houver um
 TIPOS_CICLO = ["manutencao_preventiva", "poda", "obra", "troca_equipamento", "corretiva_programada", "poda", "manutencao_preventiva"]
 
@@ -278,7 +284,26 @@ def empresa_exemplo() -> dict:
     return feito
 
 
+def semear_simulador() -> dict:
+    """O gasto mensal com rádio da EMG no simulador de economia (R$ 160.000 a R$ 300.000, 100% por tempo), para os cartões
+    aparecerem completos na apresentação. Uma vez só; se o Admin da empresa já preencheu, não mexe. Na auditoria, como da semente."""
+    emp = banco.empresa_por_sigla("EMG")
+    if not emp:
+        raise SystemExit("Rode antes: uv run python -m comunidades.semente")
+    with conectar() as c:
+        if c.execute("SELECT 1 FROM registro WHERE acao = %s AND empresa_id = %s", (MARCA_SIMULADOR, emp["id"])).fetchone():
+            return {"simulador": "já aplicado"}
+    if config_empresa(emp["id"])["simulador"]["gasto_min"] is not None:
+        return {"simulador": "já preenchido pelo Admin da empresa"}
+    v = SIMULADOR_DEMO
+    banco_radios.salvar_simulador(emp["id"], None, v["gasto_min"], v["gasto_max"], v["pct_tempo"], v["nota"])
+    banco.registrar(MARCA_SIMULADOR, f"gasto mensal (mínimo): — → {v['gasto_min']}; gasto mensal (máximo): — → {v['gasto_max']}; "
+                    f"% cobrado por tempo: 100.00 → {v['pct_tempo']}; origem dos valores: — → {v['nota']}", None, emp["id"])
+    return {"simulador": f"{v['gasto_min']} a {v['gasto_max']}, {v['pct_tempo']}% por tempo"}
+
+
 if __name__ == "__main__":
     print(semear_demo(int(sys.argv[1]) if len(sys.argv) > 1 else 16))
     print(semear_ano())
+    print(semear_simulador())
     print(empresa_exemplo())

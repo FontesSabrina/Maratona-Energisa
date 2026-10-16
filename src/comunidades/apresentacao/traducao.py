@@ -279,10 +279,14 @@ EXATOS: dict[str, tuple[str, str]] = {
     "Economia anual no cenário conservador": ("Annual savings in the conservative scenario", "Ahorro anual en el escenario conservador"),
     "Já economizado (envios registrados)": ("Already saved (recorded sendings)", "Ya ahorrado (envíos registrados)"),
     "não informado": ("not provided", "no informado"),
-    "medição de validação (44 s -> 14 s)": ("validation measurement (44 s -> 14 s)", "medición de validación (44 s -> 14 s)"),
-    "Ainda não há avisos com o aviso de hoje no período: a redução usada é a da medição de validação (44 s -> 14 s).":
-        ("There are no notices with today's notice in the period yet: the reduction used is the validation measurement (44 s -> 14 s).",
-         "Aún no hay avisos con el aviso de hoy en el período: la reducción usada es la de la medición de validación (44 s -> 14 s)."),
+    "medição de validação (Leopoldina)": ("validation measurement (Leopoldina)", "medición de validación (Leopoldina)"),
+    "média real de 1 aviso da empresa": ("real average of 1 company notice", "promedio real de 1 aviso de la empresa"),
+    "Origem dos valores": ("Source of the values", "Origen de los valores"),
+    "Origem dos valores: até 120 caracteres, sem e-mail, site nem número longo.": ("Source of the values: up to 120 characters, no e-mail, website or long number.",
+                                                                               "Origen de los valores: hasta 120 caracteres, sin correo, sitio ni número largo."),
+    "Ainda não há avisos com o aviso de hoje no período: a redução usada é a da medição de validação (Leopoldina, 44 s -> 14 s).":
+        ("There are no notices with today's notice in the period yet: the reduction used is the validation measurement (Leopoldina, 44 s -> 14 s).",
+         "Aún no hay avisos con el aviso de hoy en el período: la reducción usada es la de la medición de validación (Leopoldina, 44 s -> 14 s)."),
     "O gasto mensal com rádio ainda não foi informado: o Admin da empresa preenche no simulador.":
         ("Monthly radio spending has not been provided yet: the company Admin fills it in on the simulator.",
          "El gasto mensual con radio aún no fue informado: el Admin de la empresa lo completa en el simulador."),
@@ -299,9 +303,9 @@ EXATOS: dict[str, tuple[str, str]] = {
          "the period's notices whose spreadsheet had the local column (today's notice, farm by farm).",
          "Reducción = (segundos del aviso tradicional estimado - segundos del aviso del Farol) / segundos del aviso tradicional, sumando los "
          "avisos del período cuya planilla trajo la columna local (el aviso de hoy, finca por finca)."),
-    "Sem esses avisos no período, vale a medição de validação: 44 s -> 14 s, redução de 68,2%.":
-        ("Without such notices in the period, the validation measurement applies: 44 s -> 14 s, a 68.2% reduction.",
-         "Sin esos avisos en el período, vale la medición de validación: 44 s -> 14 s, reducción del 68,2%."),
+    "Sem esses avisos no período, vale a medição de validação (Leopoldina): 44 s -> 14 s, redução de 68,2%.":
+        ("Without such notices in the period, the validation measurement (Leopoldina) applies: 44 s -> 14 s, a 68.2% reduction.",
+         "Sin esos avisos en el período, vale la medición de validación (Leopoldina): 44 s -> 14 s, reducción del 68,2%."),
     "Economia mensal = gasto mensal com rádio x parte do gasto cobrada por tempo x redução. Economia anual = economia mensal x 12.":
         ("Monthly savings = monthly radio spending x share of spending billed by time x reduction. Annual savings = monthly savings x 12.",
          "Ahorro mensual = gasto mensual con radio x parte del gasto cobrada por tiempo x reducción. Ahorro anual = ahorro mensual x 12."),
@@ -320,8 +324,7 @@ EXATOS: dict[str, tuple[str, str]] = {
 # padrões: (expressão em português, inglês, espanhol); {1}, {2}... são os grupos; {mes1} é o grupo 1 como mês por extenso
 PADROES: list[tuple[str, str, str]] = [
     # simulador de economia
-    (r"média real da empresa \((\d+) aviso\(s\) por município com o aviso de hoje\)", "company's real average ({1} notice(s) per municipality with today's notice)",
-     "promedio real de la empresa ({1} aviso(s) por municipio con el aviso de hoy)"),
+    (r"média real de (\d+) avisos da empresa", "real average of {1} company notices", "promedio real de {1} avisos de la empresa"),
     (r"(-?R\$ [\d.,]+) a (-?R\$ [\d.,]+)", "{1} to {2}", "{1} a {2}"),
     (r"(-?R\$ [\d.,]+) calculada \+ (-?R\$ [\d.,]+) informada = (-?R\$ [\d.,]+), em (\d+) envio\(s\) do período\.",
      "{1} calculated + {2} reported = {3}, in {4} sending(s) in the period.", "{1} calculado + {2} informado = {3}, en {4} envío(s) del período."),

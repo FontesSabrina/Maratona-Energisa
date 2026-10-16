@@ -6,7 +6,8 @@ Roda num esquema próprio do Postgres (apagado no fim), só com a semente de ace
   média real (cancelado e município sem o aviso de hoje ficam de fora); já economizado = calculada + informada;
 - perfis: os três da empresa veem; só o Admin da empresa altera; o Admin do Farol não vê; Operador e Consulta 403;
 - a alteração vai para a auditoria com o antes e o depois; salvar o resto da configuração não apaga os valores;
-- PDF e CSV com o código FRL e o nome de quem gerou; a tela em inglês e em espanhol.
+- PDF e CSV com o código FRL e o nome de quem gerou; a tela em inglês e em espanhol;
+- a origem dos valores (nota) e a semente de demonstração (EMG: 160.000 a 300.000, 100%, uma vez só, como da semente).
 
 Uso (na raiz): uv run python -W ignore testes/api/teste_simulador.py
 """
@@ -92,7 +93,15 @@ conferir("sem gasto informado: alerta, nenhum cenário inventado",
 d1 = S.documento({"gasto_min": Decimal("160000"), "gasto_max": Decimal("300000"), "pct_tempo": Decimal("100")}, [], [], {})
 conferir("faixa mín.-máx.: 4 cenários (2 faixas x 2 cenários) e o intervalo no resumo",
          len(d1["secoes"][0]["linhas"]) == 4 and valor(d1, "Economia mensal estimada") == "R$ 109.090,91 a R$ 204.545,45"
-         and valor(d1, "De onde vem a redução") == "medição de validação (44 s -> 14 s)", str(d1["resumo"]))
+         and valor(d1, "De onde vem a redução") == "medição de validação (Leopoldina)", str(d1["resumo"]))
+n1 = d1["numeros"]
+conferir("números dos cartões: redução 68,2, mensal/anual/conservador (mín. e máx.) e realizado; sem gasto, sem estimativa",
+         n1["reducao_pct"] == "68.2" and n1["estimativa"]["mensal"] == ["109090.91", "204545.45"] and n1["estimativa"]["anual"] == ["1309090.91", "2454545.45"]
+         and n1["estimativa"]["conservador_anual"] == ["654545.45", "1227272.73"] and n1["realizado"]["total"] == "0" and d0["numeros"]["estimativa"] is None,
+         str(n1))
+conferir("fonte em texto curto: \"média real de 2 avisos da empresa\" (1 aviso no singular)",
+         S.fonte_texto(r1) == "média real de 2 avisos da empresa" and S.fonte_texto({**r1, "avisos": 1}) == "média real de 1 aviso da empresa"
+         and S.fonte_texto(r0) == "medição de validação (Leopoldina)", S.fonte_texto(r1))
 
 # ---------- 2. API (banco) ----------
 with conectar() as c:
@@ -121,6 +130,9 @@ try:
     conferir("máximo menor que o mínimo: 422 no campo gasto_max",
              (x := adm.put(PUT, json={**corpo, "gasto_max": "100"})).status_code == 422 and x.headers.get("x-farol-campo") == "gasto_max", x.text[:200])
     conferir("% fora de 0 a 100: 422", adm.put(PUT, json={**corpo, "pct_tempo": "101"}).status_code == 422)
+    conferir("origem dos valores com e-mail ou número longo: 422 no campo nota",
+             all((x := adm.put(PUT, json={**corpo, "nota": n})).status_code == 422 and x.headers.get("x-farol-campo") == "nota"
+                 for n in ("valores de fulano@empresa.com", "contrato 1234567890")))
     r = adm.put(PUT, json=corpo)
     conferir("Admin da empresa salva os valores", r.status_code == 200 and r.json()["simulador"]["gasto_min"] == "160000.00", r.text[:200])
     linha = sql("SELECT detalhe, usuario_nome, perfil FROM registro WHERE acao = 'alterou o simulador de economia' ORDER BY id DESC LIMIT 1")
@@ -141,7 +153,14 @@ try:
                                                                    "antecedencia_dias", "alerta_preco", "repeticao_n", "repeticao_dias", "idioma_padrao")})
     conferir("salvar o resto da configuração não apaga os valores do simulador",
              adm.get("/api/empresa/configuracao").json()["simulador"]["gasto_min"] in (160000, 160000.0, "160000.00"))
-    adm.put(PUT, json=corpo)
+    r = adm.put(PUT, json={**corpo, "nota": "valores informados pela Energisa"})
+    j = con.get(URL).json()
+    conferir("origem dos valores: salva, no resumo (\"Origem dos valores\") e nos números dos cartões",
+             r.status_code == 200 and valor(j["documento"], "Origem dos valores") == "valores informados pela Energisa"
+             and j["documento"]["numeros"]["nota"] == "valores informados pela Energisa", r.text[:200])
+    conferir("auditoria: a origem dos valores no antes e depois",
+             "origem dos valores: — → valores informados pela Energisa" in sql("SELECT detalhe FROM registro WHERE acao = 'alterou o simulador de economia'"
+                                                                             " ORDER BY id DESC LIMIT 1")[0][0])
     # PDF e CSV: código FRL e nome de quem gerou
     nome_op = sql("SELECT nome FROM usuario WHERE email = 'operador@emg.example'")[0][0]
     nome_con = sql("SELECT nome FROM usuario WHERE email = 'consulta@emg.example'")[0][0]
@@ -165,6 +184,18 @@ try:
              en["titulo"] == "Radio savings simulator" and valor(en, "Estimated monthly savings") == "R$ 109,090.91 to R$ 204,545.45", str(en["resumo"][:5]))
     conferir("espanhol: título e valores",
              es["titulo"] == "Simulador de ahorro con radio" and valor(es, "Ahorro mensual estimado") == "R$ 109.090,91 a R$ 204.545,45", str(es["resumo"][:5]))
+    # semente de demonstração: não mexe no que o Admin da empresa já preencheu; numa empresa sem valores, preenche e registra como da semente
+    from comunidades import semente_demo
+    conferir("semente do simulador: com os valores já preenchidos pelo Admin, não mexe",
+             semente_demo.semear_simulador() == {"simulador": "já preenchido pelo Admin da empresa"})
+    sql("UPDATE empresa_config SET simulador_gasto_min = NULL, simulador_gasto_max = NULL, simulador_nota = NULL")
+    feito, de_novo = semente_demo.semear_simulador(), semente_demo.semear_simulador()
+    j = con.get(URL).json()["documento"]
+    linha = sql("SELECT detalhe, usuario_id FROM registro WHERE acao = 'semente de demonstração (simulador de economia)'")
+    conferir("semente do simulador: R$ 160.000 a R$ 300.000, 100%, \"valores informados pela Energisa\", na auditoria como da semente, uma vez só",
+             "160000.00" in feito["simulador"] and de_novo == {"simulador": "já aplicado"} and valor(j, "Gasto mensal com rádio") == "R$ 160.000,00 a R$ 300.000,00"
+             and valor(j, "Origem dos valores") == "valores informados pela Energisa" and len(linha) == 1 and linha[0][1] is None
+             and "origem dos valores: — → valores informados pela Energisa" in linha[0][0], str((feito, de_novo, linha)))
     conferir("auditoria íntegra", adm.get("/api/auditoria/verificar").json()["ok"])
 finally:
     with conectar() as c:

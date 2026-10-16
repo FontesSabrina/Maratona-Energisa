@@ -31,6 +31,7 @@ def pct(v) -> str:
 def reducao(avisos: list[dict]) -> dict:
     """A redução do tempo no ar dos avisos (ativos) com o aviso de hoje; sem eles, a medição de validação."""
     hoje = farol = n = 0
+    com_hoje = set()
     for a in avisos:
         if a.get("status") == "cancelado":
             continue
@@ -41,10 +42,11 @@ def reducao(avisos: list[dict]) -> dict:
             hoje += int(m["hoje"]["segundos"])
             farol += int(seg or 0)
             n += 1
+            com_hoje.add(a.get("id"))
     fonte = "empresa" if n and hoje > 0 else "validacao"
     if fonte == "validacao":
-        hoje, farol, n = VALIDACAO["segundos_hoje"], VALIDACAO["segundos_farol"], 0
-    return {"fonte": fonte, "segundos_hoje": hoje, "segundos_farol": farol, "municipios": n,
+        hoje, farol, n, com_hoje = VALIDACAO["segundos_hoje"], VALIDACAO["segundos_farol"], 0, set()
+    return {"fonte": fonte, "segundos_hoje": hoje, "segundos_farol": farol, "municipios": n, "avisos": len(com_hoje),
             "reducao": Decimal(hoje - farol) / Decimal(hoje)}
 
 
@@ -58,6 +60,13 @@ def economizado(envios: list[dict]) -> dict:
     calc = sum((_d(e["economia"]) for e in envios if e.get("economia_tipo") == "calculada"), Decimal("0"))
     inf = sum((_d(e["economia"]) for e in envios if e.get("economia_tipo") == "informada"), Decimal("0"))
     return {"calculada": calc, "informada": inf, "total": calc + inf, "envios": len(envios)}
+
+
+def fonte_texto(r: dict) -> str:
+    """De onde vem a redução, em texto curto: "média real de 87 avisos da empresa" ou "medição de validação (Leopoldina)"."""
+    if r["fonte"] != "empresa":
+        return "medição de validação (Leopoldina)"
+    return "média real de 1 aviso da empresa" if r["avisos"] == 1 else f"média real de {r['avisos']} avisos da empresa"
 
 
 def cenarios(valores: dict, red: Decimal) -> list[dict]:
@@ -74,7 +83,7 @@ def cenarios(valores: dict, red: Decimal) -> list[dict]:
 
 
 def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: dict) -> dict:
-    """O documento do simulador (o mesmo na tela, no PDF e no CSV). valores: gasto_min, gasto_max, pct_tempo."""
+    """O documento do simulador (o mesmo na tela, no PDF e no CSV). valores: gasto_min, gasto_max, pct_tempo e nota (origem dos valores)."""
     av, en = filtrar(avisos, envios, filtros or {})
     r = reducao(av)
     red, ja = r["reducao"], economizado(en)
@@ -86,12 +95,12 @@ def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: di
     da_empresa = [c for c in cs if c["cenario"] == "da empresa"]
     conservador = [c for c in cs if c["cenario"] == "conservador"]
     intervalo = lambda xs, k: "—" if not xs else brl(xs[0][k]) if len(xs) == 1 else f"{brl(xs[0][k])} a {brl(xs[-1][k])}"
-    fonte = (f"média real da empresa ({r['municipios']} aviso(s) por município com o aviso de hoje)" if r["fonte"] == "empresa"
-             else "medição de validação (44 s -> 14 s)")
+    fonte = fonte_texto(r)
     resumo = [
         {"rotulo": "Redução do tempo no ar", "valor": pct(red * 100), "comparacoes": []},
         {"rotulo": "De onde vem a redução", "valor": fonte, "comparacoes": []},
         {"rotulo": "Gasto mensal com rádio", "valor": faixa, "comparacoes": []},
+        *([{"rotulo": "Origem dos valores", "valor": valores["nota"], "comparacoes": []}] if valores.get("nota") else []),
         {"rotulo": "Parte do gasto cobrada por tempo", "valor": pct(pct_emp), "comparacoes": []},
         {"rotulo": "Economia mensal estimada", "valor": intervalo(da_empresa, "mensal"), "comparacoes": []},
         {"rotulo": "Economia anual estimada", "valor": intervalo(da_empresa, "anual"), "comparacoes": []},
@@ -100,7 +109,7 @@ def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: di
     ]
     alertas = []
     if r["fonte"] == "validacao":
-        alertas.append("Ainda não há avisos com o aviso de hoje no período: a redução usada é a da medição de validação (44 s -> 14 s).")
+        alertas.append("Ainda não há avisos com o aviso de hoje no período: a redução usada é a da medição de validação (Leopoldina, 44 s -> 14 s).")
     if gmin is None:
         alertas.append("O gasto mensal com rádio ainda não foi informado: o Admin da empresa preenche no simulador.")
     secoes = [
@@ -113,12 +122,21 @@ def documento(valores: dict, avisos: list[dict], envios: list[dict], filtros: di
     ]
     contas = [f"Conta ({c['faixa']}, {c['cenario']}): {brl(c['gasto'])} x {pct(c['pct'])} x {pct(red * 100)} = {brl(c['mensal'])} por mês; "
               f"x 12 = {brl(c['anual'])} por ano." for c in cs]
+    par = lambda xs, k: [str(xs[0][k]), str(xs[-1][k])] if xs else None
+    numeros = {   # para os cartões da tela (a View escolhe o formato curto); dinheiro em texto, sem arredondar de novo
+        "reducao_pct": str((red * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)), "fonte": r["fonte"], "fonte_texto": fonte, "avisos": r["avisos"],
+        "gasto_min": None if gmin is None else str(gmin), "gasto_max": None if gmax is None else str(gmax), "pct_tempo": str(pct_emp),
+        "nota": valores.get("nota") or None,
+        "estimativa": None if not cs else {"mensal": par(da_empresa, "mensal"), "anual": par(da_empresa, "anual"),
+                                           "conservador_anual": par(conservador, "anual")},
+        "realizado": {k: str(v) if isinstance(v, Decimal) else v for k, v in ja.items()},
+    }
     return {"tipo": "simulador", "titulo": "Simulador de economia com rádio", "resumo": resumo, "alertas": alertas, "secoes": secoes,
-            "reducao": {k: (str(v) if isinstance(v, Decimal) else v) for k, v in r.items()},
+            "reducao": {k: (str(v) if isinstance(v, Decimal) else v) for k, v in r.items()}, "numeros": numeros,
             "como_calculamos": [
                 "Redução = (segundos do aviso tradicional estimado - segundos do aviso do Farol) / segundos do aviso tradicional, somando os "
                 "avisos do período cuja planilha trouxe a coluna local (o aviso de hoje, fazenda a fazenda).",
-                "Sem esses avisos no período, vale a medição de validação: 44 s -> 14 s, redução de 68,2%.",
+                "Sem esses avisos no período, vale a medição de validação (Leopoldina): 44 s -> 14 s, redução de 68,2%.",
                 "Economia mensal = gasto mensal com rádio x parte do gasto cobrada por tempo x redução. Economia anual = economia mensal x 12.",
                 "Cenário conservador: só 50% do gasto é cobrado por tempo (o resto não muda com o tamanho do aviso).",
                 *contas,

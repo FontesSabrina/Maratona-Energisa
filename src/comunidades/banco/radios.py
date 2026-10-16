@@ -125,7 +125,8 @@ ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS modelo_mensagem_en text, ADD
 -- Simulador de economia (Relatórios): gasto mensal com rádio (faixa mín-máx) e % do gasto cobrado por tempo
 ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS simulador_gasto_min numeric(14, 2) CHECK (simulador_gasto_min >= 0),
     ADD COLUMN IF NOT EXISTS simulador_gasto_max numeric(14, 2) CHECK (simulador_gasto_max >= 0),
-    ADD COLUMN IF NOT EXISTS simulador_pct_tempo numeric(5, 2) CHECK (simulador_pct_tempo BETWEEN 0 AND 100);
+    ADD COLUMN IF NOT EXISTS simulador_pct_tempo numeric(5, 2) CHECK (simulador_pct_tempo BETWEEN 0 AND 100),
+    ADD COLUMN IF NOT EXISTS simulador_nota text CHECK (char_length(simulador_nota) <= 120);
 CREATE INDEX IF NOT EXISTS pedido_radio_empresa ON pedido_radio (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS relatorio_via_empresa ON relatorio_via (empresa_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS radio_empresa ON radio (empresa_id);
@@ -170,12 +171,13 @@ def salvar_config(empresa_id: int, usuario_id: int, dados: dict) -> None:
 
 
 
-def salvar_simulador(empresa_id: int, usuario_id: int, gasto_min, gasto_max, pct_tempo) -> None:
-    """Só os valores do simulador de economia (o resto da configuração fica como está)."""
-    _um("INSERT INTO empresa_config (empresa_id, atualizado_por, simulador_gasto_min, simulador_gasto_max, simulador_pct_tempo)"
-        " VALUES (%s, %s, %s, %s, %s) ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por, atualizado_em = now(),"
+def salvar_simulador(empresa_id: int, usuario_id: int | None, gasto_min, gasto_max, pct_tempo, nota: str | None = None) -> None:
+    """Só os valores do simulador de economia (o resto da configuração fica como está). usuario_id None: a semente."""
+    _um("INSERT INTO empresa_config (empresa_id, atualizado_por, simulador_gasto_min, simulador_gasto_max, simulador_pct_tempo, simulador_nota)"
+        " VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (empresa_id) DO UPDATE SET atualizado_por = EXCLUDED.atualizado_por, atualizado_em = now(),"
         " simulador_gasto_min = EXCLUDED.simulador_gasto_min, simulador_gasto_max = EXCLUDED.simulador_gasto_max,"
-        " simulador_pct_tempo = EXCLUDED.simulador_pct_tempo", (empresa_id, usuario_id, gasto_min, gasto_max, pct_tempo))
+        " simulador_pct_tempo = EXCLUDED.simulador_pct_tempo, simulador_nota = EXCLUDED.simulador_nota",
+        (empresa_id, usuario_id, gasto_min, gasto_max, pct_tempo, nota))
 
 
 # ---------- Rádios ----------

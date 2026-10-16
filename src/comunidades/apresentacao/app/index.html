@@ -204,14 +204,15 @@
       <h1 id="tituloSimulador" data-t>Simulador de economia</h1>
       <p class="ajuda" data-t>Quanto a empresa economiza com rádio usando o aviso por comunidade: gasto mensal com rádio x parte cobrada por tempo x redução do tempo no ar (a média real dos avisos da empresa ou, sem avisos, a medição de validação). Só números agregados.</p>
       <form id="formSimulador" class="cartao formulario" novalidate hidden>
-        <h2 data-t>Valores da empresa</h2>
+        <h2 id="simFormTitulo" data-t>Valores da empresa</h2>
         <p class="ajuda" id="simAjuda" data-t>Só o Admin da empresa altera estes valores; a mudança fica na auditoria com o antes e o depois. Operador e Consulta veem o resultado.</p>
         <label><span data-t>Gasto mensal com rádio, em R$ (ou o mínimo da faixa)</span> <input type="number" id="simGastoMin" min="0" step="0.01" inputmode="decimal" required aria-describedby="simAjuda"></label>
         <label><span data-t>Máximo da faixa, em R$ (opcional)</span> <input type="number" id="simGastoMax" min="0" step="0.01" inputmode="decimal"></label>
         <label><span data-t>Parte do gasto cobrada por tempo no ar (%)</span> <input type="number" id="simPct" min="0" max="100" step="1" inputmode="decimal" required></label>
+        <label><span data-t>Origem dos valores (opcional, ex.: valores informados pela distribuidora)</span> <input id="simNota" maxlength="120" autocomplete="off"></label>
         <div class="acoes">
           <button type="button" id="simConservador" data-t>Cenário conservador (50%)</button>
-          <button type="submit" class="prim" data-t>Salvar</button>
+          <button type="submit" id="simSalvar" class="prim" data-t>Salvar</button>
         </div>
         <p id="estadoSimulador" class="estado" role="status" aria-live="polite"></p>
       </form>

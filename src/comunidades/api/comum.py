@@ -62,6 +62,6 @@ def config_empresa(empresa_id: int | None) -> dict:
         "idioma_padrao": escolher("idioma_padrao", DIST.idioma_padrao),
         # simulador de economia: gasto mensal com rádio (faixa) e % do gasto cobrado por tempo (padrão 100%)
         "simulador": {"gasto_min": c.get("simulador_gasto_min"), "gasto_max": c.get("simulador_gasto_max"),
-                      "pct_tempo": escolher("simulador_pct_tempo", Decimal("100"))},
+                      "pct_tempo": escolher("simulador_pct_tempo", Decimal("100")), "nota": c.get("simulador_nota")},
         "padroes": not c,
     }

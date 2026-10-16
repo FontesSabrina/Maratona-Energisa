@@ -38,7 +38,7 @@ from ..nucleo import economia, mensagem
 from ..nucleo import radios as alcance_
 from ..nucleo.acesso import PERFIS, problema_email
 from ..nucleo.auditoria import diferencas
-from ..nucleo.tipos_desligamento import limpar
+from ..nucleo.tipos_desligamento import _EMAIL, _NUMEROS, _SITE, limpar
 from ..segredos import segredo
 from .acesso import exigir
 from .comum import AUDIO, AVISO_FICTICIO, BRASILIA, config_empresa, erro, segundos
@@ -111,6 +111,7 @@ class Simulador(BaseModel):
     gasto_min: Decimal = Field(ge=0, le=1_000_000_000)                  # gasto mensal com rádio (R$), ou o mínimo da faixa
     gasto_max: Decimal | None = Field(None, ge=0, le=1_000_000_000)     # o máximo da faixa (opcional)
     pct_tempo: Decimal = Field(Decimal("100"), ge=0, le=100)            # % do gasto cobrado por tempo no ar
+    nota: str | None = Field(None, max_length=200)                      # origem dos valores (ex.: "valores informados pela Energisa")
 
 
 @rotas.put("/api/empresa/configuracao/simulador")
@@ -120,13 +121,28 @@ def salvar_simulador(dados: Simulador, u: dict = Depends(exigir("configurar_empr
     gmax = dados.gasto_max.quantize(Decimal("0.01")) if dados.gasto_max is not None else None
     if gmax is not None and gmax < gmin:
         raise erro(422, "Gasto máximo: igual ou maior que o mínimo.", "gasto_max")
+    nota = limpar(dados.nota or "") or None
+    if nota and (len(nota) > 120 or problema_nota(nota)):
+        raise erro(422, "Origem dos valores: até 120 caracteres, sem e-mail, site nem número longo.", "nota")
     antes = config_empresa(u["empresa_id"])["simulador"]
-    novo = {"gasto_min": gmin, "gasto_max": gmax, "pct_tempo": dados.pct_tempo.quantize(Decimal("0.01"))}
-    banco.salvar_simulador(u["empresa_id"], u["id"], novo["gasto_min"], novo["gasto_max"], novo["pct_tempo"])
-    banco_acesso.registrar("alterou o simulador de economia", diferencas(
-        {k: _dinheiro(v) if v is not None else None for k, v in antes.items()}, {k: _dinheiro(v) if v is not None else None for k, v in novo.items()},
-        {"gasto_min": "gasto mensal (mínimo)", "gasto_max": "gasto mensal (máximo)", "pct_tempo": "% cobrado por tempo"}), u["id"], u["empresa_id"])
-    return {"simulador": {k: _dinheiro(v) for k, v in config_empresa(u["empresa_id"])["simulador"].items()}}
+    novo = {"gasto_min": gmin, "gasto_max": gmax, "pct_tempo": dados.pct_tempo.quantize(Decimal("0.01")), "nota": nota}
+    banco.salvar_simulador(u["empresa_id"], u["id"], novo["gasto_min"], novo["gasto_max"], novo["pct_tempo"], nota)
+    banco_acesso.registrar("alterou o simulador de economia", diferencas(texto_simulador(antes), texto_simulador(novo), ROTULOS_SIMULADOR),
+                           u["id"], u["empresa_id"])
+    return {"simulador": texto_simulador(config_empresa(u["empresa_id"])["simulador"])}
+
+
+ROTULOS_SIMULADOR = {"gasto_min": "gasto mensal (mínimo)", "gasto_max": "gasto mensal (máximo)", "pct_tempo": "% cobrado por tempo",
+                     "nota": "origem dos valores"}
+
+
+def texto_simulador(v: dict) -> dict:
+    """Os valores do simulador como texto (dinheiro com 2 casas), para a auditoria e a resposta."""
+    return {k: (None if x is None else x if k == "nota" else _dinheiro(x)) for k, x in v.items()}
+
+
+def problema_nota(texto: str) -> bool:
+    return bool(_NUMEROS.search(texto) or _EMAIL.search(texto) or _SITE.search(texto))
 
 
 # ---------- Rádios ----------
