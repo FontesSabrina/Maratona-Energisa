@@ -1033,7 +1033,7 @@ function desenharComparativo() {
     no('h2', { texto: t('Em todo o histórico da empresa') }),
     no('p', { texto: t('{n} aviso(s) por município com o aviso de hoje: {hoje} no ar fazenda a fazenda ({locais} locais citados) contra {farol} por comunidade ({comunidades} comunidades).',
       { n: fmt(c.municipios), hoje: tempoNoAr(c.segundos_hoje), locais: fmt(c.locais), farol: tempoNoAr(c.segundos_farol), comunidades: fmt(c.comunidades) }) }),
-    no('p', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - c.segundos_farol / Math.max(1, c.segundos_hoje)))) }) }))] : []));
+    c.segundos_farol < c.segundos_hoje ? no('p', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - c.segundos_farol / c.segundos_hoje))) }) }) : null)] : []));
   const r = estado.resultado;
   if (!r) return $('comparativo').replaceChildren(no('p', { classe: 'ajuda cartao',
     texto: t('Gere um aviso em "Novo aviso" (com a coluna local na planilha) ou abra um aviso do Histórico para comparar.') }));
@@ -1048,7 +1048,7 @@ function desenharComparativo() {
     const ladoHoje = hoje
       ? lado('hoje', t('Hoje: fazenda a fazenda'), t('{locais} locais · {palavras} palavras · cerca de {tempo} no ar',
           { locais: fmt(hoje.locais), palavras: fmt(hoje.palavras), tempo: tempoNoAr(hoje.segundos) }),
-        hoje.texto ? caixa(hoje.texto, 'pt-BR') : no('p', { classe: 'ajuda', texto: t('O histórico guarda só as contagens do aviso de hoje (o texto lista imóveis e ruas).') }),
+        hoje.texto ? caixa(hoje.texto, idiomaDoAviso()) : no('p', { classe: 'ajuda', texto: t('O histórico guarda só as contagens do aviso de hoje (o texto lista imóveis e ruas).') }),
         hoje.texto ? 'hoje' : null)
       : lado('hoje', t('Hoje: fazenda a fazenda'), t('sem o aviso de hoje'),
         no('p', { classe: 'ajuda', texto: t('A planilha não trouxe a coluna local (o que o aviso de hoje cita para cada UC: o imóvel no rural, a rua no urbano). Sem ela não dá para montar o aviso de hoje.') }), null);
@@ -1062,7 +1062,9 @@ function desenharComparativo() {
       no('span', { classe: 'comp-tempo', texto: tempoNoAr(seg) })) : null;
     return no('article', { classe: 'cartao comp', 'data-codigo': cod },
       no('div', { classe: 'mun-cab' }, no('h2', { texto: `${m.nome}/${m.uf}` }),
-        hoje ? no('span', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - seg / Math.max(1, hoje.segundos)))) }) }) : null),
+        // o selo sai dos mesmos segundos das barras; verde só quando o Norte é mais curto
+        hoje && seg < hoje.segundos ? no('span', { classe: 'comp-economia', texto: t('{pct}% menos tempo no ar', { pct: fmt(Math.round(100 * (1 - seg / hoje.segundos))) }) })
+          : hoje && m.mesmo_tamanho ? no('span', { classe: 'chip', texto: t('mesmo tamanho: poucos locais') }) : null),
       barras, no('div', { classe: 'comp-lados' }, ladoHoje, ladoFarol));
   }));
 }

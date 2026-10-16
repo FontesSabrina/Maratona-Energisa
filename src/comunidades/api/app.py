@@ -298,8 +298,9 @@ def _aviso_hoje(locais, data: str, horario: str) -> dict | None:
         return None
     texto = aviso_antigo_de_locais(locais, data, horario, DIST.regras)
     palavras = len(texto.split())
+    # "lista": os locais, para _mensagens remontar o aviso de hoje com o mesmo modelo da empresa (não vai para o histórico)
     return {"texto": texto, "locais": len(locais_de(locais)), "palavras": palavras,
-            "segundos": round(palavras / PALAVRAS_POR_SEGUNDO)}
+            "segundos": round(palavras / PALAVRAS_POR_SEGUNDO), "lista": locais_de(locais)}
 
 
 def _prazo(vital: Counter, cfg: dict) -> dict:
@@ -762,6 +763,17 @@ def _mensagens(municipios: list[dict], cfg: dict, data: str, horario: str, idiom
             m, distribuidora=cfg["nome_mensagem"], data=data, horario=horario, motivo=motivo, telefone=cfg["telefone"], codigo=codigo,
             idioma=idioma))
         m["segundos_mensagem"] = segundos(m["mensagem"])
+        hoje = m.get("hoje")
+        if hoje and hoje.get("lista"):
+            # comparação justa: o aviso de hoje com o MESMO modelo, só a lista muda (locais no lugar das comunidades)
+            hoje["texto"] = mensagem.montar(cfg["modelos"].get(idioma, cfg["modelo_mensagem"]), mensagem.valores_do_municipio(
+                {**m, "comunidades": []}, distribuidora=cfg["nome_mensagem"], data=data, horario=horario, motivo=motivo,
+                telefone=cfg["telefone"], codigo=codigo, idioma=idioma) | {"comunidades": mensagem.lista_falada(hoje["lista"], idioma)})
+            hoje["palavras"], hoje["segundos"] = len(hoje["texto"].split()), segundos(hoje["texto"])
+            # nunca maior: com poucos locais (ex.: 1 UC), a lista por local é a mais curta e o Norte usa ela
+            m["mesmo_tamanho"] = m["segundos_mensagem"] > hoje["segundos"]
+            if m["mesmo_tamanho"]:
+                m["mensagem"], m["segundos_mensagem"] = hoje["texto"], hoje["segundos"]
 
 
 def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo: str, motivo: str, cfg: dict,
@@ -777,6 +789,7 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
     # do aviso de hoje, só as contagens (o texto lista imóveis e ruas e não precisa ficar guardado)
     municipios = [{**{k: m[k] for k in ("codigo_ibge", "nome", "uf", "ucs", "comunidades", "aviso", "segundos", "equipamento_vital",
                                          "mensagem", "segundos_mensagem")},
+                   "mesmo_tamanho": bool(m.get("mesmo_tamanho")),
                    "hoje": {k: m["hoje"][k] for k in ("locais", "palavras", "segundos")} if m.get("hoje") else None}
                   for m in resposta["municipios"]]
     nomes = ", ".join(m["nome"] for m in municipios) or "nenhum município"
@@ -787,7 +800,9 @@ def _guardar(resposta: dict, u: dict, data: str, horario: str, idioma: str, tipo
                     usuario_perfil=PERFIS.get(g["solicitante_perfil"], ""), status="gerado")
     if "{codigo}" in cfg["modelos"].get(idioma, cfg["modelo_mensagem"]):   # o código só existe depois de gravado: a mensagem é refeita com ele
         _mensagens(resposta["municipios"], cfg, data, horario, idioma, motivo, g["codigo"])
-        _mensagens(municipios, cfg, data, horario, idioma, motivo, g["codigo"])
+        for guardado, m in zip(municipios, resposta["municipios"]):   # o guardado não tem a lista de locais: copia
+            guardado.update(mensagem=m["mensagem"], segundos_mensagem=m["segundos_mensagem"], mesmo_tamanho=bool(m.get("mesmo_tamanho")),
+                            hoje={k: m["hoje"][k] for k in ("locais", "palavras", "segundos")} if m.get("hoje") else None)
         banco_acesso.atualizar_municipios(g["id"], u["empresa_id"], municipios)
     return resposta
 

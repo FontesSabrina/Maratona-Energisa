@@ -175,12 +175,18 @@ from comunidades import config as _C  # noqa: E402
 from comunidades.nucleo import desligamento as D  # noqa: E402
 cad = _gpd.read_file(_C.SINTETICO / "ucs.gpkg", ignore_geometry=True).set_index("UC")
 hoje = m.get("hoje") or {}
-do_cadastro = D.aviso_antigo(cad.loc[t["uc"].iloc[nucleo[0].ucs.index]].reset_index(), "12/11", "8h às 14h", regras)  # as 2 bases, como a API
-conferir("comparativo: aviso de hoje de Leopoldina pela coluna local = o do cadastro (núcleo)", hoje.get("texto") == do_cadastro,
-         f"\n  API:      {str(hoje.get('texto'))[:160]}\n  cadastro: {do_cadastro[:160]}")
+locais_cad = D.locais_antigos(cad.loc[t["uc"].iloc[nucleo[0].ucs.index]].reset_index())  # as 2 bases, como a API
+lista_cad = D.idiomas.lista(locais_cad, "pt-BR")
+texto_hoje, msg = str(hoje.get("texto")), m.get("mensagem", "")
+# comparação justa: o mesmo modelo da empresa nos dois lados, só a lista muda (locais x comunidades)
+comeco = msg[:msg.index(" nas comunidades")] if " nas comunidades" in msg else msg[:40]
+conferir("comparativo: aviso de hoje de Leopoldina pela coluna local = os locais do cadastro, no mesmo modelo do Norte",
+         hoje.get("lista") == locais_cad and lista_cad in texto_hoje and texto_hoje.startswith(comeco),
+         f"\n  API:   {texto_hoje[:160]}\n  Norte: {msg[:160]}")
 conferir("comparativo: locais, palavras e tempo no ar do aviso de hoje; o Norte bem mais curto",
-         hoje.get("locais", 0) > 50 and hoje.get("palavras") == len(do_cadastro.split()) and hoje.get("segundos", 0) > 5 * m["segundos"],
-         json.dumps({k: v for k, v in hoje.items() if k != "texto"}) + f" farol {m['segundos']} s")
+         hoje.get("locais", 0) > 50 and hoje.get("palavras") == len(texto_hoje.split()) and hoje.get("segundos", 0) > 5 * m["segundos_mensagem"]
+         and not m.get("mesmo_tamanho"),
+         json.dumps({k: v for k, v in hoje.items() if k not in ("texto", "lista")}) + f" norte {m['segundos_mensagem']} s")
 hist_um = cli.get(f"/api/historico/{j['id']}").json()["municipios"][0]
 imovel = next(l for l in D.locais_antigos(cad.loc[t["uc"]].reset_index()) if l.startswith("Sitio"))
 conferir("histórico: do aviso de hoje só as contagens (sem o texto, sem imóveis)",
